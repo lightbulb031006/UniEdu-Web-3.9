@@ -9,6 +9,7 @@ import Modal from './Modal';
 import { authService } from '../services/authService';
 import { useAuthStore } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
+import { fetchTeachers } from '../services/teachersService';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -54,6 +55,44 @@ export default function AuthModal({ isOpen, onClose, mode, onModeChange }: AuthM
 
       const response = await authService.login({ email: loginInput, password, rememberMe });
       setAuth(response.user, response.token, rememberMe);
+      
+      // Nếu là user nhân sự (teacher role), tìm staff ID và redirect thẳng đến staff detail
+      if (response.user.role === 'teacher') {
+        try {
+          // Fetch teachers để tìm staff ID
+          const teachers = await fetchTeachers();
+          const user = response.user;
+          
+          // Tìm teacher record theo nhiều cách
+          let teacherRecord = null;
+          
+          if (user.linkId) {
+            teacherRecord = teachers.find((t) => t.id === user.linkId);
+          }
+          
+          if (!teacherRecord && user.id) {
+            teacherRecord = teachers.find((t: any) => t.userId === user.id);
+          }
+          
+          if (!teacherRecord && user.email) {
+            teacherRecord = teachers.find((t) => 
+              t.email?.toLowerCase() === user.email?.toLowerCase()
+            );
+          }
+          
+          if (teacherRecord) {
+            // Redirect thẳng đến staff detail
+            onClose();
+            setTimeout(() => {
+              navigate(`/staff/${teacherRecord.id}`, { replace: true });
+            }, 100);
+            return;
+          }
+        } catch (err) {
+          // Nếu không tìm thấy, fallback về dashboard
+          console.warn('[AuthModal] Could not find staff record, redirecting to dashboard');
+        }
+      }
       
       // Role-based routing (giống code cũ)
       const defaultPage = getDefaultPageForRole(response.user.role);

@@ -123,7 +123,8 @@ function Dashboard() {
   
   const teachers = Array.isArray(teachersData) ? teachersData : [];
   
-  // Redirect logic cho teacher/staff: tự động redirect đến staff-detail
+  // Redirect logic cho teacher/staff: tự động redirect đến staff-detail NGAY LẬP TỨC
+  // Không hiển thị trang loading, redirect ngay khi có đủ thông tin
   useEffect(() => {
     // Check if already on staff-detail page to avoid redirect loop
     const currentPath = location.pathname;
@@ -132,7 +133,7 @@ function Dashboard() {
     }
     
     // Chỉ redirect khi teachers data đã load xong và user là teacher hoặc có staff roles
-    if (!user || isLoadingTeachers || teachers.length === 0 || hasRedirectedRef.current) {
+    if (!user || isLoadingTeachers || hasRedirectedRef.current) {
       return;
     }
     
@@ -140,6 +141,11 @@ function Dashboard() {
     const isTeacherRole = user.role === 'teacher';
     if (!isTeacherRole) {
       return; // Not a teacher/staff user
+    }
+    
+    // Nếu chưa có teachers data, đợi một chút rồi thử lại
+    if (teachers.length === 0) {
+      return; // Wait for teachers data
     }
     
     // Tìm teacher record theo nhiều cách:
@@ -173,7 +179,7 @@ function Dashboard() {
       if (hasStaffRoles || isTeacherRole) {
         // Mark as redirected to prevent multiple redirects
         hasRedirectedRef.current = true;
-        // Redirect đến staff-detail của teacher này
+        // Redirect đến staff-detail của teacher này NGAY LẬP TỨC
         const targetPath = `/staff/${teacherRecord.id}`;
         if (currentPath !== targetPath) {
           navigate(targetPath, { replace: true });
@@ -262,20 +268,19 @@ function Dashboard() {
   };
 
   // Chỉ hiển thị admin dashboard cho admin role
-  // Teacher sẽ được redirect trong useEffect ở trên
+  // Teacher sẽ được redirect trong useEffect ở trên (không hiển thị trang loading)
+  // PHẢI ĐỢI TẤT CẢ HOOKS ĐƯỢC GỌI TRƯỚC KHI RETURN
   if (user?.role !== 'admin') {
-    return (
-      <div className="page-container" style={{ padding: 'var(--spacing-6)' }}>
-        <div className="card" style={{ textAlign: 'center', padding: 'var(--spacing-8)' }}>
-          <h3>Đang chuyển hướng...</h3>
-          <p style={{ color: 'var(--muted)', marginTop: 'var(--spacing-2)' }}>
-            {user?.role === 'teacher' 
-              ? 'Đang chuyển đến trang chi tiết nhân sự...'
-              : 'Đang tải...'}
-          </p>
-        </div>
-      </div>
-    );
+    // Nếu là teacher và đã redirect, không hiển thị gì (đang redirect)
+    if (user?.role === 'teacher' && hasRedirectedRef.current) {
+      return null;
+    }
+    // Nếu là teacher và chưa redirect nhưng đang load, không hiển thị gì
+    if (user?.role === 'teacher' && (isLoadingTeachers || teachers.length === 0)) {
+      return null;
+    }
+    // Các role khác (student, etc.) - không hiển thị gì
+    return null;
   }
 
   if (error) {
