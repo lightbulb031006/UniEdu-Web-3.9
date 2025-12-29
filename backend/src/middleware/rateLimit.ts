@@ -17,6 +17,11 @@ export const generalLimiter = rateLimit({
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
+  // Disable trust proxy validation for Vercel serverless functions
+  // Vercel requires trust proxy, but we don't want rate limiter to warn about it
+  validate: {
+    trustProxy: false,
+  },
   skip: () => {
     // Skip rate limiting completely in development
     return isDevelopment;
@@ -28,6 +33,10 @@ export const authLimiter = rateLimit({
   max: 5, // 5 login attempts per window
   message: 'Too many login attempts, please try again later.',
   skipSuccessfulRequests: true,
+  // Disable trust proxy validation for Vercel
+  validate: {
+    trustProxy: false,
+  },
 });
 
 // Rate limiter for login failures - lock for 10 minutes after 5 failed attempts
@@ -38,6 +47,10 @@ export const loginFailureLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true, // Only count failed attempts
+  // Disable trust proxy validation for Vercel
+  validate: {
+    trustProxy: false,
+  },
   skip: () => {
     // Skip in development for easier testing
     return isDevelopment;
