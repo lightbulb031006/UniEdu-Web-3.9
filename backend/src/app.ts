@@ -37,6 +37,10 @@ import attendanceRoutes from './routes/attendance';
 
 const app = express();
 
+// Trust proxy - Required for Vercel serverless functions
+// This allows Express to trust the X-Forwarded-* headers from Vercel
+app.set('trust proxy', true);
+
 // Security middleware
 app.use(helmet());
 
@@ -232,7 +236,11 @@ function startServer() {
   return server;
 }
 
-startServer();
+// Chỉ start server khi chạy local (không phải Vercel)
+// Vercel sẽ tự động handle serverless function
+if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
+  startServer();
+}
 
 export default app;
 
