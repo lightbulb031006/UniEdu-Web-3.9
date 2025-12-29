@@ -54,14 +54,19 @@ const isVercelOrigin = (origin: string): boolean => {
   return origin.includes('.vercel.app') || origin.includes('vercel.app');
 };
 
+// Helper function to check if origin is custom domain (unicornsedu.com)
+const isCustomDomain = (origin: string): boolean => {
+  return origin.includes('unicornsedu.com');
+};
+
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    // In production, allow Vercel preview URLs and configured FRONTEND_URL
+    // In production, allow Vercel preview URLs, custom domain, and configured FRONTEND_URL
     if (env.NODE_ENV === 'production') {
-      if (allowedOrigins.includes(origin) || isVercelOrigin(origin)) {
+      if (allowedOrigins.includes(origin) || isVercelOrigin(origin) || isCustomDomain(origin)) {
         return callback(null, true);
       }
     } else {
