@@ -49,16 +49,29 @@ const allowedOrigins = env.NODE_ENV === 'development'
   ? ['http://localhost:3000', 'http://localhost:5173', env.FRONTEND_URL].filter(Boolean)
   : [env.FRONTEND_URL];
 
+// Helper function to check if origin is from Vercel
+const isVercelOrigin = (origin: string): boolean => {
+  return origin.includes('.vercel.app') || origin.includes('vercel.app');
+};
+
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
+    // In production, allow Vercel preview URLs and configured FRONTEND_URL
+    if (env.NODE_ENV === 'production') {
+      if (allowedOrigins.includes(origin) || isVercelOrigin(origin)) {
+        return callback(null, true);
+      }
     } else {
-      callback(new Error('Not allowed by CORS'));
+      // In development, use strict list
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
     }
+    
+    callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
