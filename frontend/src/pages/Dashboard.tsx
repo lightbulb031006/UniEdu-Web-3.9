@@ -196,7 +196,8 @@ function Dashboard() {
         teachersCount: teachers.length
       });
     }
-  }, [user, teachers, isLoadingTeachers, navigate, location.pathname]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, user?.role, user?.linkId, user?.email, teachers.length, isLoadingTeachers, navigate, location.pathname]);
 
   // Persist state to localStorage
   useEffect(() => {
@@ -219,22 +220,26 @@ function Dashboard() {
   );
 
   // Fetch dashboard data with optimized loading
+  // Chỉ fetch nếu user là admin (teacher sẽ được redirect)
   const { data, isLoading, error, refetch } = useDataLoading(
     fetchDashboardDataFn,
     [state.filterType, state.filterValue],
     {
       cacheKey: `dashboard-${state.filterType}-${state.filterValue}`,
       staleTime: 2 * 60 * 1000, // 2 minutes
+      enabled: user?.role === 'admin', // Chỉ fetch cho admin
     }
   );
 
   // Fetch quick view data
+  // Chỉ fetch nếu user là admin (teacher sẽ được redirect)
   const { data: quickView, isLoading: quickViewLoading } = useDataLoading(
     fetchQuickViewDataFn,
     [state.quickViewYear],
     {
       cacheKey: `quickview-${state.quickViewYear}`,
       staleTime: 5 * 60 * 1000, // 5 minutes
+      enabled: user?.role === 'admin', // Chỉ fetch cho admin
     }
   );
 
