@@ -125,35 +125,52 @@ function Dashboard() {
   
   // Redirect logic cho teacher/staff: tự động redirect đến staff-detail
   useEffect(() => {
-    // Chỉ redirect khi teachers data đã load xong và user là teacher
-    if (user?.role === 'teacher' && !isLoadingTeachers && teachers.length > 0 && !hasRedirectedRef.current) {
-      // Check if already on staff-detail page to avoid redirect loop
-      const currentPath = location.pathname;
-      if (currentPath.startsWith('/staff/')) {
-        return; // Already on staff detail page, don't redirect
-      }
+    // Check if already on staff-detail page to avoid redirect loop
+    const currentPath = location.pathname;
+    if (currentPath.startsWith('/staff/')) {
+      return; // Already on staff detail page, don't redirect
+    }
+    
+    // Chỉ redirect khi teachers data đã load xong và user là teacher hoặc có staff roles
+    if (!user || isLoadingTeachers || teachers.length === 0 || hasRedirectedRef.current) {
+      return;
+    }
+    
+    // Check if user is teacher role or has staff roles (nhân sự)
+    const isTeacherRole = user.role === 'teacher';
+    if (!isTeacherRole) {
+      return; // Not a teacher/staff user
+    }
+    
+    // Tìm teacher record theo nhiều cách:
+    // 1. Theo linkId (user.linkId === teacher.id)
+    // 2. Theo userId (teacher.userId === user.id)
+    // 3. Theo email (teacher.email === user.email)
+    let teacherRecord = null;
+    
+    if (user.linkId) {
+      teacherRecord = teachers.find((t) => t.id === user.linkId);
+    }
+    
+    if (!teacherRecord && user.id) {
+      teacherRecord = teachers.find((t) => (t as any).userId === user.id);
+    }
+    
+    if (!teacherRecord && user.email) {
+      teacherRecord = teachers.find((t) => 
+        t.email?.toLowerCase() === user.email?.toLowerCase()
+      );
+    }
+    
+    if (teacherRecord) {
+      // Check if teacher has staff roles (nhân sự)
+      const staffRoles = teacherRecord.roles || [];
+      const hasStaffRoles = Array.isArray(staffRoles) && staffRoles.length > 0;
       
-      // Tìm teacher record theo nhiều cách:
-      // 1. Theo linkId (user.linkId === teacher.id)
-      // 2. Theo userId (teacher.userId === user.id)
-      // 3. Theo email (teacher.email === user.email)
-      let teacherRecord = null;
-      
-      if (user.linkId) {
-        teacherRecord = teachers.find((t) => t.id === user.linkId);
-      }
-      
-      if (!teacherRecord && user.id) {
-        teacherRecord = teachers.find((t) => (t as any).userId === user.id);
-      }
-      
-      if (!teacherRecord && user.email) {
-        teacherRecord = teachers.find((t) => 
-          t.email?.toLowerCase() === user.email?.toLowerCase()
-        );
-      }
-      
-      if (teacherRecord) {
+      // Redirect đến staff-detail của teacher này nếu:
+      // 1. Có staff roles (nhân sự), hoặc
+      // 2. Là teacher role (gia sư)
+      if (hasStaffRoles || isTeacherRole) {
         // Mark as redirected to prevent multiple redirects
         hasRedirectedRef.current = true;
         // Redirect đến staff-detail của teacher này
@@ -162,15 +179,16 @@ function Dashboard() {
           navigate(targetPath, { replace: true });
         }
         return;
-      } else {
-        // Nếu không tìm thấy teacher record, log để debug
-        console.warn('[Dashboard] Teacher record not found for user:', {
-          userId: user.id,
-          linkId: user.linkId,
-          email: user.email,
-          teachersCount: teachers.length
-        });
       }
+    } else {
+      // Nếu không tìm thấy teacher record, log để debug
+      console.warn('[Dashboard] Teacher record not found for user:', {
+        userId: user.id,
+        linkId: user.linkId,
+        email: user.email,
+        role: user.role,
+        teachersCount: teachers.length
+      });
     }
   }, [user, teachers, isLoadingTeachers, navigate, location.pathname]);
 
