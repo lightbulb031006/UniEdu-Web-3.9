@@ -1,0 +1,33 @@
+/* Import CSS từ app cũ */
+@import './assets/css/base.css';
+@import './assets/css/components.css';
+@import './assets/css/pages.css';
+@import './assets/css/pages-action-history.css';
+@import './assets/css/coding.css';
+
+/* Tailwind CSS */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* React App Base Styles */
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+  font-family: var(--font-sans);
+}
+
+* {
+  font-family: inherit;
+}
+
