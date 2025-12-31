@@ -139,11 +139,12 @@ function ClassDetail() {
   const canManagePaymentStatus = isAdmin || hasRole('accountant') || hasCskhPrivileges;
   
   // Session management permissions
-  const isTutor = userHasStaffRole('teacher', currentUser, teachers);
+  // Teacher role hoặc staff role 'teacher' đều có thể tạo/chỉnh sửa session
+  const isTutor = currentUser?.role === 'teacher' || userHasStaffRole('teacher', currentUser, teachers);
   const canShowDelete = canManage && !isTutor;
   const canSelectSessions = canManage || hasCskhPrivileges;
   const canBulkUpdateStatus = isAdmin || hasRole('accountant') || hasCskhPrivileges;
-  // Teacher có thể tạo và chỉnh sửa session
+  // Teacher (gia sư) có thể tạo và chỉnh sửa session
   const canCreateSession = isAdmin || isTutor || hasRole('accountant') || hasCskhPrivileges;
   const canEditSession = isAdmin || isTutor || hasRole('accountant') || hasCskhPrivileges;
   // Chỉ admin và accountant mới có thể chỉnh sửa allowance thủ công
@@ -2493,6 +2494,7 @@ function AddSessionModal({
   const endTimeInputRef = React.useRef<HTMLInputElement>(null);
   const [teacherId, setTeacherId] = useState<string>(teachers.length > 0 ? teachers[0].id : '');
   const [coefficient, setCoefficient] = useState<number>(1);
+  const [coefficientInputValue, setCoefficientInputValue] = useState<string>('1');
   const [notes, setNotes] = useState<string>('');
   const [paymentStatus, setPaymentStatus] = useState<'paid' | 'unpaid' | 'deposit'>('unpaid');
   const [loading, setLoading] = useState(false);
