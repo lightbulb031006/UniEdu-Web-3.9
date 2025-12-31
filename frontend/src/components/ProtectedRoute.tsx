@@ -9,6 +9,7 @@ import { useAuthStore } from '../store/authStore';
 import { canAccessPage } from '../utils/permissions';
 import { useDataLoading } from '../hooks/useDataLoading';
 import { fetchTeachers } from '../services/teachersService';
+import { fetchClassById } from '../services/classesService';
 import { useRef } from 'react';
 
 interface ProtectedRouteProps {
@@ -80,9 +81,60 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     }
   }
 
+  // Special handling for teacher accessing class detail: check if they are assigned to the class
+  const isClassDetailPage = location.pathname.startsWith('/classes/') && location.pathname !== '/classes';
+  const classId = isClassDetailPage ? location.pathname.split('/')[2] : null;
+  
+  // Fetch class data to check teacher assignment (only for teacher role on class detail page)
+  const { data: classData, isLoading: isLoadingClass } = useDataLoading(
+    () => {
+      if (!classId || user?.role !== 'teacher') return Promise.resolve(null);
+      return fetchClassById(classId);
+    },
+    [classId, user?.role],
+    {
+      cacheKey: classId ? `class-for-access-check-${classId}` : undefined,
+      staleTime: 2 * 60 * 1000,
+      enabled: isClassDetailPage && user?.role === 'teacher' && !!classId,
+    }
+  );
+
+  // Check if teacher is assigned to this class
+  if (isClassDetailPage && user?.role === 'teacher' && classData && !isLoadingClass) {
+    const teacherId = user.linkId;
+    const classTeacherIds = classData.teacherIds || (classData.teacherId ? [classData.teacherId] : []);
+    
+    // Nếu không có linkId, thử tìm teacher record
+    let actualTeacherId = teacherId;
+    if (!actualTeacherId && teachers.length > 0) {
+      let teacherRecord = null;
+      if (user.id) {
+        teacherRecord = teachers.find((t: any) => t.userId === user.id);
+      }
+      if (!teacherRecord && user.email) {
+        teacherRecord = teachers.find((t) => 
+          t.email?.toLowerCase() === user.email?.toLowerCase()
+        );
+      }
+      if (teacherRecord) {
+        actualTeacherId = teacherRecord.id;
+      }
+    }
+    
+    // Nếu teacher không được assign vào lớp này, redirect về home
+    if (actualTeacherId && !classTeacherIds.includes(actualTeacherId)) {
+      return <Navigate to="/home" replace />;
+    }
+  }
+
   // Wait for teachers data to load before checking access (only if needed)
   if (isLoadingTeachers && user?.role === 'teacher' && location.pathname === '/home') {
     return null; // Show nothing while loading teachers for redirect
+  }
+
+  // Wait for class data to load before checking access (only if needed)
+  if (isLoadingClass && isClassDetailPage && user?.role === 'teacher') {
+    return null; // Show nothing while loading class data for access check
   }
 
   // Check role-based page access (only check once per path change)
