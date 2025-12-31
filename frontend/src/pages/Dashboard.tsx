@@ -114,22 +114,8 @@ function Dashboard() {
   const [state, setState] = useState(loadStoredDashboardState());
   const hasRedirectedRef = useRef(false);
   
-  // Fetch teachers để tìm teacher record cho redirect
-  // CHỈ fetch nếu user là teacher (admin không cần)
-  const { data: teachersData, isLoading: isLoadingTeachers } = useDataLoading(
-    () => fetchTeachers(),
-    [],
-    { 
-      cacheKey: 'teachers-for-dashboard-redirect', 
-      staleTime: 5 * 60 * 1000,
-      enabled: user?.role === 'teacher' // CHỈ fetch cho teacher
-    }
-  );
-  
-  const teachers = Array.isArray(teachersData) ? teachersData : [];
-  
   // Redirect logic cho teacher/staff: tự động redirect đến staff-detail NGAY LẬP TỨC
-  // Không hiển thị trang loading, redirect ngay khi có đủ thông tin
+  // Ưu tiên: Nếu có linkId, redirect ngay mà không cần fetch teachers
   useEffect(() => {
     // Check if already on staff-detail page to avoid redirect loop
     const currentPath = location.pathname;
@@ -137,33 +123,62 @@ function Dashboard() {
       return; // Already on staff detail page, don't redirect
     }
     
-    // Chỉ redirect khi teachers data đã load xong và user là teacher hoặc có staff roles
-    if (!user || isLoadingTeachers || hasRedirectedRef.current) {
+    if (!user || hasRedirectedRef.current) {
       return;
     }
     
-    // Check if user is teacher role or has staff roles (nhân sự)
+    // Check if user is teacher role
     const isTeacherRole = user.role === 'teacher';
     if (!isTeacherRole) {
       return; // Not a teacher/staff user
     }
     
-    // Nếu chưa có teachers data, đợi một chút rồi thử lại
-    if (teachers.length === 0) {
+    // Nếu có linkId, redirect ngay lập tức mà không cần fetch teachers
+    if (user.linkId) {
+      hasRedirectedRef.current = true;
+      const targetPath = `/staff/${user.linkId}`;
+      if (currentPath !== targetPath) {
+        navigate(targetPath, { replace: true });
+      }
+      return;
+    }
+  }, [user?.id, user?.role, user?.linkId, navigate, location.pathname]);
+  
+  // CHỈ fetch teachers nếu không có linkId và cần tìm teacher record
+  const needsTeacherLookup = user?.role === 'teacher' && !user?.linkId;
+  const { data: teachersData, isLoading: isLoadingTeachers } = useDataLoading(
+    () => fetchTeachers(),
+    [],
+    { 
+      cacheKey: 'teachers-for-dashboard-redirect', 
+      staleTime: 5 * 60 * 1000,
+      enabled: needsTeacherLookup // CHỈ fetch nếu không có linkId
+    }
+  );
+  
+  const teachers = Array.isArray(teachersData) ? teachersData : [];
+  
+  // Fallback: Nếu không có linkId, tìm teacher record từ teachers list
+  useEffect(() => {
+    // Check if already on staff-detail page to avoid redirect loop
+    const currentPath = location.pathname;
+    if (currentPath.startsWith('/staff/')) {
+      return; // Already on staff detail page, don't redirect
+    }
+    
+    if (!user || hasRedirectedRef.current || !needsTeacherLookup) {
+      return;
+    }
+    
+    // Chỉ redirect khi teachers data đã load xong
+    if (isLoadingTeachers || teachers.length === 0) {
       return; // Wait for teachers data
     }
     
-    // Tìm teacher record theo nhiều cách:
-    // 1. Theo linkId (user.linkId === teacher.id)
-    // 2. Theo userId (teacher.userId === user.id)
-    // 3. Theo email (teacher.email === user.email)
+    // Tìm teacher record theo userId hoặc email
     let teacherRecord = null;
     
-    if (user.linkId) {
-      teacherRecord = teachers.find((t) => t.id === user.linkId);
-    }
-    
-    if (!teacherRecord && user.id) {
+    if (user.id) {
       teacherRecord = teachers.find((t) => (t as any).userId === user.id);
     }
     
@@ -174,23 +189,14 @@ function Dashboard() {
     }
     
     if (teacherRecord) {
-      // Check if teacher has staff roles (nhân sự)
-      const staffRoles = teacherRecord.roles || [];
-      const hasStaffRoles = Array.isArray(staffRoles) && staffRoles.length > 0;
-      
-      // Redirect đến staff-detail của teacher này nếu:
-      // 1. Có staff roles (nhân sự), hoặc
-      // 2. Là teacher role (gia sư)
-      if (hasStaffRoles || isTeacherRole) {
-        // Mark as redirected to prevent multiple redirects
-        hasRedirectedRef.current = true;
-        // Redirect đến staff-detail của teacher này NGAY LẬP TỨC
-        const targetPath = `/staff/${teacherRecord.id}`;
-        if (currentPath !== targetPath) {
-          navigate(targetPath, { replace: true });
-        }
-        return;
+      // Mark as redirected to prevent multiple redirects
+      hasRedirectedRef.current = true;
+      // Redirect đến staff-detail của teacher này NGAY LẬP TỨC
+      const targetPath = `/staff/${teacherRecord.id}`;
+      if (currentPath !== targetPath) {
+        navigate(targetPath, { replace: true });
       }
+      return;
     } else {
       // Nếu không tìm thấy teacher record, log để debug
       console.warn('[Dashboard] Teacher record not found for user:', {
@@ -202,7 +208,7 @@ function Dashboard() {
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, user?.role, user?.linkId, user?.email, teachers.length, isLoadingTeachers, navigate, location.pathname]);
+  }, [user?.id, user?.email, teachers.length, isLoadingTeachers, needsTeacherLookup, navigate, location.pathname]);
 
   // Persist state to localStorage
   useEffect(() => {
