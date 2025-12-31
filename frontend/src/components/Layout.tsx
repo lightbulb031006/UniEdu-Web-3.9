@@ -42,7 +42,8 @@ function Layout({ children }: LayoutProps) {
   // Role-based menu items visibility
   // Icon is an array of path strings (each path is a separate <path> element)
   const allMenuItems = [
-    { path: '/dashboard', label: 'Dashboard', icon: ['M3 13h8V3H3z', 'M13 21h8V8h-8z', 'M3 21h8v-6H3z', 'M13 3v3h8V3z'], roles: ['admin', 'teacher', 'student'] },
+    { path: '/dashboard', label: 'Dashboard', icon: ['M3 13h8V3H3z', 'M13 21h8V8h-8z', 'M3 21h8v-6H3z', 'M13 3v3h8V3z'], roles: ['admin', 'student'], excludeRoles: ['teacher'] }, // Ẩn Dashboard với teacher
+    { path: '/home', label: 'Trang chủ', icon: ['M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', 'M9 22V12h6v10'], roles: ['teacher'] }, // Thêm Trang chủ cho teacher
     { path: '/staff', label: 'Nhân sự', icon: ['M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2', 'M9 7a4 4 0 1 0 8 0 4 4 0 0 0-8 0', 'M23 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'], roles: ['admin'], requireStaffRole: 'accountant' }, // Only admin and accountant can access
     { path: '/classes', label: 'Lớp học', icon: ['M4 19.5A2.5 2.5 0 0 1 6.5 17H20', 'M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'], roles: ['admin'], requireStaffRole: 'accountant' }, // Only admin and accountant can access
     { path: '/coding', label: 'Lập trình', icon: ['M2 4h20v14H2z', 'M8 20h8', 'M12 16v4'], roles: ['admin', 'teacher', 'student'] },
@@ -56,6 +57,11 @@ function Layout({ children }: LayoutProps) {
   const menuItems = allMenuItems.filter(item => {
     if (isAdmin) return true;
     if (item.showOnlyForAdmin) return false;
+    
+    // Exclude items for specific roles
+    if ((item as any).excludeRoles && (item as any).excludeRoles.includes(user?.role || 'guest')) {
+      return false;
+    }
     
     // Check base role access
     if (!item.roles.includes(user?.role || 'guest')) return false;
@@ -78,6 +84,11 @@ function Layout({ children }: LayoutProps) {
   const topNavItems = allMenuItems.filter(item => {
     if (isAdmin) return false;
     if (item.showOnlyForAdmin) return false;
+    
+    // Exclude items for specific roles
+    if ((item as any).excludeRoles && (item as any).excludeRoles.includes(user?.role || 'guest')) {
+      return false;
+    }
     
     // Check base role access
     if (!item.roles.includes(user?.role || 'guest')) return false;
@@ -187,10 +198,33 @@ function Layout({ children }: LayoutProps) {
                 <div className="user-account-card" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <button
                     className="user-account-btn"
-                    onClick={() => isAdmin && setIsAdminProfileModalOpen(true)}
+                    onClick={() => {
+                      if (isAdmin) {
+                        setIsAdminProfileModalOpen(true);
+                      } else if (user?.role === 'teacher') {
+                        // Teacher: redirect đến staff detail
+                        if (user.linkId) {
+                          navigate(`/staff/${user.linkId}`, { replace: false });
+                        } else if (teachers.length > 0) {
+                          // Tìm teacher record
+                          let teacherRecord = null;
+                          if (user.id) {
+                            teacherRecord = teachers.find((t) => (t as any).userId === user.id);
+                          }
+                          if (!teacherRecord && user.email) {
+                            teacherRecord = teachers.find((t) => 
+                              t.email?.toLowerCase() === user.email?.toLowerCase()
+                            );
+                          }
+                          if (teacherRecord) {
+                            navigate(`/staff/${teacherRecord.id}`, { replace: false });
+                          }
+                        }
+                      }
+                    }}
                     style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 'var(--radius)' }}
-                    title={isAdmin ? 'Thông tin tài khoản' : undefined}
-                    aria-label={isAdmin ? 'Thông tin tài khoản' : undefined}
+                    title={isAdmin ? 'Thông tin tài khoản' : user?.role === 'teacher' ? 'Chi tiết nhân sự' : undefined}
+                    aria-label={isAdmin ? 'Thông tin tài khoản' : user?.role === 'teacher' ? 'Chi tiết nhân sự' : undefined}
                   >
                     <div className="user-avatar">
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

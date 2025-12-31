@@ -20,7 +20,7 @@ function getDefaultPageForRole(role: string): string {
     case 'admin':
       return '/dashboard';
     case 'teacher':
-      return '/dashboard'; // Sẽ redirect đến staff-detail trong Dashboard
+      return '/home'; // Teacher mặc định ở trang chủ (sẽ redirect đến staff-detail khi đăng nhập)
     case 'student':
       return '/classes';
     default:

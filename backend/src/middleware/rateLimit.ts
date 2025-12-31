@@ -6,7 +6,7 @@ import rateLimit from 'express-rate-limit';
 import env from '../config/env';
 
 const windowMs = parseInt(env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000; // 15 minutes
-const max = parseInt(env.RATE_LIMIT_MAX_REQUESTS) || 200; // Tăng từ 100 lên 200 để tránh 429 errors
+const max = parseInt(env.RATE_LIMIT_MAX_REQUESTS) || 500; // Tăng lên 500 để tránh 429 errors khi load nhiều API
 
 // In development, disable rate limiting completely
 const isDevelopment = env.NODE_ENV === 'development';

@@ -56,21 +56,27 @@ export default function AuthModal({ isOpen, onClose, mode, onModeChange }: AuthM
       const response = await authService.login({ email: loginInput, password, rememberMe });
       setAuth(response.user, response.token, rememberMe);
       
-      // Nếu là user nhân sự (teacher role), tìm staff ID và redirect thẳng đến staff detail
+      // Nếu là user nhân sự (teacher role), redirect thẳng đến staff detail
       if (response.user.role === 'teacher') {
+        const user = response.user;
+        
+        // Nếu có linkId, redirect ngay lập tức
+        if (user.linkId) {
+          onClose();
+          setTimeout(() => {
+            navigate(`/staff/${user.linkId}`, { replace: true });
+          }, 100);
+          return;
+        }
+        
+        // Nếu không có linkId, fetch teachers để tìm staff ID
         try {
-          // Fetch teachers để tìm staff ID
           const teachers = await fetchTeachers();
-          const user = response.user;
           
-          // Tìm teacher record theo nhiều cách
+          // Tìm teacher record theo userId hoặc email
           let teacherRecord = null;
           
-          if (user.linkId) {
-            teacherRecord = teachers.find((t) => t.id === user.linkId);
-          }
-          
-          if (!teacherRecord && user.id) {
+          if (user.id) {
             teacherRecord = teachers.find((t: any) => t.userId === user.id);
           }
           
@@ -89,8 +95,13 @@ export default function AuthModal({ isOpen, onClose, mode, onModeChange }: AuthM
             return;
           }
         } catch (err) {
-          // Nếu không tìm thấy, fallback về dashboard
-          console.warn('[AuthModal] Could not find staff record, redirecting to dashboard');
+          // Nếu không tìm thấy, fallback về home
+          console.warn('[AuthModal] Could not find staff record, redirecting to home');
+          onClose();
+          setTimeout(() => {
+            navigate('/home', { replace: true });
+          }, 100);
+          return;
         }
       }
       

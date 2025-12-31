@@ -33,7 +33,35 @@ function StaffDetail() {
 
   const fetchTeacherFn = useCallback(async () => {
     if (!id) throw new Error('Staff ID is required');
+    // Sử dụng cache từ sessionStorage nếu có
+    const cacheKey = 'teachers-for-staff-detail';
+    try {
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        const { data: cachedTeachers, timestamp } = JSON.parse(cached);
+        const now = Date.now();
+        // Cache 5 phút
+        if (now - timestamp < 5 * 60 * 1000) {
+          const teacher = cachedTeachers.find((t: any) => t.id === id);
+          if (teacher) return teacher;
+        }
+      }
+    } catch {
+      // Ignore cache errors
+    }
+    
+    // Nếu không có cache, fetch teachers
     const teachers = await fetchTeachers();
+    // Lưu vào cache
+    try {
+      sessionStorage.setItem(cacheKey, JSON.stringify({
+        data: teachers,
+        timestamp: Date.now(),
+      }));
+    } catch {
+      // Ignore storage errors
+    }
+    
     const teacher = teachers.find((t) => t.id === id);
     if (!teacher) throw new Error('Staff not found');
     return teacher;
@@ -41,54 +69,66 @@ function StaffDetail() {
 
   const { data: staff, isLoading, error, refetch } = useDataLoading(fetchTeacherFn, [id], {
     cacheKey: `staff-${id}`,
-    staleTime: 2 * 60 * 1000,
+    staleTime: 5 * 60 * 1000, // Tăng cache time lên 5 phút
   });
 
   // Fetch classes to get classes taught by this staff
+  // Chỉ fetch khi staff đã load xong
   const { data: classesData } = useDataLoading(() => fetchClasses(), [], {
     cacheKey: 'classes-for-staff-detail',
     staleTime: 5 * 60 * 1000,
+    enabled: !!staff && !isLoading, // Chỉ fetch khi staff đã load
   });
 
   // Fetch sessions for this staff (all sessions, not filtered by month)
+  // Chỉ fetch khi staff đã load xong
   const fetchSessionsFn = useCallback(() => fetchSessions({ teacherId: id }), [id]);
   const { data: sessionsData } = useDataLoading(fetchSessionsFn, [id], {
     cacheKey: `sessions-staff-${id}`,
-    staleTime: 1 * 60 * 1000,
+    staleTime: 2 * 60 * 1000, // Tăng cache time
+    enabled: !!staff && !isLoading, // Chỉ fetch khi staff đã load
   });
 
 
   // Fetch unpaid amount
+  // Chỉ fetch khi staff đã load xong
   const [unpaidAmount, setUnpaidAmount] = useState<number>(0);
   useEffect(() => {
-    if (id) {
+    if (id && staff && !isLoading) {
       getStaffUnpaidAmount(id)
         .then(setUnpaidAmount)
         .catch((err) => {
-          console.error('Failed to fetch unpaid amount:', err);
+          // Không log 429 errors
+          if (err?.response?.status !== 429) {
+            console.error('Failed to fetch unpaid amount:', err);
+          }
           setUnpaidAmount(0);
         });
     }
-  }, [id]);
+  }, [id, staff, isLoading]);
 
   // Fetch work items
+  // Chỉ fetch khi staff đã load xong
   const fetchWorkItemsFn = useCallback(async () => {
     if (!id) throw new Error('Staff ID is required');
     return await fetchStaffWorkItems(id, selectedMonth);
   }, [id, selectedMonth]);
   const { data: workItemsData, refetch: refetchWorkItems } = useDataLoading(fetchWorkItemsFn, [id, selectedMonth], {
     cacheKey: `staff-work-items-${id}-${selectedMonth}`,
-    staleTime: 1 * 60 * 1000,
+    staleTime: 2 * 60 * 1000, // Tăng cache time
+    enabled: !!staff && !isLoading, // Chỉ fetch khi staff đã load
   });
 
   // Fetch bonuses
+  // Chỉ fetch khi staff đã load xong
   const fetchBonusesFn = useCallback(async () => {
     if (!id) throw new Error('Staff ID is required');
     return await fetchStaffBonuses(id, selectedMonth);
   }, [id, selectedMonth]);
   const { data: bonusesData, refetch: refetchBonuses } = useDataLoading(fetchBonusesFn, [id, selectedMonth], {
     cacheKey: `staff-bonuses-${id}-${selectedMonth}`,
-    staleTime: 1 * 60 * 1000,
+    staleTime: 2 * 60 * 1000, // Tăng cache time
+    enabled: !!staff && !isLoading, // Chỉ fetch khi staff đã load
   });
 
   const workItems = Array.isArray(workItemsData) ? workItemsData : [];

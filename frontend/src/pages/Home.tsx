@@ -231,7 +231,12 @@ const HOME_CONTACT = {
 // Get home stats from dashboard API
 async function getHomeStats() {
   try {
-    const dashboardData = await fetchDashboardData({ year: new Date().getFullYear().toString() });
+    // Dashboard API cần filterType và filterValue
+    const currentYear = new Date().getFullYear().toString();
+    const dashboardData = await fetchDashboardData({ 
+      filterType: 'year', 
+      filterValue: currentYear 
+    });
     return {
       activeStudents: dashboardData.summary.activeStudents || 0,
       activeClasses: dashboardData.summary.activeClasses || 0,
@@ -240,7 +245,15 @@ async function getHomeStats() {
       automationRate: 72 + Math.round(Math.random() * 12),
     };
   } catch (error) {
-    // Fallback to default values
+    // Fallback to default values - không log 400/404 errors
+    if (error && typeof error === 'object' && 'response' in error) {
+      const httpError = error as { response?: { status?: number } };
+      if (httpError.response?.status === 400 || httpError.response?.status === 404) {
+        // Ignore 400/404 errors silently
+      } else {
+        console.debug('Failed to fetch home stats:', error);
+      }
+    }
     return {
       activeStudents: 150,
       activeClasses: 25,
@@ -433,8 +446,8 @@ function Home({ initialAuthMode }: HomeProps = {} as HomeProps) {
             loadedSections[sectionId] = HOME_SECTION_DEFAULTS[sectionId as keyof typeof HOME_SECTION_DEFAULTS] || { title: '', content: '' };
           }
         } catch (error: any) {
-          // Use default on error (ignore connection refused)
-          if (error?.code !== 'ERR_CONNECTION_REFUSED') {
+          // Use default on error (ignore connection refused and 404)
+          if (error?.code !== 'ERR_CONNECTION_REFUSED' && error?.response?.status !== 404) {
             console.debug(`Failed to load section ${sectionId}:`, error);
           }
           loadedSections[sectionId] = HOME_SECTION_DEFAULTS[sectionId as keyof typeof HOME_SECTION_DEFAULTS] || { title: '', content: '' };

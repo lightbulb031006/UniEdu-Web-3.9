@@ -43,6 +43,14 @@ api.interceptors.response.use(
       // Redirect to home (giống code cũ)
       window.location.href = '/';
     }
+    
+    // Suppress 404 errors for home posts (expected when posts don't exist yet)
+    if (error.response?.status === 404 && error.config?.url?.includes('/home/posts/')) {
+      // Return a rejected promise but don't log to console
+      // The calling code will handle it gracefully
+      return Promise.reject(error);
+    }
+    
     return Promise.reject(error);
   }
 );
