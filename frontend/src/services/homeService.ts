@@ -29,16 +29,23 @@ export async function fetchHomePosts(): Promise<HomePost[]> {
 
 /**
  * Get home post by category
+ * Returns null if post doesn't exist (404) - this is expected behavior
  */
 export async function fetchHomePostByCategory(category: string): Promise<HomePost | null> {
   try {
     const response = await api.get<HomePost>(`/home/posts/${category}`);
     return response.data || null;
   } catch (error: any) {
+    // 404 is expected when posts don't exist yet - return null silently
     if (error.response?.status === 404) {
       return null;
     }
-    throw error;
+    // For other errors, still return null to prevent blocking the page
+    // Only log non-404 errors
+    if (error.response?.status !== 404) {
+      console.debug(`Failed to fetch home post for category ${category}:`, error);
+    }
+    return null;
   }
 }
 

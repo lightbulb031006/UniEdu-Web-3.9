@@ -428,6 +428,9 @@ function Home({ initialAuthMode }: HomeProps = {} as HomeProps) {
       const sectionIds = ['news', 'docs'];
       const loadedSections: Record<string, { title: string; content: string; id?: string }> = {};
       
+      // Initialize with defaults first to prevent loading state
+      setSections(HOME_SECTION_DEFAULTS);
+      
       for (const sectionId of sectionIds) {
         if (cancelled) break;
         
@@ -442,20 +445,22 @@ function Home({ initialAuthMode }: HomeProps = {} as HomeProps) {
               id: post.id,
             };
           } else {
-            // Use default
+            // Use default - 404 is expected when posts don't exist
             loadedSections[sectionId] = HOME_SECTION_DEFAULTS[sectionId as keyof typeof HOME_SECTION_DEFAULTS] || { title: '', content: '' };
           }
         } catch (error: any) {
-          // Use default on error (ignore connection refused and 404)
-          if (error?.code !== 'ERR_CONNECTION_REFUSED' && error?.response?.status !== 404) {
-            console.debug(`Failed to load section ${sectionId}:`, error);
-          }
+          // Use default on error - fetchHomePostByCategory should never throw for 404
+          // But just in case, handle it here too
           loadedSections[sectionId] = HOME_SECTION_DEFAULTS[sectionId as keyof typeof HOME_SECTION_DEFAULTS] || { title: '', content: '' };
         }
       }
       
       if (!cancelled) {
-        setSections(loadedSections);
+        // Merge loaded sections with defaults (keep defaults for sections not loaded)
+        setSections({
+          ...HOME_SECTION_DEFAULTS,
+          ...loadedSections,
+        });
       }
     };
     

@@ -53,9 +53,36 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     return <Navigate to="/login" replace />; // Will redirect to Home with login modal
   }
 
-  // Wait for teachers data to load before checking access
-  if (isLoadingTeachers) {
-    return null; // Or a loading spinner
+  // Special handling for teacher: redirect to staff detail if on home page
+  if (user?.role === 'teacher' && location.pathname === '/home') {
+    // Nếu có linkId, redirect ngay lập tức
+    if (user.linkId) {
+      return <Navigate to={`/staff/${user.linkId}`} replace />;
+    }
+    
+    // Nếu không có linkId và đã có teachers data, tìm staff ID
+    if (!isLoadingTeachers && teachers.length > 0) {
+      let teacherRecord = null;
+      
+      if (user.id) {
+        teacherRecord = teachers.find((t: any) => t.userId === user.id);
+      }
+      
+      if (!teacherRecord && user.email) {
+        teacherRecord = teachers.find((t) => 
+          t.email?.toLowerCase() === user.email?.toLowerCase()
+        );
+      }
+      
+      if (teacherRecord) {
+        return <Navigate to={`/staff/${teacherRecord.id}`} replace />;
+      }
+    }
+  }
+
+  // Wait for teachers data to load before checking access (only if needed)
+  if (isLoadingTeachers && user?.role === 'teacher' && location.pathname === '/home') {
+    return null; // Show nothing while loading teachers for redirect
   }
 
   // Check role-based page access (only check once per path change)
@@ -72,13 +99,14 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     // Get default page for user's role
     const defaultPage = getDefaultPageForRole(user.role || 'guest');
     
-    // Avoid redirect loop: don't redirect if already on default page
+    // Avoid redirect loop: don't redirect if already on default page or staff detail
     const isOnDefaultPage = location.pathname === defaultPage || location.pathname === defaultPage + '/';
+    const isOnStaffDetail = user.role === 'teacher' && location.pathname.startsWith('/staff/');
     
     // Check if user can access this page
     if (!canAccessPage(normalizedPage, user, teachers)) {
       // Only redirect if not already on default page and haven't redirected yet
-      if (!isOnDefaultPage && !hasRedirectedRef.current) {
+      if (!isOnDefaultPage && !isOnStaffDetail && !hasRedirectedRef.current) {
         hasRedirectedRef.current = true;
         return <Navigate to={defaultPage} replace />;
       }
