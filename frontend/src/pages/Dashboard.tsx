@@ -115,10 +115,15 @@ function Dashboard() {
   const hasRedirectedRef = useRef(false);
   
   // Fetch teachers để tìm teacher record cho redirect
+  // CHỈ fetch nếu user là teacher (admin không cần)
   const { data: teachersData, isLoading: isLoadingTeachers } = useDataLoading(
     () => fetchTeachers(),
     [],
-    { cacheKey: 'teachers-for-dashboard-redirect', staleTime: 5 * 60 * 1000 }
+    { 
+      cacheKey: 'teachers-for-dashboard-redirect', 
+      staleTime: 5 * 60 * 1000,
+      enabled: user?.role === 'teacher' // CHỈ fetch cho teacher
+    }
   );
   
   const teachers = Array.isArray(teachersData) ? teachersData : [];

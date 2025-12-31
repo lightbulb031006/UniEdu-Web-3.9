@@ -27,10 +27,15 @@ function Layout({ children }: LayoutProps) {
   const isLandingPage = location.pathname === '/' || location.pathname === '/home';
 
   // Fetch teachers để check staff roles
+  // CHỈ fetch khi user là teacher (admin không cần check staff roles)
   const { data: teachersData } = useDataLoading(
     () => fetchTeachers(),
     [],
-    { cacheKey: 'teachers-for-layout-permissions', staleTime: 5 * 60 * 1000 }
+    { 
+      cacheKey: 'teachers-for-layout-permissions', 
+      staleTime: 5 * 60 * 1000,
+      enabled: user?.role === 'teacher' // CHỈ fetch cho teacher
+    }
   );
   const teachers = Array.isArray(teachersData) ? teachersData : [];
 

@@ -35,10 +35,15 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   const lastCheckedPathRef = useRef<string>('');
   
   // Fetch teachers for staff role checking
+  // CHỈ fetch khi user là teacher (admin không cần check staff roles)
   const { data: teachersData, isLoading: isLoadingTeachers } = useDataLoading(
     () => fetchTeachers(),
     [],
-    { cacheKey: 'teachers-for-protected-route', staleTime: 5 * 60 * 1000 }
+    { 
+      cacheKey: 'teachers-for-protected-route', 
+      staleTime: 5 * 60 * 1000,
+      enabled: user?.role === 'teacher' // CHỈ fetch cho teacher
+    }
   );
   
   const teachers = Array.isArray(teachersData) ? teachersData : [];

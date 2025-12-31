@@ -135,6 +135,16 @@ export function useDataLoading<T>(
           // Don't retry on 401 - let the interceptor handle redirect
           return;
         }
+        
+        // If 429 (too many requests), stop retrying immediately
+        if (err?.response?.status === 429) {
+          setIsLoading(false);
+          setIsRefetching(false);
+          isFetchingRef.current = false;
+          // Don't retry on 429 - rate limit exceeded
+          console.warn('[useDataLoading] Rate limit exceeded (429), stopping fetch');
+          return;
+        }
       } finally {
         setIsLoading(false);
         setIsRefetching(false);
