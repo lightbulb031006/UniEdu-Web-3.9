@@ -130,6 +130,10 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
       }
       if (teacherRecord) {
         actualTeacherId = teacherRecord.id;
+        console.log('[ProtectedRoute] Found teacher record:', {
+          teacherId: actualTeacherId,
+          teacherRecord,
+        });
       }
     }
     
