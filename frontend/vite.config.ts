@@ -22,8 +22,6 @@ export default defineConfig({
         manualChunks: {
           // Vendor chunks
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-          // Large libraries
-          'ui-vendor': ['@supabase/supabase-js'],
         },
       },
     },
