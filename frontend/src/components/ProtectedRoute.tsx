@@ -90,9 +90,8 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     () => {
       if (!classId || user?.role !== 'teacher') return Promise.resolve(null);
       return fetchClassById(classId).catch((error) => {
-        // Log error but don't throw - allow page to load and show error
-        console.error('[ProtectedRoute] Error fetching class for access check:', error);
-        return null; // Return null on error to allow access check to proceed
+        // Return null on error to allow access check to proceed
+        return null;
       });
     },
     [classId, user?.role],
@@ -130,10 +129,6 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
       }
       if (teacherRecord) {
         actualTeacherId = teacherRecord.id;
-        console.log('[ProtectedRoute] Found teacher record:', {
-          teacherId: actualTeacherId,
-          teacherRecord,
-        });
       }
     }
     
@@ -143,13 +138,6 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     // 3. VÀ đã load xong teachers data (không còn đang loading)
     // 4. VÀ class có ít nhất 1 teacher được assign (để tránh block khi class chưa có teacher)
     if (!isLoadingTeachers && actualTeacherId && classTeacherIds.length > 0 && !classTeacherIds.includes(actualTeacherId)) {
-      console.warn('[ProtectedRoute] Teacher not assigned to class:', {
-        teacherId: actualTeacherId,
-        classId,
-        classTeacherIds,
-        userEmail: user.email,
-        userLinkId: user.linkId,
-      });
       return <Navigate to="/home" replace />;
     }
     
@@ -157,10 +145,6 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     // (có thể là admin hoặc có quyền khác, hoặc teacher record chưa được link)
     // Chỉ block nếu chắc chắn teacher không được assign
     // Nếu class không có teacher nào được assign, cho phép truy cập (có thể là class mới)
-    if (!isLoadingTeachers && actualTeacherId && classTeacherIds.length === 0) {
-      // Class chưa có teacher được assign - cho phép truy cập
-      console.log('[ProtectedRoute] Class has no teachers assigned, allowing access:', classId);
-    }
   }
 
   // Wait for teachers data to load before checking access (only if needed)
@@ -178,10 +162,6 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     
     // If class data failed to load or is null, allow access (let ClassDetail page handle the error)
     // This prevents redirect loop if there's a temporary network issue
-    if (!isLoadingClass && !classData && classId) {
-      // Class not found or error loading - allow access, let ClassDetail page show error
-      console.warn('[ProtectedRoute] Class data not loaded, allowing access to let page handle error:', classId);
-    }
   }
 
   // Check role-based page access (only check once per path change)
@@ -215,22 +195,11 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     // Check if user can access this page
     const canAccess = canAccessPage(normalizedPage, user, teachers);
     
-    console.log('[ProtectedRoute] Access check:', {
-      pathname: location.pathname,
-      normalizedPage,
-      canAccess,
-      userRole: user.role,
-      isOnDefaultPage,
-      isOnStaffDetail,
-      isOnClassDetail,
-    });
-    
     if (!canAccess) {
       // Only redirect if not already on default page and haven't redirected yet
       // Also skip redirect for class detail pages (we handle that separately above)
       if (!isOnDefaultPage && !isOnStaffDetail && !isOnClassDetail && !hasRedirectedRef.current) {
         hasRedirectedRef.current = true;
-        console.warn('[ProtectedRoute] Redirecting to default page:', defaultPage);
         return <Navigate to={defaultPage} replace />;
       }
     }
