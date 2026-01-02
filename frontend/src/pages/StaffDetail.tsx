@@ -1,10 +1,10 @@
-import React, { useCallback, useState, useMemo, useEffect, useRef } from 'react';
+import React, { useCallback, useState, useMemo, useEffect, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDataLoading } from '../hooks/useDataLoading';
 import { fetchTeachers, updateTeacher } from '../services/teachersService';
 import { fetchClasses, removeTeacherFromClass } from '../services/classesService';
 import { fetchSessions } from '../services/sessionsService';
-import { getStaffUnpaidAmount, fetchStaffWorkItems, fetchStaffBonuses, updateStaffQrPaymentLink, getStaffLoginInfo } from '../services/staffService';
+import { getStaffUnpaidAmount, fetchStaffWorkItems, fetchStaffBonuses, updateStaffQrPaymentLink, getStaffLoginInfo, fetchStaffDetailData, StaffDetailData } from '../services/staffService';
 import { fetchBonuses, createBonus, updateBonus, deleteBonus, Bonus } from '../services/bonusesService';
 import { useAuthStore } from '../store/authStore';
 import { formatCurrencyVND, formatDate, formatMonthLabel } from '../utils/formatters';
@@ -12,6 +12,24 @@ import { hasRole } from '../utils/permissions';
 import Modal from '../components/Modal';
 import { toast } from '../utils/toast';
 import { CurrencyInput } from '../components/CurrencyInput';
+import { TableSkeleton, SkeletonLoader } from '../components/SkeletonLoader';
+import { useDebounce } from '../hooks/useDebounce';
+
+// Add spin animation for loading spinner
+const spinAnimation = `
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+`;
+
+// Inject animation style
+if (typeof document !== 'undefined' && !document.getElementById('spin-animation-style')) {
+  const style = document.createElement('style');
+  style.id = 'spin-animation-style';
+  style.textContent = spinAnimation;
+  document.head.appendChild(style);
+}
 
 /**
  * Staff Detail Page Component
@@ -30,6 +48,8 @@ function StaffDetail() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   }, []);
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonth);
+  // Debounce month change to avoid too many API calls
+  const debouncedMonth = useDebounce(selectedMonth, 300);
 
   const fetchTeacherFn = useCallback(async () => {
     if (!id) throw new Error('Staff ID is required');
@@ -107,32 +127,112 @@ function StaffDetail() {
     }
   }, [id, staff, isLoading]);
 
-  // Fetch work items
-  // Chỉ fetch khi staff đã load xong
+  // Fetch work items - use debounced month to avoid too many calls
   const fetchWorkItemsFn = useCallback(async () => {
     if (!id) throw new Error('Staff ID is required');
-    return await fetchStaffWorkItems(id, selectedMonth);
-  }, [id, selectedMonth]);
-  const { data: workItemsData, refetch: refetchWorkItems } = useDataLoading(fetchWorkItemsFn, [id, selectedMonth], {
-    cacheKey: `staff-work-items-${id}-${selectedMonth}`,
-    staleTime: 2 * 60 * 1000, // Tăng cache time
-    enabled: !!staff && !isLoading, // Chỉ fetch khi staff đã load
+    return await fetchStaffWorkItems(id, debouncedMonth);
+  }, [id, debouncedMonth]);
+  const { data: workItemsData, isLoading: workItemsLoading, refetch: refetchWorkItems } = useDataLoading(fetchWorkItemsFn, [id, debouncedMonth], {
+    cacheKey: `staff-work-items-${id}-${debouncedMonth}`,
+    staleTime: 5 * 60 * 1000, // Tăng cache time lên 5 phút
+    persistCache: true, // Lưu vào localStorage để persist qua sessions
+    enabled: !!staff && !isLoading,
   });
+  
+  // Prefetch next month work items
+  useEffect(() => {
+    if (!id || !staff || isLoading) return;
+    const [year, month] = debouncedMonth.split('-').map(Number);
+    let nextYear = year;
+    let nextMonth = month + 1;
+    if (nextMonth > 12) {
+      nextMonth = 1;
+      nextYear = year + 1;
+    }
+    const nextMonthStr = `${nextYear}-${String(nextMonth).padStart(2, '0')}`;
+    
+    const timeoutId = setTimeout(() => {
+      fetchStaffWorkItems(id, nextMonthStr).catch(() => {});
+    }, 2000);
+    
+    return () => clearTimeout(timeoutId);
+  }, [id, staff, isLoading, debouncedMonth]);
 
-  // Fetch bonuses
-  // Chỉ fetch khi staff đã load xong
+  // Fetch bonuses - use debounced month
   const fetchBonusesFn = useCallback(async () => {
     if (!id) throw new Error('Staff ID is required');
-    return await fetchStaffBonuses(id, selectedMonth);
-  }, [id, selectedMonth]);
-  const { data: bonusesData, refetch: refetchBonuses } = useDataLoading(fetchBonusesFn, [id, selectedMonth], {
-    cacheKey: `staff-bonuses-${id}-${selectedMonth}`,
-    staleTime: 2 * 60 * 1000, // Tăng cache time
-    enabled: !!staff && !isLoading, // Chỉ fetch khi staff đã load
+    return await fetchStaffBonuses(id, debouncedMonth);
+  }, [id, debouncedMonth]);
+  const { data: bonusesData, refetch: refetchBonuses } = useDataLoading(fetchBonusesFn, [id, debouncedMonth], {
+    cacheKey: `staff-bonuses-${id}-${debouncedMonth}`,
+    staleTime: 2 * 60 * 1000,
+    enabled: !!staff && !isLoading,
   });
+  
+  // Prefetch next month bonuses
+  useEffect(() => {
+    if (!id || !staff || isLoading) return;
+    const [year, month] = debouncedMonth.split('-').map(Number);
+    let nextYear = year;
+    let nextMonth = month + 1;
+    if (nextMonth > 12) {
+      nextMonth = 1;
+      nextYear = year + 1;
+    }
+    const nextMonthStr = `${nextYear}-${String(nextMonth).padStart(2, '0')}`;
+    
+    const timeoutId = setTimeout(() => {
+      fetchStaffBonuses(id, nextMonthStr).catch(() => {});
+    }, 2000);
+    
+    return () => clearTimeout(timeoutId);
+  }, [id, staff, isLoading, debouncedMonth]);
+
+  // Fetch staff detail data (all calculations done in backend) - use debounced month
+  const fetchStaffDetailDataFn = useCallback(async () => {
+    if (!id) throw new Error('Staff ID is required');
+    return await fetchStaffDetailData(id, debouncedMonth);
+  }, [id, debouncedMonth]);
+  const { data: staffDetailData, isLoading: staffDetailDataLoading, refetch: refetchStaffDetailData } = useDataLoading(fetchStaffDetailDataFn, [id, debouncedMonth], {
+    cacheKey: `staff-detail-data-${id}-${debouncedMonth}`,
+    staleTime: 10 * 60 * 1000, // Tăng cache time lên 10 phút
+    persistCache: true, // Lưu vào localStorage để persist qua sessions
+    enabled: !!staff && !isLoading,
+  });
+  
+  // Prefetch current month data immediately when staff is loaded (before debounce)
+  // This helps load data faster on first visit
+  useEffect(() => {
+    if (!id || !staff || isLoading) return;
+    // Prefetch immediately with current month (not debounced)
+    fetchStaffDetailData(id, currentMonth).catch(() => {
+      // Ignore errors - this is just prefetching
+    });
+  }, [id, staff, isLoading, currentMonth]);
+  
+  // Prefetch next month detail data
+  useEffect(() => {
+    if (!id || !staff || isLoading) return;
+    const [year, month] = debouncedMonth.split('-').map(Number);
+    let nextYear = year;
+    let nextMonth = month + 1;
+    if (nextMonth > 12) {
+      nextMonth = 1;
+      nextYear = year + 1;
+    }
+    const nextMonthStr = `${nextYear}-${String(nextMonth).padStart(2, '0')}`;
+    
+    const timeoutId = setTimeout(() => {
+      fetchStaffDetailData(id, nextMonthStr).catch(() => {});
+    }, 2000);
+    
+    return () => clearTimeout(timeoutId);
+  }, [id, staff, isLoading, debouncedMonth]);
 
   const workItems = Array.isArray(workItemsData) ? workItemsData : [];
-  const bonuses = Array.isArray(bonusesData) ? bonusesData : [];
+  // Parse bonuses data (now includes statistics)
+  const bonuses = bonusesData?.bonuses || (Array.isArray(bonusesData) ? bonusesData : []);
+  const bonusesStatistics = bonusesData?.statistics || { totalMonth: 0, paid: 0, unpaid: 0 };
 
   const classes = Array.isArray(classesData) ? classesData : [];
   // Sort sessions by date (newest first)
@@ -152,32 +252,38 @@ function StaffDetail() {
   const canManageBonuses = isAdmin || hasRole('accountant') || user?.role === 'teacher';
   const showNavigation = user?.role !== 'teacher';
 
-  // Month navigation handlers
-  const handleMonthChange = (delta: number) => {
-    const [year, month] = selectedMonth.split('-');
-    let newMonth = parseInt(month) + delta;
-    let newYear = parseInt(year);
-    if (newMonth < 1) {
-      newMonth = 12;
-      newYear -= 1;
-    } else if (newMonth > 12) {
-      newMonth = 1;
-      newYear += 1;
-    }
-    setSelectedMonth(`${newYear}-${String(newMonth).padStart(2, '0')}`);
-  };
+  // Month navigation handlers - memoized to prevent re-renders
+  const handleMonthChange = useCallback((delta: number) => {
+    setSelectedMonth((currentMonth) => {
+      const [year, month] = currentMonth.split('-');
+      let newMonth = parseInt(month) + delta;
+      let newYear = parseInt(year);
+      if (newMonth < 1) {
+        newMonth = 12;
+        newYear -= 1;
+      } else if (newMonth > 12) {
+        newMonth = 1;
+        newYear += 1;
+      }
+      return `${newYear}-${String(newMonth).padStart(2, '0')}`;
+    });
+  }, []);
 
-  const handleYearChange = (delta: number) => {
-    const [year, month] = selectedMonth.split('-');
-    const newYear = parseInt(year) + delta;
-    setSelectedMonth(`${newYear}-${month}`);
-  };
+  const handleYearChange = useCallback((delta: number) => {
+    setSelectedMonth((currentMonth) => {
+      const [year, month] = currentMonth.split('-');
+      const newYear = parseInt(year) + delta;
+      return `${newYear}-${month}`;
+    });
+  }, []);
 
-  const handleMonthSelect = (monthVal: string) => {
-    const [year] = selectedMonth.split('-');
-    setSelectedMonth(`${year}-${monthVal}`);
+  const handleMonthSelect = useCallback((monthVal: string) => {
+    setSelectedMonth((currentMonth) => {
+      const [year] = currentMonth.split('-');
+      return `${year}-${monthVal}`;
+    });
     setMonthPopupOpen(false);
-  };
+  }, []);
 
   const [monthPopupOpen, setMonthPopupOpen] = useState(false);
   const [addBonusModalOpen, setAddBonusModalOpen] = useState(false);
@@ -186,6 +292,49 @@ function StaffDetail() {
   const [staffInfoPanelOpen, setStaffInfoPanelOpen] = useState(false);
   const [depositDetailsModalOpen, setDepositDetailsModalOpen] = useState(false);
   const [editingBonus, setEditingBonus] = useState<Bonus | null>(null);
+
+  // Memoized modal handlers to prevent re-renders
+  const handleCloseBonusModal = useCallback(() => {
+    setAddBonusModalOpen(false);
+    setEditingBonus(null);
+  }, []);
+
+  const handleSaveBonus = useCallback(async () => {
+    await refetchBonuses();
+    setAddBonusModalOpen(false);
+    setEditingBonus(null);
+  }, [refetchBonuses]);
+
+  const handleCloseQrModal = useCallback(() => {
+    setQrEditModalOpen(false);
+  }, []);
+
+  const handleSaveQr = useCallback(async () => {
+    await refetch();
+    setQrEditModalOpen(false);
+  }, [refetch]);
+
+  const handleCloseDepositModal = useCallback(() => {
+    setDepositDetailsModalOpen(false);
+  }, []);
+
+  const handleCloseEditStaffModal = useCallback(() => {
+    setEditStaffModalOpen(false);
+  }, []);
+
+  const handleSuccessEditStaff = useCallback(() => {
+    setEditStaffModalOpen(false);
+    refetch();
+  }, [refetch]);
+
+  const handleCloseStaffInfoPanel = useCallback(() => {
+    setStaffInfoPanelOpen(false);
+  }, []);
+
+  const handleEditFromInfoPanel = useCallback(() => {
+    setStaffInfoPanelOpen(false);
+    setEditStaffModalOpen(true);
+  }, []);
 
   // Filter sessions by selected month
   const monthSessions = useMemo(() => {
@@ -249,59 +398,70 @@ function StaffDetail() {
     };
   }, [classes, id]);
 
-  // Calculate class stats for selected month
+  // Use data from backend (all calculations done in backend)
+  // For teachers, use backend calculated data; for display purposes, still need getSessionAllowance for individual session display
   const teacherClassStats = useMemo(() => {
-    if (!staff?.id) return [];
-    return staffClasses.map((cls) => {
-      const classSessions = sessions.filter((s) => s.class_id === cls.id);
-      const monthSessionsForClass = classSessions.filter((s) => {
-        if (!s.date) return false;
-        return s.date.slice(0, 7) === selectedMonth;
+    if (!staffDetailData) {
+      // Fallback: calculate locally if backend data not available (should not happen in production)
+      if (!staff?.id) return [];
+      return staffClasses.map((cls) => {
+        const classSessions = sessions.filter((s) => s.class_id === cls.id);
+        const monthSessionsForClass = classSessions.filter((s) => {
+          if (!s.date) return false;
+          return s.date.slice(0, 7) === selectedMonth;
+        });
+
+        const totalMonth = monthSessionsForClass.reduce((sum, s) => sum + getSessionAllowance(s), 0);
+        const totalPaid = monthSessionsForClass
+          .filter((s) => s.payment_status === 'paid')
+          .reduce((sum, s) => sum + getSessionAllowance(s), 0);
+        const teacherSessionsForClass = classSessions.filter((s) => 
+          (s.teacher_id === staff.id || s.teacherId === staff.id)
+        );
+        const totalUnpaid = teacherSessionsForClass
+          .filter((s) => s.payment_status === 'unpaid')
+          .reduce((sum, s) => sum + getSessionAllowance(s), 0);
+
+        const teacherIds = cls.teacherIds || (cls.teacherId ? [cls.teacherId] : []);
+        const isActive = teacherIds.includes(staff.id);
+
+        return {
+          class: cls,
+          totalMonth,
+          totalPaid,
+          totalUnpaid,
+          monthSessionsCount: monthSessionsForClass.length,
+          isActive,
+        };
       });
-
-      const totalMonth = monthSessionsForClass.reduce((sum, s) => sum + getSessionAllowance(s), 0);
-      const totalPaid = monthSessionsForClass
-        .filter((s) => s.payment_status === 'paid')
-        .reduce((sum, s) => sum + getSessionAllowance(s), 0);
-      // Chưa thanh toán: tính từ TẤT CẢ sessions của teacher có payment_status='unpaid' (không chỉ trong tháng)
-      const teacherSessionsForClass = classSessions.filter((s) => 
-        (s.teacher_id === staff.id || s.teacherId === staff.id)
-      );
-      const totalUnpaid = teacherSessionsForClass
-        .filter((s) => s.payment_status === 'unpaid')
-        .reduce((sum, s) => sum + getSessionAllowance(s), 0);
-
-      const teacherIds = cls.teacherIds || (cls.teacherId ? [cls.teacherId] : []);
-      const isActive = teacherIds.includes(staff.id);
-
+    }
+    
+    // Use backend calculated data, but map class IDs to full class objects
+    return staffDetailData.teacherClassStats.map((stat) => {
+      const cls = staffClasses.find((c) => c.id === stat.class.id) || stat.class;
       return {
+        ...stat,
         class: cls,
-        totalMonth,
-        totalPaid,
-        totalUnpaid,
-        monthSessionsCount: monthSessionsForClass.length,
-        isActive,
       };
     });
-  }, [staffClasses, sessions, selectedMonth, staff?.id, getSessionAllowance]);
+  }, [staffDetailData, staffClasses, sessions, selectedMonth, staff?.id, getSessionAllowance]);
 
-  // Calculate income statistics
+  // Use income stats from backend
   const incomeStats = useMemo(() => {
+    if (staffDetailData) {
+      return staffDetailData.incomeStats;
+    }
+    // Fallback calculation (should not happen in production)
     const totalMonthAllClasses = teacherClassStats.reduce((sum, stat) => sum + stat.totalMonth, 0);
     const totalPaidByStatus = teacherClassStats.reduce((sum, stat) => sum + stat.totalPaid, 0);
     const totalUnpaidByStatus = teacherClassStats.reduce((sum, stat) => sum + stat.totalUnpaid, 0);
-
-    // Total paid all time from sessions
     const allSessions = sessions.filter((s) => s.teacherId === id);
     const totalPaidAllTime = allSessions
       .filter((s) => s.payment_status === 'paid')
       .reduce((sum, s) => sum + getSessionAllowance(s), 0);
-
-    // Total deposit all time from sessions
     const totalDepositAllTime = allSessions
       .filter((s) => s.payment_status === 'deposit')
       .reduce((sum, s) => sum + getSessionAllowance(s), 0);
-
     return {
       totalMonthAllClasses,
       totalPaidByStatus,
@@ -309,19 +469,29 @@ function StaffDetail() {
       totalPaidAllTime,
       totalDepositAllTime,
     };
-  }, [teacherClassStats, sessions, id, getSessionAllowance]);
+  }, [staffDetailData, teacherClassStats, sessions, id, getSessionAllowance]);
+  
+  // Check if income stats are loading (when month changes and data is being fetched)
+  const isIncomeStatsLoading = staffDetailDataLoading || (debouncedMonth !== selectedMonth);
 
-  // Calculate session statistics
-  const sessionStats = {
-    total: sessions.length,
-    paid: sessions.filter((s) => s.payment_status === 'paid').length,
-    unpaid: sessions.filter((s) => s.payment_status === 'unpaid').length,
-    totalAllowance: sessions.reduce((sum, s) => sum + getSessionAllowance(s), 0),
-    paidAllowance: sessions.filter((s) => s.payment_status === 'paid').reduce((sum, s) => sum + getSessionAllowance(s), 0),
-  };
+  // Use session stats from backend
+  const sessionStats = useMemo(() => {
+    if (staffDetailData) {
+      return staffDetailData.sessionStats;
+    }
+    // Fallback calculation (should not happen in production)
+    return {
+      total: sessions.length,
+      paid: sessions.filter((s) => s.payment_status === 'paid').length,
+      unpaid: sessions.filter((s) => s.payment_status === 'unpaid').length,
+      totalAllowance: sessions.reduce((sum, s) => sum + getSessionAllowance(s), 0),
+      paidAllowance: sessions.filter((s) => s.payment_status === 'paid').reduce((sum, s) => sum + getSessionAllowance(s), 0),
+    };
+  }, [staffDetailData, sessions, getSessionAllowance]);
 
+  // Get roles from staff
   const roles = staff?.roles || [];
-  const isTeacher = roles.includes('teacher');
+  const isTeacher = roles.includes('teacher') || roles.length === 0;
   const nonTeacherRoles = roles.filter((r) => r !== 'teacher');
   const hasCskhRole = roles.includes('cskh_sale');
 
@@ -360,6 +530,24 @@ function StaffDetail() {
         </div>
       </div>
     );
+  }
+
+  // Progressive loading: Show page structure even while loading
+  // Only show full page loading if staff data is not available
+  if (isLoading && !staff) {
+    return (
+      <div className="page-container" style={{ padding: 'var(--spacing-6)' }}>
+        <div className="card" style={{ padding: 'var(--spacing-8)', textAlign: 'center' }}>
+          <div className="spinner" />
+          <p className="text-muted" style={{ marginTop: 'var(--spacing-3)' }}>Đang tải thông tin nhân sự...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // If staff is loaded but other data is loading, show page with skeleton loaders
+  if (!staff) {
+    return null; // Should not happen, but safety check
   }
 
   if (isLoading || !staff) {
@@ -648,8 +836,8 @@ function StaffDetail() {
       {/* Income Statistics - Matching backup */}
       {(isTeacher || nonTeacherRoles.length > 0) && (
         <div className="staff-detail-cards-grid" style={{ marginBottom: 'var(--spacing-4)' }}>
-          <div className="staff-detail-card">
-            <div className="staff-detail-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="staff-detail-card" style={{ overflow: 'visible' }}>
+            <div className="staff-detail-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 1 }}>
               <h3 className="staff-detail-card-title" style={{ margin: 0 }}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="12" y1="1" x2="12" y2="23" />
@@ -657,170 +845,291 @@ function StaffDetail() {
                 </svg>
                 Thống kê thu nhập
               </h3>
-            {/* Month Navigation */}
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 'var(--spacing-1)' }}>
-              <button
-                type="button"
-                className="session-month-btn"
-                onClick={() => handleMonthChange(-1)}
-                title="Tháng trước"
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: 'var(--radius)',
-                  border: '1px solid var(--border)',
-                  background: 'var(--bg)',
-                  color: 'var(--text)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                ◀
-              </button>
-              <button
-                type="button"
-                className="session-month-label-btn"
-                onClick={() => setMonthPopupOpen(!monthPopupOpen)}
-                title="Chọn tháng/năm"
-                style={{
-                  padding: 'var(--spacing-2) var(--spacing-3)',
-                  borderRadius: 'var(--radius)',
-                  border: '1px solid var(--border)',
-                  background: 'var(--bg)',
-                  color: 'var(--text)',
-                  cursor: 'pointer',
-                  fontSize: '0.875rem',
-                  fontWeight: '500',
-                }}
-              >
-                Tháng {formatMonthLabel(selectedMonth)}
-              </button>
-              <button
-                type="button"
-                className="session-month-btn"
-                onClick={() => handleMonthChange(1)}
-                title="Tháng sau"
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: 'var(--radius)',
-                  border: '1px solid var(--border)',
-                  background: 'var(--bg)',
-                  color: 'var(--text)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                ▶
-              </button>
-              {/* Month Popup */}
-              {monthPopupOpen && (
-                <div
-                  id="staffMonthPopup"
-                  className="session-month-popup"
+              {/* Month Navigation */}
+              <div className="session-month-nav" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 'var(--spacing-1)', zIndex: 1002 }}>
+                <button
+                  type="button"
+                  className="session-month-btn"
+                  onClick={() => handleMonthChange(-1)}
+                  title="Tháng trước"
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'var(--bg)';
+                    e.currentTarget.style.borderColor = 'var(--primary)';
+                    e.currentTarget.style.color = 'var(--primary)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'var(--surface)';
+                    e.currentTarget.style.borderColor = 'var(--border)';
+                    e.currentTarget.style.color = 'var(--text)';
+                  }}
                   style={{
-                    position: 'absolute',
-                    top: '100%',
-                    right: 0,
-                    marginTop: 'var(--spacing-2)',
-                    background: 'var(--surface)',
+                    padding: '4px 8px',
+                    borderRadius: 'var(--radius)',
                     border: '1px solid var(--border)',
-                    borderRadius: 'var(--radius-lg)',
-                    padding: 'var(--spacing-3)',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                    zIndex: 1000,
-                    minWidth: '200px',
+                    background: 'var(--surface)',
+                    color: 'var(--text)',
+                    cursor: 'pointer',
+                    fontSize: 'var(--font-size-sm)',
+                    minWidth: '32px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s ease',
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-3)' }}>
-                    <button
-                      type="button"
-                      onClick={() => handleYearChange(-1)}
-                      style={{
-                        width: '32px',
-                        height: '32px',
-                        borderRadius: 'var(--radius)',
-                        border: '1px solid var(--border)',
-                        background: 'var(--bg)',
-                        color: 'var(--text)',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      ‹
-                    </button>
-                    <span style={{ fontWeight: '600', fontSize: '1rem' }}>{year}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleYearChange(1)}
-                      style={{
-                        width: '32px',
-                        height: '32px',
-                        borderRadius: 'var(--radius)',
-                        border: '1px solid var(--border)',
-                        background: 'var(--bg)',
-                        color: 'var(--text)',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      ›
-                    </button>
-                  </div>
+                  ◀
+                </button>
+                <button
+                  type="button"
+                  className="session-month-label-btn"
+                  onClick={() => setMonthPopupOpen(!monthPopupOpen)}
+                  title="Chọn tháng/năm"
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'var(--bg)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'transparent';
+                  }}
+                  style={{
+                    border: 'none',
+                    background: 'transparent',
+                    cursor: 'pointer',
+                    padding: '4px 8px',
+                    borderRadius: 'var(--radius)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'background 0.2s ease',
+                  }}
+                >
+                  <span style={{ fontWeight: '500', fontSize: 'var(--font-size-sm)', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    Tháng {formatMonthLabel(selectedMonth)}
+                    {debouncedMonth !== selectedMonth && (
+                      <span style={{ fontSize: '0.75rem', opacity: 0.6, animation: 'pulse 1.5s ease-in-out infinite' }}>⏳</span>
+                    )}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="session-month-btn"
+                  onClick={() => handleMonthChange(1)}
+                  title="Tháng sau"
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'var(--bg)';
+                    e.currentTarget.style.borderColor = 'var(--primary)';
+                    e.currentTarget.style.color = 'var(--primary)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'var(--surface)';
+                    e.currentTarget.style.borderColor = 'var(--border)';
+                    e.currentTarget.style.color = 'var(--text)';
+                  }}
+                  style={{
+                    padding: '4px 8px',
+                    borderRadius: 'var(--radius)',
+                    border: '1px solid var(--border)',
+                    background: 'var(--surface)',
+                    color: 'var(--text)',
+                    cursor: 'pointer',
+                    fontSize: 'var(--font-size-sm)',
+                    minWidth: '32px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  ▶
+                </button>
+                {/* Month Popup */}
+                {monthPopupOpen && (
                   <div
+                    id="staffMonthPopup"
+                    className="session-month-popup"
                     style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(3, 1fr)',
-                      gap: 'var(--spacing-1)',
+                      position: 'absolute',
+                      top: '100%',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      marginTop: '6px',
+                      background: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius)',
+                      boxShadow: 'var(--shadow-sm)',
+                      padding: '6px 8px 8px',
+                      zIndex: 1003,
+                      minWidth: '200px',
                     }}
                   >
-                    {monthNames.map((label, idx) => {
-                      const val = String(idx + 1).padStart(2, '0');
-                      const isActive = val === month;
-                      return (
-                        <button
-                          key={val}
-                          type="button"
-                          className={`session-month-cell${isActive ? ' active' : ''}`}
-                          data-month={val}
-                          onClick={() => handleMonthSelect(val)}
-                          style={{
-                            padding: 'var(--spacing-2)',
-                            borderRadius: 'var(--radius)',
-                            border: '1px solid var(--border)',
-                            background: isActive ? 'var(--primary)' : 'var(--bg)',
-                            color: isActive ? 'white' : 'var(--text)',
-                            cursor: 'pointer',
-                            fontSize: '0.875rem',
-                            fontWeight: isActive ? '600' : '400',
-                            transition: 'all 0.2s ease',
-                          }}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
+                    <div className="session-month-popup-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px', fontSize: 'var(--font-size-xs)' }}>
+                      <button
+                        type="button"
+                        className="session-month-year-btn"
+                        onClick={() => handleYearChange(-1)}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = 'var(--bg)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'transparent';
+                        }}
+                        style={{
+                          border: 'none',
+                          background: 'transparent',
+                          cursor: 'pointer',
+                          padding: '2px 4px',
+                          borderRadius: 'var(--radius)',
+                          transition: 'background 0.2s ease',
+                        }}
+                      >
+                        ‹
+                      </button>
+                      <span style={{ fontWeight: '500' }}>{year}</span>
+                      <button
+                        type="button"
+                        className="session-month-year-btn"
+                        onClick={() => handleYearChange(1)}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = 'var(--bg)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'transparent';
+                        }}
+                        style={{
+                          border: 'none',
+                          background: 'transparent',
+                          cursor: 'pointer',
+                          padding: '2px 4px',
+                          borderRadius: 'var(--radius)',
+                          transition: 'background 0.2s ease',
+                        }}
+                      >
+                        ›
+                      </button>
+                    </div>
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(3, 1fr)',
+                        gap: '2px',
+                      }}
+                    >
+                      {monthNames.map((label, idx) => {
+                        const val = String(idx + 1).padStart(2, '0');
+                        const isActive = val === month;
+                        return (
+                          <button
+                            key={val}
+                            type="button"
+                            className={`session-month-cell${isActive ? ' active' : ''}`}
+                            data-month={val}
+                            onClick={() => handleMonthSelect(val)}
+                            style={{
+                              padding: '4px 6px',
+                              borderRadius: 'var(--radius)',
+                              border: 'none',
+                              background: isActive ? 'var(--primary)' : 'transparent',
+                              color: isActive ? 'white' : 'var(--text)',
+                              cursor: 'pointer',
+                              fontSize: 'var(--font-size-xs)',
+                              fontWeight: isActive ? '600' : '400',
+                              transition: 'all 0.2s ease',
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!isActive) {
+                                e.currentTarget.style.background = 'var(--bg)';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!isActive) {
+                                e.currentTarget.style.background = 'transparent';
+                              }
+                            }}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="staff-detail-stats-grid" style={{ position: 'relative' }}>
+              {/* Loading overlay khi đang refetch nhưng đã có data */}
+              {isIncomeStatsLoading && staffDetailData && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'rgba(255, 255, 255, 0.6)',
+                    backdropFilter: 'blur(2px)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 5,
+                    borderRadius: 'var(--radius-lg)',
+                    transition: 'opacity 0.3s ease',
+                  }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                    <div
+                      style={{
+                        width: '24px',
+                        height: '24px',
+                        border: '3px solid var(--border)',
+                        borderTopColor: 'var(--primary)',
+                        borderRadius: '50%',
+                        animation: 'spin 0.8s linear infinite',
+                      }}
+                    />
+                    <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>Đang cập nhật...</span>
                   </div>
                 </div>
               )}
-            </div>
-          </div>
-            <div className="staff-detail-stats-grid">
-              <div className="staff-detail-stat-item">
-                <div className="staff-detail-stat-label">Tổng trợ cấp tháng</div>
-                <div className="staff-detail-stat-value" style={{ color: 'var(--primary)' }}>
-                  {formatCurrencyVND(incomeStats.totalMonthAllClasses)}
-                </div>
-              </div>
+              {isIncomeStatsLoading && !staffDetailData ? (
+                // Show skeleton loaders when loading for the first time
+                Array.from({ length: 5 }).map((_, idx) => (
+                  <div key={idx} className="staff-detail-stat-item">
+                    <div className="staff-detail-stat-label">
+                      <SkeletonLoader width="120px" height="16px" />
+                    </div>
+                    <div className="staff-detail-stat-value">
+                      <SkeletonLoader width="100px" height="20px" />
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <>
+                  <div className="staff-detail-stat-item">
+                    <div className="staff-detail-stat-label">Tổng trợ cấp tháng</div>
+                    <div className="staff-detail-stat-value" style={{ color: 'var(--primary)', opacity: isIncomeStatsLoading ? 0.6 : 1, transition: 'opacity 0.3s ease', minHeight: '24px', display: 'flex', alignItems: 'center' }}>
+                      {isIncomeStatsLoading ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                          <span style={{ display: 'inline-block', width: '12px', height: '12px', border: '2px solid var(--border)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                          Đang tải...
+                        </span>
+                      ) : (
+                        formatCurrencyVND(incomeStats.totalMonthAllClasses)
+                      )}
+                    </div>
+                  </div>
               <div className="staff-detail-stat-item">
                 <div className="staff-detail-stat-label">
                   <span className="badge badge-success" style={{ marginRight: '8px' }}>✓</span>
                   Đã thanh toán
                 </div>
-                <div className="staff-detail-stat-value" style={{ color: '#059669' }}>
-                  {formatCurrencyVND(incomeStats.totalPaidByStatus)}
+                <div className="staff-detail-stat-value" style={{ color: '#059669', opacity: isIncomeStatsLoading ? 0.5 : 1, transition: 'opacity 0.2s', minHeight: '24px', display: 'flex', alignItems: 'center' }}>
+                  {isIncomeStatsLoading ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                      <span style={{ display: 'inline-block', width: '12px', height: '12px', border: '2px solid var(--border)', borderTopColor: '#059669', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                      Đang tải...
+                    </span>
+                  ) : (
+                    formatCurrencyVND(incomeStats.totalPaidByStatus)
+                  )}
                 </div>
               </div>
               <div className="staff-detail-stat-item">
@@ -828,14 +1137,28 @@ function StaffDetail() {
                   <span className="badge badge-danger" style={{ marginRight: '8px' }}>✗</span>
                   Chưa thanh toán
                 </div>
-                <div className="staff-detail-stat-value" style={{ color: '#dc2626' }}>
-                  {formatCurrencyVND(incomeStats.totalUnpaidByStatus)}
+                <div className="staff-detail-stat-value" style={{ color: '#dc2626', opacity: isIncomeStatsLoading ? 0.5 : 1, transition: 'opacity 0.2s', minHeight: '24px', display: 'flex', alignItems: 'center' }}>
+                  {isIncomeStatsLoading ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                      <span style={{ display: 'inline-block', width: '12px', height: '12px', border: '2px solid var(--border)', borderTopColor: '#dc2626', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                      Đang tải...
+                    </span>
+                  ) : (
+                    formatCurrencyVND(incomeStats.totalUnpaidByStatus)
+                  )}
                 </div>
               </div>
               <div className="staff-detail-stat-item">
                 <div className="staff-detail-stat-label">Tổng nhận (từ trước)</div>
-                <div className="staff-detail-stat-value" style={{ color: 'var(--primary)' }}>
-                  {formatCurrencyVND(incomeStats.totalPaidAllTime)}
+                <div className="staff-detail-stat-value" style={{ color: 'var(--primary)', opacity: isIncomeStatsLoading ? 0.5 : 1, transition: 'opacity 0.2s', minHeight: '24px', display: 'flex', alignItems: 'center' }}>
+                  {isIncomeStatsLoading ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                      <span style={{ display: 'inline-block', width: '12px', height: '12px', border: '2px solid var(--border)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                      Đang tải...
+                    </span>
+                  ) : (
+                    formatCurrencyVND(incomeStats.totalPaidAllTime)
+                  )}
                 </div>
               </div>
               <div
@@ -857,10 +1180,19 @@ function StaffDetail() {
                   <span className="badge badge-purple" style={{ marginRight: '8px' }}>●</span>
                   Cọc
                 </div>
-                <div className="staff-detail-stat-value" style={{ color: '#9333ea' }}>
-                  {formatCurrencyVND(incomeStats.totalDepositAllTime)}
+                <div className="staff-detail-stat-value" style={{ color: '#9333ea', opacity: isIncomeStatsLoading ? 0.5 : 1, transition: 'opacity 0.2s' }}>
+                  {isIncomeStatsLoading ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ fontSize: '0.75rem' }}>⏳</span>
+                      <span style={{ fontSize: '0.875rem' }}>Đang tải...</span>
+                    </span>
+                  ) : (
+                    formatCurrencyVND(incomeStats.totalDepositAllTime)
+                  )}
                 </div>
               </div>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -1045,62 +1377,120 @@ function StaffDetail() {
                 <span className="text-muted text-sm">Tháng {formatMonthLabel(selectedMonth)}</span>
               </div>
               <div className="staff-detail-section-content">
-              {workItems.length > 0 ? (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              {workItemsLoading && !workItemsData ? (
+                <TableSkeleton rows={3} columns={4} />
+              ) : workItems.length > 0 ? (
+                <div className="table-container" style={{ borderRadius: 'var(--radius-lg)', overflow: 'hidden', border: '1px solid var(--border)', position: 'relative' }}>
+                  {/* Loading overlay khi đang refetch */}
+                  {workItemsLoading && workItemsData && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        background: 'rgba(255, 255, 255, 0.7)',
+                        backdropFilter: 'blur(2px)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 10,
+                        borderRadius: 'var(--radius-lg)',
+                        transition: 'opacity 0.3s ease',
+                      }}
+                    >
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                        <div
+                          style={{
+                            width: '24px',
+                            height: '24px',
+                            border: '3px solid var(--border)',
+                            borderTopColor: 'var(--primary)',
+                            borderRadius: '50%',
+                            animation: 'spin 0.8s linear infinite',
+                          }}
+                        />
+                        <span style={{ fontSize: '0.875rem', color: 'var(--muted)' }}>Đang cập nhật...</span>
+                      </div>
+                    </div>
+                  )}
+                  <table className="table-striped" style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ background: 'linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0.03) 100%)' }}>
-                        <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', color: 'var(--text)' }}>Công việc</th>
-                        <th style={{ padding: 'var(--spacing-3)', textAlign: 'right', fontWeight: '600', fontSize: '0.875rem', color: 'var(--text)' }}>Chưa thanh toán</th>
-                        <th style={{ padding: 'var(--spacing-3)', textAlign: 'right', fontWeight: '600', fontSize: '0.875rem', color: 'var(--text)' }}>Đã thanh toán</th>
-                        <th style={{ padding: 'var(--spacing-3)', textAlign: 'right', fontWeight: '600', fontSize: '0.875rem', color: 'var(--text)' }}>Tổng tháng</th>
+                        <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '200px' }}>Tên công việc</th>
+                        <th style={{ padding: 'var(--spacing-3)', textAlign: 'right', fontWeight: '600', fontSize: '0.875rem', minWidth: '140px' }}>Tổng tháng</th>
+                        <th style={{ padding: 'var(--spacing-3)', textAlign: 'right', fontWeight: '600', fontSize: '0.875rem', minWidth: '140px' }}>Đã nhận</th>
+                        <th style={{ padding: 'var(--spacing-3)', textAlign: 'right', fontWeight: '600', fontSize: '0.875rem', minWidth: '140px' }}>Chưa nhận</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {workItems.map((item, index) => (
-                        <tr
-                          key={item.type}
-                          style={{
-                            borderTop: index > 0 ? '1px solid var(--border)' : 'none',
-                            transition: 'background 0.2s ease',
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'var(--bg-secondary)';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = '';
-                          }}
-                        >
-                          <td style={{ padding: 'var(--spacing-3)', fontWeight: '500', color: 'var(--text)' }}>
-                            {item.pageUrl ? (
-                              <button
-                                className="btn-link"
-                                onClick={() => {
-                                  if (item.pageUrl?.startsWith('staff-cskh-detail:')) {
-                                    navigate(`/staff/${id}/cskh`);
-                                  } else {
-                                    navigate(`/${item.pageUrl}`);
-                                  }
-                                }}
-                                style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', padding: 0, textAlign: 'left' }}
-                              >
-                                {item.name}
-                              </button>
-                            ) : (
-                              item.name
-                            )}
-                          </td>
-                          <td style={{ padding: 'var(--spacing-3)', textAlign: 'right', color: item.unpaid > 0 ? 'var(--danger)' : 'var(--muted)' }}>
-                            {formatCurrencyVND(item.unpaid)}
-                          </td>
-                          <td style={{ padding: 'var(--spacing-3)', textAlign: 'right', color: 'var(--text)' }}>
-                            {formatCurrencyVND(item.paid)}
-                          </td>
-                          <td style={{ padding: 'var(--spacing-3)', textAlign: 'right', fontWeight: '600', color: 'var(--text)' }}>
-                            {formatCurrencyVND(item.total)}
-                          </td>
-                        </tr>
-                      ))}
+                      {workItems.map((item, index) => {
+                        const hasAction = item.pageUrl || item.clickAction;
+                        const pageUrl = item.pageUrl || '';
+                        const rowClass = hasAction ? 'work-item-row' : '';
+                        
+                        return (
+                          <tr
+                            key={item.type}
+                            className={rowClass}
+                            data-page-url={hasAction ? pageUrl : undefined}
+                            data-work-item-index={hasAction ? index : undefined}
+                            onClick={() => {
+                              if (hasAction && pageUrl) {
+                                if (pageUrl.startsWith('staff-cskh-detail:')) {
+                                  navigate(`/staff/${id}/cskh`);
+                                } else {
+                                  navigate(`/${pageUrl}`);
+                                }
+                              }
+                            }}
+                            style={{
+                              cursor: hasAction ? 'pointer' : 'default',
+                              transition: 'all 0.2s ease',
+                            }}
+                            onMouseEnter={(e) => {
+                              if (hasAction) {
+                                e.currentTarget.style.background = 'rgba(59, 130, 246, 0.05)';
+                                e.currentTarget.style.transform = 'translateX(4px)';
+                              } else {
+                                e.currentTarget.style.background = 'var(--bg-secondary)';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = '';
+                              e.currentTarget.style.transform = 'translateX(0)';
+                            }}
+                          >
+                            <td style={{ padding: 'var(--spacing-3)' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--primary)' }}>
+                                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                  <polyline points="14 2 14 8 20 8" />
+                                </svg>
+                                <span style={{ fontWeight: 500, color: hasAction ? 'var(--primary)' : 'var(--text)' }}>
+                                  {item.name}
+                                </span>
+                              </div>
+                            </td>
+                            <td style={{ padding: 'var(--spacing-3)', textAlign: 'right' }}>
+                              <div style={{ fontWeight: 600, color: 'var(--text)' }}>
+                                {formatCurrencyVND(item.total || 0)}
+                              </div>
+                            </td>
+                            <td style={{ padding: 'var(--spacing-3)', textAlign: 'right' }}>
+                              <div style={{ fontWeight: 500, color: '#059669' }}>
+                                {formatCurrencyVND(item.paid || 0)}
+                              </div>
+                            </td>
+                            <td style={{ padding: 'var(--spacing-3)', textAlign: 'right' }}>
+                              <div style={{ fontWeight: 500, color: '#dc2626' }}>
+                                {formatCurrencyVND(item.unpaid || 0)}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -1145,8 +1535,39 @@ function StaffDetail() {
               )}
             </div>
             <div className="staff-detail-section-content">
+              {/* Statistics Row */}
+              <div style={{ 
+                padding: 'var(--spacing-4)', 
+                background: 'var(--bg)', 
+                border: '1px solid var(--border)',
+                borderBottom: 'none',
+                borderTopLeftRadius: 'var(--radius-lg)',
+                borderTopRightRadius: 'var(--radius-lg)',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: 'var(--spacing-4)',
+              }}>
+                <div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: 'var(--spacing-1)', fontWeight: '500' }}>Tổng tháng</div>
+                  <div style={{ fontSize: '1.125rem', fontWeight: '600', color: 'var(--primary)' }}>
+                    {formatCurrencyVND(bonusesStatistics.totalMonth)}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: 'var(--spacing-1)', fontWeight: '500' }}>Đã nhận</div>
+                  <div style={{ fontSize: '1.125rem', fontWeight: '600', color: '#059669' }}>
+                    {formatCurrencyVND(bonusesStatistics.paid)}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: 'var(--spacing-1)', fontWeight: '500' }}>Chưa nhận</div>
+                  <div style={{ fontSize: '1.125rem', fontWeight: '600', color: '#dc2626' }}>
+                    {formatCurrencyVND(bonusesStatistics.unpaid)}
+                  </div>
+                </div>
+              </div>
               {bonuses.length > 0 ? (
-                <div className="table-container" style={{ borderRadius: 'var(--radius-lg)', overflow: 'hidden', border: '1px solid var(--border)' }}>
+                <div className="table-container" style={{ borderRadius: '0 0 var(--radius-lg) var(--radius-lg)', overflow: 'hidden', border: '1px solid var(--border)', borderTop: 'none', background: 'var(--bg)' }}>
                 <table className="table-striped" style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: 'linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0.03) 100%)' }}>
@@ -1245,13 +1666,21 @@ function StaffDetail() {
                 </table>
                 </div>
               ) : (
-                <div className="staff-detail-empty-state">
-                  <div className="staff-detail-empty-state-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <div style={{ 
+                  padding: 'var(--spacing-6)', 
+                  textAlign: 'center',
+                  background: 'var(--bg)',
+                  border: '1px solid var(--border)',
+                  borderTop: 'none',
+                  borderBottomLeftRadius: 'var(--radius-lg)',
+                  borderBottomRightRadius: 'var(--radius-lg)',
+                }}>
+                  <div className="staff-detail-empty-state-icon" style={{ marginBottom: 'var(--spacing-2)' }}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '48px', height: '48px', color: 'var(--text-secondary)' }}>
                       <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
                     </svg>
                   </div>
-                  <p>Chưa có thưởng nào trong tháng này.</p>
+                  <p style={{ color: 'var(--text-secondary)', margin: 0 }}>Chưa có thưởng nào trong tháng này.</p>
                 </div>
               )}
             </div>
@@ -1262,7 +1691,212 @@ function StaffDetail() {
       {/* Sessions List */}
       {sessions.length > 0 && (
         <div className="card">
-          <h3 style={{ marginBottom: 'var(--spacing-4)', fontSize: 'var(--font-size-lg)', fontWeight: '600' }}>Lịch sử buổi dạy</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-4)' }}>
+            <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)', fontWeight: '600' }}>Lịch sử buổi dạy</h3>
+            {/* Month Navigation */}
+            <div className="session-month-nav" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 'var(--spacing-1)' }}>
+              <button
+                type="button"
+                className="session-month-btn"
+                onClick={() => handleMonthChange(-1)}
+                title="Tháng trước"
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'var(--bg)';
+                  e.currentTarget.style.borderColor = 'var(--primary)';
+                  e.currentTarget.style.color = 'var(--primary)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'var(--surface)';
+                  e.currentTarget.style.borderColor = 'var(--border)';
+                  e.currentTarget.style.color = 'var(--text)';
+                }}
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: 'var(--radius)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface)',
+                  color: 'var(--text)',
+                  cursor: 'pointer',
+                  fontSize: 'var(--font-size-sm)',
+                  minWidth: '32px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                ◀
+              </button>
+              <button
+                type="button"
+                className="session-month-label-btn"
+                onClick={() => setMonthPopupOpen(!monthPopupOpen)}
+                title="Chọn tháng/năm"
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'var(--bg)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                }}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  padding: '4px 8px',
+                  borderRadius: 'var(--radius)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'background 0.2s ease',
+                }}
+              >
+                <span style={{ fontWeight: '500', fontSize: 'var(--font-size-sm)', whiteSpace: 'nowrap' }}>Tháng {formatMonthLabel(selectedMonth)}</span>
+              </button>
+              <button
+                type="button"
+                className="session-month-btn"
+                onClick={() => handleMonthChange(1)}
+                title="Tháng sau"
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'var(--bg)';
+                  e.currentTarget.style.borderColor = 'var(--primary)';
+                  e.currentTarget.style.color = 'var(--primary)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'var(--surface)';
+                  e.currentTarget.style.borderColor = 'var(--border)';
+                  e.currentTarget.style.color = 'var(--text)';
+                }}
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: 'var(--radius)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface)',
+                  color: 'var(--text)',
+                  cursor: 'pointer',
+                  fontSize: 'var(--font-size-sm)',
+                  minWidth: '32px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                ▶
+              </button>
+              {/* Month Popup */}
+              {monthPopupOpen && (
+                <div
+                  id="staffMonthPopup"
+                  className="session-month-popup"
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    marginTop: '6px',
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius)',
+                    boxShadow: 'var(--shadow-sm)',
+                    padding: '6px 8px 8px',
+                    zIndex: 30,
+                    minWidth: '200px',
+                  }}
+                >
+                  <div className="session-month-popup-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px', fontSize: 'var(--font-size-xs)' }}>
+                    <button
+                      type="button"
+                      className="session-month-year-btn"
+                      onClick={() => handleYearChange(-1)}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'var(--bg)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'transparent';
+                      }}
+                      style={{
+                        border: 'none',
+                        background: 'transparent',
+                        cursor: 'pointer',
+                        padding: '2px 4px',
+                        borderRadius: 'var(--radius)',
+                        transition: 'background 0.2s ease',
+                      }}
+                    >
+                      ‹
+                    </button>
+                    <span style={{ fontWeight: '500' }}>{year}</span>
+                    <button
+                      type="button"
+                      className="session-month-year-btn"
+                      onClick={() => handleYearChange(1)}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'var(--bg)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'transparent';
+                      }}
+                      style={{
+                        border: 'none',
+                        background: 'transparent',
+                        cursor: 'pointer',
+                        padding: '2px 4px',
+                        borderRadius: 'var(--radius)',
+                        transition: 'background 0.2s ease',
+                      }}
+                    >
+                      ›
+                    </button>
+                  </div>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(3, 1fr)',
+                      gap: '2px',
+                    }}
+                  >
+                    {monthNames.map((label, idx) => {
+                      const val = String(idx + 1).padStart(2, '0');
+                      const isActive = val === month;
+                      return (
+                        <button
+                          key={val}
+                          type="button"
+                          className={`session-month-cell${isActive ? ' active' : ''}`}
+                          data-month={val}
+                          onClick={() => handleMonthSelect(val)}
+                          style={{
+                            padding: '4px 6px',
+                            borderRadius: 'var(--radius)',
+                            border: 'none',
+                            background: isActive ? 'var(--primary)' : 'transparent',
+                            color: isActive ? 'white' : 'var(--text)',
+                            cursor: 'pointer',
+                            fontSize: 'var(--font-size-xs)',
+                            fontWeight: isActive ? '600' : '400',
+                            transition: 'all 0.2s ease',
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isActive) {
+                              e.currentTarget.style.background = 'var(--bg)';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isActive) {
+                              e.currentTarget.style.background = 'transparent';
+                            }
+                          }}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
           <div className="table-container" style={{ overflowX: 'auto' }}>
             <table className="table-striped" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
@@ -1275,7 +1909,7 @@ function StaffDetail() {
                 </tr>
               </thead>
               <tbody>
-                {sessions.map((session) => {
+                {monthSessions.map((session) => {
                   const cls = classes.find((c) => c.id === session.class_id);
                   const sessionAllowance = getSessionAllowance(session);
                   return (
@@ -1313,7 +1947,7 @@ function StaffDetail() {
                     Tổng trợ cấp:
                   </td>
                   <td style={{ padding: 'var(--spacing-3)', textAlign: 'right', fontWeight: '600', color: 'var(--primary)' }}>
-                    {formatCurrencyVND(sessions.reduce((sum, s) => sum + getSessionAllowance(s), 0))}
+                    {formatCurrencyVND(monthSessions.reduce((sum, s) => sum + getSessionAllowance(s), 0))}
                   </td>
                   <td style={{ padding: 'var(--spacing-3)' }}></td>
                 </tr>
@@ -1323,47 +1957,35 @@ function StaffDetail() {
         </div>
       )}
 
-      {/* Add/Edit Bonus Modal */}
+      {/* Add/Edit Bonus Modal - Only render when open */}
       {addBonusModalOpen && (
         <BonusModal
           isOpen={addBonusModalOpen}
-          onClose={() => {
-            setAddBonusModalOpen(false);
-            setEditingBonus(null);
-          }}
+          onClose={handleCloseBonusModal}
           staffId={id || ''}
           month={selectedMonth}
           bonus={editingBonus}
           staff={staff}
-          onSave={async () => {
-            await refetchBonuses();
-            setAddBonusModalOpen(false);
-            setEditingBonus(null);
-          }}
+          onSave={handleSaveBonus}
         />
       )}
 
-      {/* QR Edit Modal */}
+      {/* QR Edit Modal - Only render when open */}
       {qrEditModalOpen && (
         <QREditModal
           isOpen={qrEditModalOpen}
-          onClose={() => {
-            setQrEditModalOpen(false);
-          }}
+          onClose={handleCloseQrModal}
           staffId={id || ''}
           currentQrLink={qrPaymentLink || ''}
-          onSave={async () => {
-            await refetch();
-            setQrEditModalOpen(false);
-          }}
+          onSave={handleSaveQr}
         />
       )}
 
-      {/* Deposit Details Modal */}
+      {/* Deposit Details Modal - Only render when open */}
       {depositDetailsModalOpen && (
         <DepositDetailsModal
           isOpen={depositDetailsModalOpen}
-          onClose={() => setDepositDetailsModalOpen(false)}
+          onClose={handleCloseDepositModal}
           staffId={id || ''}
           staff={staff}
           sessions={sessions}
@@ -1372,36 +1994,32 @@ function StaffDetail() {
         />
       )}
 
-      {/* Edit Staff Modal */}
-      <Modal
-        title="Chỉnh sửa thông tin nhân sự"
-        isOpen={editStaffModalOpen}
-        onClose={() => setEditStaffModalOpen(false)}
-        size="lg"
-      >
-        {staff && (
-          <EditStaffModal
-            staffId={id!}
-            staff={staff}
-            onSuccess={() => {
-              setEditStaffModalOpen(false);
-              refetch();
-            }}
-            onClose={() => setEditStaffModalOpen(false)}
-          />
-        )}
-      </Modal>
+      {/* Edit Staff Modal - Only render when open */}
+      {editStaffModalOpen && (
+        <Modal
+          title="Chỉnh sửa thông tin nhân sự"
+          isOpen={editStaffModalOpen}
+          onClose={handleCloseEditStaffModal}
+          size="lg"
+        >
+          {staff && (
+            <EditStaffModal
+              staffId={id!}
+              staff={staff}
+              onSuccess={handleSuccessEditStaff}
+              onClose={handleCloseEditStaffModal}
+            />
+          )}
+        </Modal>
+      )}
 
-      {/* Staff Info Panel (Sidebar) */}
+      {/* Staff Info Panel (Sidebar) - Only render when open */}
       {staffInfoPanelOpen && staff && (
         <StaffInfoPanel
           staff={staff}
           canEdit={canManageStaff}
-          onClose={() => setStaffInfoPanelOpen(false)}
-          onEdit={() => {
-            setStaffInfoPanelOpen(false);
-            setEditStaffModalOpen(true);
-          }}
+          onClose={handleCloseStaffInfoPanel}
+          onEdit={handleEditFromInfoPanel}
         />
       )}
     </div>

@@ -74,3 +74,17 @@ export async function deletePayment(id: string) {
   await api.delete(`/payments/${id}`);
 }
 
+/**
+ * Get payments statistics with all calculations done in backend
+ */
+export interface PaymentsStatistics {
+  total: number;
+  paid: number;
+  pending: number;
+}
+
+export async function fetchPaymentsStatistics(filters?: PaymentFilters): Promise<PaymentsStatistics> {
+  const response = await api.get<PaymentsStatistics>('/payments/statistics', { params: filters });
+  return response.data;
+}
+

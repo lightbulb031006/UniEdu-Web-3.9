@@ -15,6 +15,7 @@ import {
   addStudentToClass,
   removeTeacherFromClass,
   moveStudentToClass,
+  getClassDetailData,
 } from '../services/classesService';
 
 const router = Router();
@@ -153,6 +154,19 @@ router.post('/:id/move-student', authenticate, async (req, res, next) => {
     }
     const result = await moveStudentToClass(studentId, req.params.id, toClassId, refundRemaining !== false);
     res.json(result);
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/classes/:id/detail-data
+ * Get class detail data with teacher statistics calculated in backend
+ */
+router.get('/:id/detail-data', authenticate, async (req, res, next) => {
+  try {
+    const data = await getClassDetailData(req.params.id);
+    res.json(data);
   } catch (error: any) {
     next(error);
   }

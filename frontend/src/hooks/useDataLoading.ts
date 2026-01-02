@@ -12,12 +12,34 @@ export function useDataLoading<T>(
     refetchInterval?: number;
     cacheKey?: string;
     staleTime?: number;
+    persistCache?: boolean; // If true, use localStorage instead of sessionStorage
   } = {}
 ) {
-  const { enabled = true, refetchInterval, cacheKey, staleTime = 5 * 60 * 1000 } = options;
+  const { enabled = true, refetchInterval, cacheKey, staleTime = 5 * 60 * 1000, persistCache = false } = options;
 
-  const [data, setData] = useState<T | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // Helper function to get cached data synchronously (for initial state)
+  const getCachedDataSync = (): T | null => {
+    if (!cacheKey) return null;
+    try {
+      const storage = persistCache ? localStorage : sessionStorage;
+      const cached = storage.getItem(cacheKey);
+      if (!cached) return null;
+      const { data: cachedData, timestamp } = JSON.parse(cached);
+      const now = Date.now();
+      if (now - timestamp > staleTime) {
+        storage.removeItem(cacheKey);
+        return null;
+      }
+      return cachedData;
+    } catch {
+      return null;
+    }
+  };
+
+  // Initialize with cached data if available
+  const initialData = getCachedDataSync();
+  const [data, setData] = useState<T | null>(initialData);
+  const [isLoading, setIsLoading] = useState(!initialData); // Only loading if no cached data
   const [error, setError] = useState<Error | null>(null);
   const [isRefetching, setIsRefetching] = useState(false);
 
@@ -36,40 +58,75 @@ export function useDataLoading<T>(
     dependenciesRef.current = dependencies;
   }, [dependencies]);
 
-  // Cache management
+  // Cache management - use localStorage if persistCache is true, otherwise sessionStorage
   const getCachedData = useCallback((): T | null => {
     if (!cacheKey) return null;
     try {
-      const cached = sessionStorage.getItem(cacheKey);
+      const storage = persistCache ? localStorage : sessionStorage;
+      const cached = storage.getItem(cacheKey);
       if (!cached) return null;
       const { data: cachedData, timestamp } = JSON.parse(cached);
       const now = Date.now();
       if (now - timestamp > staleTime) {
-        sessionStorage.removeItem(cacheKey);
+        storage.removeItem(cacheKey);
         return null;
       }
       return cachedData;
     } catch {
       return null;
     }
-  }, [cacheKey, staleTime]);
+  }, [cacheKey, staleTime, persistCache]);
 
   const setCachedData = useCallback(
     (dataToCache: T) => {
       if (!cacheKey) return;
       try {
-        sessionStorage.setItem(
+        const storage = persistCache ? localStorage : sessionStorage;
+        storage.setItem(
           cacheKey,
           JSON.stringify({
             data: dataToCache,
             timestamp: Date.now(),
           })
         );
-      } catch {
-        // Ignore storage errors
+      } catch (error) {
+        // If storage is full, try to clear old cache entries
+        if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+          try {
+            const storage = persistCache ? localStorage : sessionStorage;
+            // Clear old cache entries (older than 1 day)
+            const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+            for (let i = 0; i < storage.length; i++) {
+              const key = storage.key(i);
+              if (key && key.startsWith('staff-detail-data-')) {
+                try {
+                  const item = storage.getItem(key);
+                  if (item) {
+                    const { timestamp } = JSON.parse(item);
+                    if (timestamp < oneDayAgo) {
+                      storage.removeItem(key);
+                    }
+                  }
+                } catch {
+                  // Ignore parse errors
+                }
+              }
+            }
+            // Retry setting cache
+            storage.setItem(
+              cacheKey,
+              JSON.stringify({
+                data: dataToCache,
+                timestamp: Date.now(),
+              })
+            );
+          } catch {
+            // Ignore storage errors
+          }
+        }
       }
     },
-    [cacheKey]
+    [cacheKey, persistCache]
   );
 
   // Stable fetch function that uses refs

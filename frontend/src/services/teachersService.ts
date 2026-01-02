@@ -24,6 +24,7 @@ export interface Teacher {
   photo_url?: string;
   status?: 'active' | 'inactive';
   roles?: string[];
+  userId?: string; // Link to users table
   // QR payment link fields (for compatibility with different naming conventions)
   bank_qr_link?: string;
   bankQRLink?: string;
@@ -47,6 +48,7 @@ function normalizeTeacher(teacher: any): Teacher {
     photoUrl: teacher.photo_url || teacher.photoUrl,
     status: teacher.status,
     roles: teacher.roles,
+    userId: teacher.user_id || teacher.userId,
   };
   
   // Preserve QR payment link fields from raw data (for compatibility)

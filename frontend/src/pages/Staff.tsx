@@ -6,6 +6,7 @@ import { getStaffUnpaidAmounts } from '../services/staffService';
 import { useAuthStore } from '../store/authStore';
 import { hasRole, userHasStaffRole } from '../utils/permissions';
 import { formatCurrencyVND, formatNumber } from '../utils/formatters';
+import { SkeletonLoader } from '../components/SkeletonLoader';
 
 /**
  * Staff Page Component - Nhân sự
@@ -73,10 +74,12 @@ function Staff() {
 
   // State for unpaid amounts
   const [unpaidAmounts, setUnpaidAmounts] = useState<Record<string, number>>({});
+  const [isLoadingUnpaid, setIsLoadingUnpaid] = useState(false);
 
   // Fetch unpaid amounts when teachers data changes
   useEffect(() => {
     if (teachers.length > 0) {
+      setIsLoadingUnpaid(true);
       const staffIds = teachers.map((t) => t.id);
       getStaffUnpaidAmounts(staffIds)
         .then((amounts) => {
@@ -86,7 +89,13 @@ function Staff() {
           console.error('Failed to fetch unpaid amounts:', err);
           // Set all to 0 on error
           setUnpaidAmounts({});
+        })
+        .finally(() => {
+          setIsLoadingUnpaid(false);
         });
+    } else {
+      setUnpaidAmounts({});
+      setIsLoadingUnpaid(false);
     }
   }, [teachers]);
 
@@ -289,8 +298,26 @@ function Staff() {
                         <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--muted)' }}>{roleLabels}</span>
                       </td>
                       <td style={{ padding: 'var(--spacing-3)' }}>{staff.province || '-'}</td>
-                      <td style={{ padding: 'var(--spacing-3)', textAlign: 'right', fontWeight: '500' }}>
-                        {formatCurrencyVND(unpaidAmounts[staff.id] || 0)}
+                      <td style={{ padding: 'var(--spacing-3)', textAlign: 'right', fontWeight: '500', minWidth: '120px' }}>
+                        {isLoadingUnpaid ? (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
+                            <div
+                              style={{
+                                width: '12px',
+                                height: '12px',
+                                border: '2px solid var(--border)',
+                                borderTopColor: '#dc2626',
+                                borderRadius: '50%',
+                                animation: 'spin 0.8s linear infinite',
+                              }}
+                            />
+                            <SkeletonLoader width="80px" height="16px" />
+                          </div>
+                        ) : (
+                          <span style={{ color: unpaidAmounts[staff.id] > 0 ? '#dc2626' : 'var(--muted)' }}>
+                            {formatCurrencyVND(unpaidAmounts[staff.id] || 0)}
+                          </span>
+                        )}
                       </td>
                       <td style={{ padding: 'var(--spacing-3)', textAlign: 'center' }}>
                         <button

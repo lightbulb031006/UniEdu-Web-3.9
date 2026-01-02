@@ -22,6 +22,8 @@ export interface Student {
   goal?: string;
   classId?: string | string[] | null; // Single class ID or array of class IDs
   classIds?: string[]; // Array of class IDs for compatibility
+  cskhStaffId?: string; // CSKH staff ID (from cskh_staff_id in DB)
+  cskh_staff_id?: string; // Also keep snake_case for compatibility
 }
 
 export interface StudentFilters {
@@ -65,6 +67,9 @@ function normalizeStudent(data: any): Student {
     goal: data.goal,
     classId: classId,
     classIds: Array.isArray(classId) ? classId : classId ? [classId] : [],
+    // Map CSKH staff ID (keep both camelCase and snake_case for compatibility)
+    cskhStaffId: data.cskh_staff_id || data.cskhStaffId || undefined,
+    cskh_staff_id: data.cskh_staff_id || data.cskhStaffId || undefined,
   };
 }
 

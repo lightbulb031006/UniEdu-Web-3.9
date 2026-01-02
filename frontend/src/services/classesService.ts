@@ -175,3 +175,24 @@ export async function moveStudentToClass(fromClassId: string, studentId: string,
   return response.data;
 }
 
+/**
+ * Get class detail data with teacher statistics calculated in backend
+ */
+export interface ClassDetailData {
+  teacherStats: Array<{
+    teacher: {
+      id: string;
+      fullName: string;
+      email?: string;
+      phone?: string;
+    };
+    allowance: number;
+    totalReceived: number;
+  }>;
+}
+
+export async function fetchClassDetailData(classId: string): Promise<ClassDetailData> {
+  const response = await api.get<ClassDetailData>(`/classes/${classId}/detail-data`);
+  return response.data;
+}
+

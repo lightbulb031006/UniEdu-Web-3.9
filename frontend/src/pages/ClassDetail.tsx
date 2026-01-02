@@ -1,7 +1,7 @@
 import React, { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDataLoading } from '../hooks/useDataLoading';
-import { fetchClassById, fetchClassStudentsWithRemaining, updateClass, addStudentToClass, removeStudentFromClass, moveStudentToClass, fetchClasses } from '../services/classesService';
+import { fetchClassById, fetchClassStudentsWithRemaining, updateClass, addStudentToClass, removeStudentFromClass, moveStudentToClass, fetchClasses, fetchClassDetailData, ClassDetailData } from '../services/classesService';
 import { fetchTeachers } from '../services/teachersService';
 import { fetchStudents, updateStudent } from '../services/studentsService';
 import { fetchSessions, createSession, updateSession, deleteSession } from '../services/sessionsService';
@@ -242,8 +242,32 @@ function ClassDetail() {
   // Check if current user is a teacher viewer
   const isTeacherViewer = currentUser?.role === 'teacher';
   
-  // Calculate teacher stats (simplified - would need backend support for full stats)
+  // Fetch class detail data with teacher statistics calculated in backend
+  const fetchClassDetailDataFn = useCallback(() => {
+    if (!id) throw new Error('Class ID is required');
+    return fetchClassDetailData(id);
+  }, [id]);
+
+  const { data: classDetailData, refetch: refetchClassDetailData } = useDataLoading(fetchClassDetailDataFn, [id], {
+    cacheKey: `class-detail-data-${id}`,
+    staleTime: 1 * 60 * 1000,
+    enabled: !!classData && !isLoading,
+  });
+
+  // Use teacher stats from backend (all calculations done in backend)
   const teacherStats = useMemo(() => {
+    if (classDetailData) {
+      // Map backend data to match frontend structure
+      return classDetailData.teacherStats.map((stat) => {
+        const teacher = classTeachers.find((t) => t.id === stat.teacher.id) || stat.teacher;
+        return {
+          teacher,
+          allowance: stat.allowance,
+          totalReceived: stat.totalReceived,
+        };
+      });
+    }
+    // Fallback: calculate locally if backend data not available (should not happen in production)
     const customAllowances = (classData as any)?.customTeacherAllowances || {};
     const defaultSalary = classData?.tuitionPerSession || 0;
     return classTeachers.map((teacher) => {
@@ -258,7 +282,7 @@ function ClassDetail() {
         totalReceived,
       };
     });
-  }, [classTeachers, sessions, classData]);
+  }, [classDetailData, classTeachers, sessions, classData]);
 
   if (error) {
     return (

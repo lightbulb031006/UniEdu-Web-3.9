@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { useDataLoading } from '../hooks/useDataLoading';
-import { fetchPayments, createPayment, updatePayment, deletePayment, Payment, PaymentFilters } from '../services/paymentsService';
+import { fetchPayments, createPayment, updatePayment, deletePayment, fetchPaymentsStatistics, Payment, PaymentFilters } from '../services/paymentsService';
 import { fetchStudents } from '../services/studentsService';
 import { fetchClasses } from '../services/classesService';
 import { formatCurrencyVND } from '../utils/formatters';
@@ -47,6 +47,20 @@ function Payments() {
     }
   );
 
+  // Fetch payments statistics from backend (all calculations done in backend)
+  const fetchPaymentsStatsFn = useCallback(
+    () => fetchPaymentsStatistics(filters),
+    [filters.status, filters.classId, filters.studentId]
+  );
+  const { data: paymentsStatsData, refetch: refetchStats } = useDataLoading(
+    fetchPaymentsStatsFn,
+    [filters.status, filters.classId, filters.studentId],
+    {
+      cacheKey: `payments-stats-${filters.status}-${filters.classId || ''}-${filters.studentId || ''}`,
+      staleTime: 1 * 60 * 1000,
+    }
+  );
+
   // Fetch students and classes for filters
   const { data: studentsData } = useDataLoading(() => fetchStudents(), [], {
     cacheKey: 'students-for-payments',
@@ -63,14 +77,12 @@ function Payments() {
   const students = Array.isArray(studentsData) ? studentsData : [];
   const classes = Array.isArray(classesData) ? classesData : [];
 
-  // Calculate statistics
-  const stats = useMemo(() => {
-    return {
-      total: payments.reduce((sum, p) => sum + (p.amount || 0), 0),
-      paid: payments.filter((p) => p.status === 'paid').reduce((sum, p) => sum + (p.amount || 0), 0),
-      pending: payments.filter((p) => p.status === 'pending').reduce((sum, p) => sum + (p.amount || 0), 0),
-    };
-  }, [payments]);
+  // Use statistics from backend (all calculations done in backend)
+  const stats = paymentsStatsData || {
+    total: 0,
+    paid: 0,
+    pending: 0,
+  };
 
   // Filter payments
   const filteredPayments = useMemo(() => {

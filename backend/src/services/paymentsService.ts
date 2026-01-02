@@ -83,3 +83,18 @@ export async function deletePayment(id: string) {
   }
 }
 
+/**
+ * Get payments statistics with all calculations done in backend
+ */
+export async function getPaymentsStatistics(filters: PaymentFilters = {}) {
+  const payments = await getPayments(filters);
+  
+  const stats = {
+    total: payments.reduce((sum, p) => sum + (p.amount || 0), 0),
+    paid: payments.filter((p) => p.status === 'paid').reduce((sum, p) => sum + (p.amount || 0), 0),
+    pending: payments.filter((p) => p.status === 'pending').reduce((sum, p) => sum + (p.amount || 0), 0),
+  };
+
+  return stats;
+}
+

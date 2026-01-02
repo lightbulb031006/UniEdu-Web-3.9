@@ -50,9 +50,11 @@ router.get('/:id', async (req, res, next) => {
  */
 router.post('/', async (req, res, next) => {
   try {
+    console.log('Creating cost with data:', JSON.stringify(req.body, null, 2));
     const cost = await createCost(req.body);
     res.status(201).json(cost);
-  } catch (error) {
+  } catch (error: any) {
+    console.error('Error creating cost:', error);
     next(error);
   }
 });

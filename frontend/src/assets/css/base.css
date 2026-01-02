@@ -3,6 +3,7 @@
     /* Colors - Flat Design, Modern & Minimalist */
     --bg: #F9FAFB;
     --bg-secondary: #F3F4F6;
+    --bg-hover: #E5E7EB;
     --surface: #FFFFFF;
     --muted: #6B7280;
     --text: #1F2937;
@@ -56,6 +57,7 @@
 [data-theme="dark"] {
     --bg: #1E1E2F;
     --bg-secondary: #2A2A3C;
+    --bg-hover: #3F3F4F;
     --surface: #2A2A3C;
     --muted: #9CA3AF;
     --text: #F3F4F6;
@@ -76,6 +78,7 @@
 /* Sakura Theme - Hoa Anh Đào */
 [data-theme="sakura"] {
     --bg: #FFF0F5;
+    --bg-hover: #FFD6E0;
     --surface: #FFE4E8;
     --muted: #8F5D85;
     --text: #4B0082;

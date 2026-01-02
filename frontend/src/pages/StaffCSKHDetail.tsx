@@ -8,19 +8,21 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDataLoading } from '../hooks/useDataLoading';
 import { fetchTeachers } from '../services/teachersService';
-import { fetchStudents } from '../services/studentsService';
-import { fetchWalletTransactions } from '../services/walletService';
+import {
+  updateCSKHPaymentStatus,
+  bulkUpdateCSKHPaymentStatus,
+} from '../services/cskhPaymentStatusService';
+import { fetchCSKHDetailData, CSKHDetailData } from '../services/staffService';
 import { useAuthStore } from '../store/authStore';
 import { formatCurrencyVND } from '../utils/formatters';
 import { hasRole } from '../utils/permissions';
+import { toast } from '../utils/toast';
+import Modal from '../components/Modal';
+import { TableSkeleton } from '../components/SkeletonLoader';
+import { useDebounce } from '../hooks/useDebounce';
 
-interface StudentStat {
-  student: any;
-  totalPaid: number;
-  profitPercent: number;
-  profit: number;
-  paymentStatus: 'paid' | 'unpaid' | 'deposit';
-}
+// StudentStat is now from backend API
+type StudentStat = CSKHDetailData['students'][0];
 
 function StaffCSKHDetail() {
   const { id: staffId } = useParams<{ id: string }>();
@@ -37,11 +39,10 @@ function StaffCSKHDetail() {
   const selectedMonth = parseInt(searchParams.get('month') || String(currentMonth.month));
   const selectedYear = parseInt(searchParams.get('year') || String(currentMonth.year));
 
-  // State for profit percentages (stored in localStorage)
-  const [defaultProfitPercent, setDefaultProfitPercent] = useState<number>(10);
-  const [studentProfitPercentages, setStudentProfitPercentages] = useState<Record<string, number>>({});
+  // State for UI
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
-  const [paymentStatuses, setPaymentStatuses] = useState<Record<string, 'paid' | 'unpaid' | 'deposit'>>({});
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [showBulkStatusModal, setShowBulkStatusModal] = useState(false);
 
   // Fetch staff data
   const fetchStaffFn = useCallback(() => {
@@ -54,127 +55,67 @@ function StaffCSKHDetail() {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Fetch students
-  const { data: studentsData } = useDataLoading(() => fetchStudents(), [], {
-    cacheKey: 'students-for-cskh-detail',
-    staleTime: 5 * 60 * 1000,
-  });
+  // Fetch CSKH detail data from backend (all calculations done in backend)
+  // Debounce month change to avoid too many API calls
+  const monthKey = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
+  const debouncedMonthKey = useDebounce(monthKey, 300);
+  
+  const fetchCSKHDetailFn = useCallback(() => {
+    if (!staffId) throw new Error('Staff ID is required');
+    return fetchCSKHDetailData(staffId, debouncedMonthKey);
+  }, [staffId, debouncedMonthKey]);
 
-  // Fetch wallet transactions
-  const { data: walletTransactionsData } = useDataLoading(() => fetchWalletTransactions(), [], {
-    cacheKey: 'wallet-transactions-for-cskh-detail',
+  const { data: cskhDetailData, isLoading: cskhLoading, error: cskhError, refetch: refetchCSKHDetail } = useDataLoading(fetchCSKHDetailFn, [staffId, debouncedMonthKey], {
+    cacheKey: `cskh-detail-${staffId}-${debouncedMonthKey}`,
     staleTime: 1 * 60 * 1000,
+    enabled: !!staffId && !!debouncedMonthKey,
   });
-
-  // Load default profit percent from localStorage
+  
+  // Prefetch next month data
   useEffect(() => {
-    if (staffId) {
-      const saved = localStorage.getItem(`cskh_default_profit_${staffId}`);
-      if (saved) {
-        setDefaultProfitPercent(parseFloat(saved) || 10);
-      }
+    if (!staffId || !staff || staffLoading) return;
+    const [year, month] = debouncedMonthKey.split('-').map(Number);
+    let nextYear = year;
+    let nextMonth = month + 1;
+    if (nextMonth > 12) {
+      nextMonth = 1;
+      nextYear = year + 1;
     }
-  }, [staffId]);
+    const nextMonthStr = `${nextYear}-${String(nextMonth).padStart(2, '0')}`;
+    
+    const timeoutId = setTimeout(() => {
+      fetchCSKHDetailData(staffId, nextMonthStr).catch(() => {});
+    }, 2000);
+    
+    return () => clearTimeout(timeoutId);
+  }, [staffId, staff, staffLoading, debouncedMonthKey]);
 
-  // Load payment statuses from localStorage
-  useEffect(() => {
-    if (staffId) {
-      const statuses: Record<string, 'paid' | 'unpaid' | 'deposit'> = {};
-      const students = studentsData || [];
-      students.forEach((student) => {
-        const key = `cskh_payment_${staffId}_${student.id}_${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
-        const status = localStorage.getItem(key);
-        if (status && (status === 'paid' || status === 'unpaid' || status === 'deposit')) {
-          statuses[student.id] = status;
-        }
-      });
-      setPaymentStatuses(statuses);
-    }
-  }, [staffId, studentsData, selectedMonth, selectedYear]);
 
-  // Permission checks
+  // Permission checks (matching backup logic)
   const isAdmin = hasRole('admin');
   const staffRoles = staff?.roles || [];
   const hasCskhRole = Array.isArray(staffRoles) && staffRoles.includes('cskh_sale');
-  const isSelf = user?.role === 'teacher' && (user.linkId === staffId || staff?.userId === user.id);
-  const canEditProfit = isAdmin;
-  const canManagePaymentStatus = isAdmin || (hasCskhRole && isSelf);
+  
+  // Check if current user is the same as staff member (matching backup logic)
+  const isSelf = user && 
+    user.role === 'teacher' && 
+    (user.linkId === staffId || (staff?.userId && staff.userId === user.id));
+  
+  // Access control: must be admin OR (has cskh role AND is self)
+  const hasAccess = isAdmin || (hasCskhRole && isSelf);
+  
+  const canEditProfit = Boolean(isAdmin);
+  const canManagePaymentStatus = Boolean(isAdmin || hasCskhRole); // Match backup: no isSelf check for managing payment status
 
-  // Check if student was assigned in month
-  const wasStudentAssignedInMonth = useCallback(
-    (student: any, month: number, year: number) => {
-      if (student.cskhStaffId !== staffId) return false;
-
-      // Check if student has classes
-      const studentClassIds = student.classIds || (student.classId ? [student.classId] : []);
-      if (studentClassIds.length === 0) return false;
-
-      // For now, if student has cskhStaffId matching, consider them assigned
-      // In a full implementation, we'd check sessions/attendance in that month
-      return true;
-    },
-    [staffId]
-  );
-
-  // Get assigned students for selected month
-  const assignedStudents = useMemo(() => {
-    if (!studentsData) return [];
-    return studentsData.filter((s) => wasStudentAssignedInMonth(s, selectedMonth, selectedYear));
-  }, [studentsData, selectedMonth, selectedYear, wasStudentAssignedInMonth]);
-
-  // Calculate stats for each student
-  const studentStats = useMemo<StudentStat[]>(() => {
-    if (!assignedStudents.length || !walletTransactionsData) return [];
-
-    const monthStart = new Date(selectedYear, selectedMonth - 1, 1);
-    const monthEnd = new Date(selectedYear, selectedMonth, 0, 23, 59, 59);
-
-    return assignedStudents.map((student) => {
-      // Get top-up transactions for this student in the selected month
-      const monthTopups = (walletTransactionsData || []).filter((tx: any) => {
-        if (tx.studentId !== student.id) return false;
-        if (tx.type !== 'topup') return false;
-        if (!tx.date) return false;
-        const txDate = new Date(tx.date);
-        return txDate >= monthStart && txDate <= monthEnd;
-      });
-
-      const totalPaid = monthTopups.reduce((sum: number, tx: any) => sum + (Number(tx.amount) || 0), 0);
-
-      // Get profit percentage for this student (or use default)
-      const profitPercentKey = `${staffId}_${student.id}`;
-      const profitPercent = studentProfitPercentages[profitPercentKey] || defaultProfitPercent;
-      const profit = totalPaid * (profitPercent / 100);
-
-      // Get payment status for this student in this month
-      const paymentStatus = paymentStatuses[student.id] || 'unpaid';
-
-      return {
-        student,
-        totalPaid,
-        profitPercent,
-        profit,
-        paymentStatus,
-      };
-    });
-  }, [assignedStudents, walletTransactionsData, selectedMonth, selectedYear, defaultProfitPercent, studentProfitPercentages, paymentStatuses, staffId]);
-
-  // Calculate totals
-  const totalUnpaidProfit = useMemo(() => {
-    return studentStats.filter((s) => s.paymentStatus === 'unpaid').reduce((sum, s) => sum + s.profit, 0);
-  }, [studentStats]);
-
-  const totalPaidProfit = useMemo(() => {
-    return studentStats.filter((s) => s.paymentStatus === 'paid').reduce((sum, s) => sum + s.profit, 0);
-  }, [studentStats]);
-
-  const totalPaidAll = useMemo(() => {
-    return studentStats.reduce((sum, s) => sum + s.totalPaid, 0);
-  }, [studentStats]);
-
-  const totalProfitAll = useMemo(() => {
-    return studentStats.reduce((sum, s) => sum + s.profit, 0);
-  }, [studentStats]);
+  // Extract data from backend (all calculations done in backend)
+  const studentStats = cskhDetailData?.students || [];
+  const defaultProfitPercent = cskhDetailData?.defaultProfitPercent || 10;
+  const totals = cskhDetailData?.totals || {
+    totalUnpaidProfit: 0,
+    totalPaidProfit: 0,
+    totalPaidAll: 0,
+    totalProfitAll: 0,
+  };
 
   // Generate month options (last 12 months)
   const monthOptions = useMemo(() => {
@@ -190,37 +131,69 @@ function StaffCSKHDetail() {
   }, []);
 
   // Handlers
-  const handleMonthChange = (value: string) => {
+  const handleMonthChange = useCallback((value: string) => {
     const [month, year] = value.split('-');
     setSearchParams({ month, year });
+  }, [setSearchParams]);
+
+  const handleDefaultProfitChange = async (value: number) => {
+    // Note: Default profit percent is stored per student, not globally
+    // This is just for UI display - actual profit percent is stored per student
+    // Backend will handle the update
   };
 
-  const handleDefaultProfitChange = (value: number) => {
+  const handleStudentProfitChange = async (studentId: string, value: number) => {
     if (!staffId) return;
-    setDefaultProfitPercent(value);
-    localStorage.setItem(`cskh_default_profit_${staffId}`, value.toString());
+    
+    // Update in database immediately
+    try {
+      const studentStat = studentStats.find((s) => s.student.id === studentId);
+      if (!studentStat) return;
+      const currentStatus = studentStat.paymentStatus;
+      await updateCSKHPaymentStatus(staffId, studentId, monthKey, currentStatus, value);
+      // Refetch to get updated data from backend
+      await refetchCSKHDetail();
+    } catch (error: any) {
+      console.error('Failed to update profit percent:', error);
+      // Don't show error toast for profit percent changes to avoid spam
+    }
   };
 
-  const handleStudentProfitChange = (studentId: string, value: number) => {
-    if (!staffId) return;
-    const key = `${staffId}_${studentId}`;
-    setStudentProfitPercentages((prev) => ({ ...prev, [key]: value }));
+  const handlePaymentStatusChange = async (studentId: string, status: 'paid' | 'unpaid' | 'deposit') => {
+    if (!staffId || isUpdatingStatus) return;
+    
+    // Optimistic update: update UI immediately
+    const studentStat = studentStats.find((s) => s.student.id === studentId);
+    if (!studentStat) return;
+    
+    // Store original state for rollback
+    const originalStatus = studentStat.paymentStatus;
+    
+    // Optimistically update local state (will be overwritten by refetch)
+    setIsUpdatingStatus(true);
+    
+    try {
+      const profitPercent = studentStat.profitPercent;
+      await updateCSKHPaymentStatus(staffId, studentId, monthKey, status, profitPercent);
+      // Refetch to get updated data from backend
+      await refetchCSKHDetail();
+      toast.success('Đã cập nhật trạng thái thanh toán');
+    } catch (error: any) {
+      toast.error('Không thể cập nhật trạng thái thanh toán: ' + (error.message || 'Lỗi không xác định'));
+      // Refetch to restore correct state
+      await refetchCSKHDetail();
+    } finally {
+      setIsUpdatingStatus(false);
+    }
   };
 
-  const handlePaymentStatusChange = (studentId: string, status: 'paid' | 'unpaid' | 'deposit') => {
-    if (!staffId) return;
-    const key = `cskh_payment_${staffId}_${studentId}_${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
-    localStorage.setItem(key, status);
-    setPaymentStatuses((prev) => ({ ...prev, [studentId]: status }));
-  };
-
-  const handleSelectAll = (checked: boolean) => {
+  const handleSelectAll = useCallback((checked: boolean) => {
     if (checked) {
       setSelectedStudents(new Set(studentStats.map((s) => s.student.id)));
     } else {
       setSelectedStudents(new Set());
     }
-  };
+  }, [studentStats]);
 
   const handleStudentSelect = (studentId: string, checked: boolean) => {
     setSelectedStudents((prev) => {
@@ -234,12 +207,40 @@ function StaffCSKHDetail() {
     });
   };
 
-  const handleBulkStatusUpdate = (status: 'paid' | 'unpaid' | 'deposit') => {
-    selectedStudents.forEach((studentId) => {
-      handlePaymentStatusChange(studentId, status);
-    });
-    setSelectedStudents(new Set());
+  const handleBulkStatusUpdate = async (status: 'paid' | 'unpaid' | 'deposit') => {
+    if (!staffId || isUpdatingStatus || selectedStudents.size === 0) return;
+    
+    setShowBulkStatusModal(false);
+    setIsUpdatingStatus(true);
+    
+    try {
+      const updates = Array.from(selectedStudents).map((studentId) => {
+        const studentStat = studentStats.find((s) => s.student.id === studentId);
+        return {
+          studentId,
+          paymentStatus: status,
+          profitPercent: studentStat?.profitPercent || defaultProfitPercent,
+        };
+      });
+      
+      await bulkUpdateCSKHPaymentStatus(staffId, monthKey, updates);
+      
+      // Clear selection
+      setSelectedStudents(new Set());
+      
+      // Refetch to get updated data from backend
+      await refetchCSKHDetail();
+      
+      toast.success(`Đã cập nhật trạng thái thanh toán cho ${updates.length} học sinh`);
+    } catch (error: any) {
+      toast.error('Không thể cập nhật trạng thái thanh toán: ' + (error.message || 'Lỗi không xác định'));
+      // Refetch to restore correct state
+      await refetchCSKHDetail();
+    } finally {
+      setIsUpdatingStatus(false);
+    }
   };
+
 
   // Payment status labels and classes
   const paymentStatusLabels = {
@@ -277,18 +278,22 @@ function StaffCSKHDetail() {
     );
   }
 
-  if (!isAdmin && (!hasCskhRole || !isSelf)) {
+  // Show access denied if no permission (matching backup logic)
+  if (!hasAccess && !staffLoading) {
     return (
       <div className="page-container" style={{ padding: 'var(--spacing-6)' }}>
         <div className="card" style={{ textAlign: 'center', padding: 'var(--spacing-8)' }}>
           <p style={{ color: 'var(--danger)' }}>Bạn không có quyền truy cập trang CSKH này.</p>
           <button className="btn btn-secondary mt-3" onClick={() => navigate('/staff')}>
-            Quay lại
+            ← Quay lại
           </button>
         </div>
       </div>
     );
   }
+
+  // Show error state (but still show page structure)
+  const showError = cskhError && !cskhDetailData;
 
   const allSelected = studentStats.length > 0 && selectedStudents.size === studentStats.length;
   const someSelected = selectedStudents.size > 0 && selectedStudents.size < studentStats.length;
@@ -353,23 +358,30 @@ function StaffCSKHDetail() {
         </div>
 
         {/* Bulk Actions */}
-        {canManagePaymentStatus && selectedStudents.size > 0 && (
+        {canManagePaymentStatus && (
           <div
+            id="studentBulkActions"
             style={{
-              marginTop: 'var(--spacing-3)',
+              display: selectedStudents.size > 0 ? 'block' : 'none',
+              marginBottom: 'var(--spacing-3)',
               padding: 'var(--spacing-3)',
               background: 'var(--bg-secondary)',
               border: '1px solid var(--border)',
               borderRadius: 'var(--radius)',
+              transition: 'opacity 0.2s ease, transform 0.2s ease',
+              opacity: selectedStudents.size > 0 ? 1 : 0,
+              transform: selectedStudents.size > 0 ? 'translateY(0)' : 'translateY(-10px)',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>
-              <span style={{ fontWeight: 500, fontSize: 'var(--font-size-sm)' }}>Đã chọn: {selectedStudents.size} học sinh</span>
+              <span className="selected-count" id="studentSelectedCount" style={{ fontWeight: 500, color: 'var(--text)', fontSize: 'var(--font-size-sm)' }}>
+                {selectedStudents.size > 0 ? `Đã chọn: ${selectedStudents.size} học sinh` : ''}
+              </span>
               <div style={{ display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   className="btn btn-sm btn-primary"
-                  onClick={() => handleBulkStatusUpdate('paid')}
+                  onClick={() => setShowBulkStatusModal(true)}
                   style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)', whiteSpace: 'nowrap' }}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -395,8 +407,31 @@ function StaffCSKHDetail() {
           </div>
         )}
 
+        {/* Error Message */}
+        {cskhError && !cskhDetailData && (
+          <div style={{ 
+            marginTop: 'var(--spacing-4)', 
+            padding: 'var(--spacing-4)', 
+            background: 'rgba(220, 38, 38, 0.1)', 
+            border: '1px solid rgba(220, 38, 38, 0.3)', 
+            borderRadius: 'var(--radius)',
+            textAlign: 'center'
+          }}>
+            <p style={{ color: 'var(--danger)', margin: '0 0 var(--spacing-2) 0' }}>
+              Lỗi khi tải dữ liệu: {cskhError.message || 'Lỗi không xác định'}
+            </p>
+            <button className="btn btn-sm btn-secondary" onClick={() => refetchCSKHDetail()}>
+              Thử lại
+            </button>
+          </div>
+        )}
+
         {/* Students Table */}
-        {studentStats.length > 0 ? (
+        {cskhLoading && !cskhDetailData ? (
+          <div style={{ marginTop: 'var(--spacing-4)' }}>
+            <TableSkeleton rows={8} columns={canManagePaymentStatus ? 7 : 6} />
+          </div>
+        ) : cskhError && !cskhDetailData ? null : studentStats.length > 0 ? (
           <div style={{ marginTop: 'var(--spacing-4)', overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
             <table style={{ minWidth: '1000px', width: '100%', borderCollapse: 'collapse' }}>
               <thead>
@@ -430,7 +465,7 @@ function StaffCSKHDetail() {
                       <span>Lợi nhuận</span>
                       <input
                         type="number"
-                        value={defaultProfitPercent}
+                        value={defaultProfitPercent ?? 10}
                         min="0"
                         max="100"
                         step="0.1"
@@ -464,20 +499,22 @@ function StaffCSKHDetail() {
                   return (
                     <tr
                       key={student.id}
-                      onClick={() => {
-                        if (!canManagePaymentStatus) {
-                          navigate(`/students/${student.id}`);
+                      className="student-row"
+                      data-student-id={student.id}
+                      onClick={(e) => {
+                        // Don't navigate if clicking on checkbox or input (matching backup)
+                        if ((e.target as HTMLElement).closest('.student-checkbox') || (e.target as HTMLElement).closest('.student-profit-percent')) {
+                          return;
                         }
+                        navigate(`/students/${student.id}`);
                       }}
                       style={{
-                        cursor: canManagePaymentStatus ? 'default' : 'pointer',
+                        cursor: 'pointer',
                         transition: 'all 0.2s ease',
                         background: isSelected ? 'var(--bg-secondary)' : undefined,
                       }}
                       onMouseEnter={(e) => {
-                        if (!canManagePaymentStatus) {
-                          e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
-                        }
+                        e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
                       }}
                       onMouseLeave={(e) => {
                         if (!isSelected) {
@@ -492,6 +529,8 @@ function StaffCSKHDetail() {
                         >
                           <input
                             type="checkbox"
+                            className="student-checkbox table-checkbox"
+                            data-student-id={student.id}
                             checked={isSelected}
                             onChange={(e) => handleStudentSelect(student.id, e.target.checked)}
                             style={{ cursor: 'pointer', width: '18px', height: '18px', accentColor: 'var(--primary)' }}
@@ -514,7 +553,10 @@ function StaffCSKHDetail() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}>
                           <input
                             type="number"
-                            value={stat.profitPercent}
+                            className="student-profit-percent"
+                            data-staff-id={staffId}
+                            data-student-id={student.id}
+                            value={stat.profitPercent ?? defaultProfitPercent ?? 10}
                             min="0"
                             max="100"
                             step="0.1"
@@ -537,28 +579,17 @@ function StaffCSKHDetail() {
                           </span>
                         </div>
                       </td>
-                      <td
-                        style={{ padding: 'var(--spacing-3)', textAlign: 'center', borderBottom: '1px solid var(--border)' }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <select
-                          value={stat.paymentStatus}
-                          onChange={(e) => handlePaymentStatusChange(student.id, e.target.value as 'paid' | 'unpaid' | 'deposit')}
-                          disabled={!canManagePaymentStatus}
+                      <td style={{ padding: 'var(--spacing-3)', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
+                        <span
+                          className={`badge ${statusClass}`}
                           style={{
-                            padding: 'var(--spacing-1) var(--spacing-2)',
-                            borderRadius: 'var(--radius)',
-                            border: '1px solid var(--border)',
-                            background: 'var(--bg)',
-                            cursor: canManagePaymentStatus ? 'pointer' : 'default',
                             fontSize: 'var(--font-size-xs)',
+                            padding: '4px 10px',
                             fontWeight: 500,
                           }}
                         >
-                          <option value="unpaid">Chờ thanh toán</option>
-                          <option value="paid">Đã thanh toán</option>
-                          <option value="deposit">Cọc</option>
-                        </select>
+                          {statusLabel}
+                        </span>
                       </td>
                     </tr>
                   );
@@ -572,10 +603,10 @@ function StaffCSKHDetail() {
                   <td style={{ padding: 'var(--spacing-3)' }}></td>
                   <td style={{ padding: 'var(--spacing-3)' }}></td>
                   <td style={{ padding: 'var(--spacing-3)', textAlign: 'right' }}>
-                    <strong>{formatCurrencyVND(totalPaidAll)}</strong>
+                    <strong>{formatCurrencyVND(totals.totalPaidAll)}</strong>
                   </td>
                   <td style={{ padding: 'var(--spacing-3)' }}>
-                    <strong>{formatCurrencyVND(totalProfitAll)}</strong>
+                    <strong>{formatCurrencyVND(totals.totalProfitAll)}</strong>
                   </td>
                   <td style={{ padding: 'var(--spacing-3)' }}></td>
                 </tr>
@@ -594,7 +625,7 @@ function StaffCSKHDetail() {
                   <td style={{ padding: 'var(--spacing-3)' }}></td>
                   <td style={{ padding: 'var(--spacing-3)' }}></td>
                   <td style={{ padding: 'var(--spacing-3)', color: 'var(--danger)', fontWeight: 600 }}>
-                    <strong>{formatCurrencyVND(totalUnpaidProfit)}</strong>
+                    <strong>{formatCurrencyVND(totals.totalUnpaidProfit)}</strong>
                   </td>
                   <td style={{ padding: 'var(--spacing-3)' }}></td>
                 </tr>
@@ -613,7 +644,7 @@ function StaffCSKHDetail() {
                   <td style={{ padding: 'var(--spacing-3)' }}></td>
                   <td style={{ padding: 'var(--spacing-3)' }}></td>
                   <td style={{ padding: 'var(--spacing-3)', color: 'var(--success)', fontWeight: 600 }}>
-                    <strong>{formatCurrencyVND(totalPaidProfit)}</strong>
+                    <strong>{formatCurrencyVND(totals.totalPaidProfit)}</strong>
                   </td>
                   <td style={{ padding: 'var(--spacing-3)' }}></td>
                 </tr>
@@ -628,6 +659,80 @@ function StaffCSKHDetail() {
           </div>
         )}
       </div>
+
+      {/* Bulk Status Modal */}
+      <Modal
+        title="Chọn trạng thái thanh toán"
+        isOpen={showBulkStatusModal}
+        onClose={() => setShowBulkStatusModal(false)}
+      >
+        <div style={{ padding: 'var(--spacing-4)' }}>
+          <p style={{ margin: '0 0 var(--spacing-4) 0', fontSize: 'var(--font-size-base)', color: 'var(--text)' }}>
+            Chọn trạng thái thanh toán cho <strong>{selectedStudents.size}</strong> học sinh đã chọn:
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-2)' }}>
+            <button
+              type="button"
+              className="btn btn-block"
+              onClick={() => handleBulkStatusUpdate('paid')}
+              style={{
+                justifyContent: 'flex-start',
+                padding: 'var(--spacing-3)',
+                background: 'rgba(34, 197, 94, 0.1)',
+                border: '1px solid rgba(34, 197, 94, 0.3)',
+                color: '#047857',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 'var(--spacing-2)' }}>
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+              </svg>
+              Đã thanh toán
+            </button>
+            <button
+              type="button"
+              className="btn btn-block"
+              onClick={() => handleBulkStatusUpdate('unpaid')}
+              style={{
+                justifyContent: 'flex-start',
+                padding: 'var(--spacing-3)',
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                color: '#991b1b',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 'var(--spacing-2)' }}>
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+              Chờ thanh toán
+            </button>
+            <button
+              type="button"
+              className="btn btn-block"
+              onClick={() => handleBulkStatusUpdate('deposit')}
+              style={{
+                justifyContent: 'flex-start',
+                padding: 'var(--spacing-3)',
+                background: 'rgba(168, 85, 247, 0.1)',
+                border: '1px solid rgba(168, 85, 247, 0.3)',
+                color: '#6b21a8',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 'var(--spacing-2)' }}>
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M12 8v4M12 16h.01"></path>
+              </svg>
+              Cọc
+            </button>
+          </div>
+        </div>
+      </Modal>
+
     </div>
   );
 }

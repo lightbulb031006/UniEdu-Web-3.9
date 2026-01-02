@@ -1,0 +1,167 @@
+/**
+ * Sidebar Responsive Styles
+ * Cải thiện responsive cho sidebar trên mobile
+ */
+
+/* Desktop: Main content margin khi sidebar collapsed */
+.layout:has(.sidebar[data-collapsed="true"]) .main-content {
+  margin-left: 56px;
+  transition: margin-left 0.3s ease-in-out;
+}
+
+/* Mobile breakpoint: 768px */
+@media (max-width: 768px) {
+  /* Layout adjustments */
+  .layout {
+    position: relative;
+  }
+
+  /* Sidebar khi collapsed trên mobile */
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    height: 100vh;
+    z-index: 999;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Main content margin khi sidebar collapsed */
+  .main-content {
+    margin-left: 56px !important;
+    transition: margin-left 0.3s ease-in-out;
+  }
+
+  /* Sidebar khi expanded trên mobile */
+  .sidebar:not([data-collapsed="true"]) {
+    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.2);
+  }
+
+  /* Overlay khi sidebar mở trên mobile */
+  .sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 998;
+    animation: fadeIn 0.3s ease-in-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* Toggle button styles */
+  .sidebar-toggle-btn {
+    position: absolute;
+    top: 72px;
+    right: -12px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    box-shadow: var(--shadow-sm);
+    transition: right 0.3s ease-in-out, transform 0.3s ease-in-out;
+  }
+
+  .sidebar-toggle-btn:hover {
+    background: var(--bg-secondary);
+    transform: scale(1.05);
+  }
+
+  .sidebar-toggle-btn:active {
+    transform: scale(0.95);
+  }
+
+  /* Menu items khi collapsed */
+  .sidebar[data-collapsed="true"] .tab {
+    justify-content: center;
+    padding: var(--spacing-2);
+  }
+
+  .sidebar[data-collapsed="true"] .tab span {
+    display: none;
+  }
+
+  /* Brand section khi collapsed */
+  .sidebar[data-collapsed="true"] .brand > div:not(:first-child) {
+    display: none;
+  }
+
+  /* User section khi collapsed */
+  .sidebar[data-collapsed="true"] .user-info-content {
+    display: none;
+  }
+
+  /* Version text khi collapsed */
+  .sidebar[data-collapsed="true"] .version-text {
+    font-size: 0.65rem;
+  }
+}
+
+/* Tablet breakpoint: 1024px */
+@media (max-width: 1024px) and (min-width: 769px) {
+  .sidebar {
+    width: 200px;
+    flex: 0 0 200px;
+  }
+}
+
+/* Desktop: Sidebar có thể toggle manually */
+@media (min-width: 769px) {
+  .sidebar {
+    position: relative;
+  }
+
+  .main-content {
+    transition: margin-left 0.3s ease-in-out;
+  }
+
+  /* Optional: Desktop có thể có toggle button */
+  .sidebar-toggle-btn-desktop {
+    display: none; /* Ẩn trên desktop, có thể bật nếu cần */
+  }
+}
+
+/* Smooth transitions cho tất cả sidebar elements */
+.sidebar * {
+  transition-timing-function: ease-in-out;
+}
+
+/* Prevent layout shift */
+.sidebar {
+  will-change: width;
+}
+
+/* Accessibility: Focus styles */
+.sidebar .tab:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Touch-friendly tap targets trên mobile */
+@media (max-width: 768px) {
+  .sidebar .tab {
+    min-height: 48px; /* Tăng từ 42px lên 48px cho mobile */
+    min-width: 48px;
+  }
+
+  .sidebar .btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+

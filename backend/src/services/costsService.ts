@@ -59,30 +59,55 @@ export async function getCostById(id: string): Promise<Cost | null> {
  * Create a new cost
  */
 export async function createCost(costData: Omit<Cost, 'id' | 'created_at' | 'updated_at'>): Promise<Cost> {
+  // Generate ID for new cost
+  const id = `COST${Date.now()}${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+  
   // Ensure month is derived from date if provided
   const month = costData.month || (costData.date ? costData.date.slice(0, 7) : '');
   if (!month) {
     throw new Error('Month is required (either provide month or date)');
   }
 
+  if (!costData.category || !costData.category.trim()) {
+    throw new Error('Category is required');
+  }
+
+  if (!Number.isFinite(costData.amount) || costData.amount < 0) {
+    throw new Error('Amount must be a valid positive number');
+  }
+
+  // Build payload with only required fields first
   const payload: any = {
+    id,
     month,
-    category: costData.category,
-    amount: costData.amount,
+    category: costData.category.trim(),
+    amount: Number(costData.amount),
   };
 
-  // Add optional fields if provided
-  if (costData.date) {
-    payload.date = costData.date;
+  // Add optional fields if provided (only if they have values)
+  // Note: Only add if the field exists in the request to avoid database errors
+  if (costData.date && costData.date.trim()) {
+    try {
+      // Validate date format
+      new Date(costData.date);
+      payload.date = costData.date.trim();
+    } catch (e) {
+      console.warn('Invalid date format, skipping date field:', costData.date);
+    }
   }
-  if (costData.status) {
+  
+  // Only add status if it's a valid value
+  if (costData.status && (costData.status === 'paid' || costData.status === 'pending')) {
     payload.status = costData.status;
   }
 
+  console.log('Inserting cost payload:', JSON.stringify(payload, null, 2));
   const { data, error } = await supabase.from('costs').insert(payload).select().single();
 
   if (error) {
-    throw new Error(`Failed to create cost: ${error.message}`);
+    console.error('Supabase error creating cost:', error);
+    console.error('Error details:', JSON.stringify(error, null, 2));
+    throw new Error(`Failed to create cost: ${error.message || 'Unknown error'}`);
   }
 
   return data as Cost;

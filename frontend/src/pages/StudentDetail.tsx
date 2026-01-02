@@ -12,6 +12,7 @@ import {
   updateStudentClassFee,
 } from '../services/studentsService';
 import { fetchClasses, addStudentToClass } from '../services/classesService';
+import { fetchTeachers } from '../services/teachersService';
 import { createWalletTransaction, fetchWalletTransactions } from '../services/walletService';
 import { useAuthStore } from '../store/authStore';
 import { formatCurrencyVND } from '../utils/formatters';
@@ -62,12 +63,18 @@ function StudentDetail() {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Fetch teachers for CSKH staff selection
+  const { data: teachersData } = useDataLoading(() => fetchTeachers(), [], {
+    cacheKey: 'teachers-for-student-detail',
+    staleTime: 5 * 60 * 1000,
+  });
+
   // Fetch student class financial data
   const fetchFinancialDataFn = useCallback(() => {
     if (!id) throw new Error('Student ID is required');
     return getStudentClassFinancialData(id);
   }, [id]);
-  const { data: financialData } = useDataLoading(fetchFinancialDataFn, [id], {
+  const { data: financialData, refetch: refetchFinancialData } = useDataLoading(fetchFinancialDataFn, [id], {
     cacheKey: `student-financial-${id}`,
     staleTime: 1 * 60 * 1000,
   });
@@ -974,9 +981,10 @@ function StudentDetail() {
             student={student}
             classId={selectedClassId}
             financialData={financialData || undefined}
-            onSuccess={() => {
+            onSuccess={async () => {
               setExtendModalOpen(false);
-              refetch();
+              // Refetch both student data and financial data to update remaining sessions
+              await Promise.all([refetch(), refetchFinancialData()]);
             }}
             onClose={() => {
               setExtendModalOpen(false);
@@ -1001,9 +1009,10 @@ function StudentDetail() {
             student={student}
             classId={selectedClassId}
             financialData={financialData || undefined}
-            onSuccess={() => {
+            onSuccess={async () => {
               setRefundModalOpen(false);
-              refetch();
+              // Refetch both student data and financial data to update remaining sessions
+              await Promise.all([refetch(), refetchFinancialData()]);
             }}
             onClose={() => {
               setRefundModalOpen(false);
@@ -1029,9 +1038,10 @@ function StudentDetail() {
             classId={selectedClassId}
             classes={classes}
             financialData={financialData || undefined}
-            onSuccess={() => {
+            onSuccess={async () => {
               setRemoveModalOpen(false);
-              refetch();
+              // Refetch both student data and financial data
+              await Promise.all([refetch(), refetchFinancialData()]);
             }}
             onClose={() => {
               setRemoveModalOpen(false);
@@ -1126,10 +1136,11 @@ function StudentDetail() {
             classId={editingFeeClassId}
             classInfo={classes.find((c) => c.id === editingFeeClassId)}
             financialData={financialData}
-            onSuccess={() => {
+            onSuccess={async () => {
               setEditFeeModalOpen(false);
               setEditingFeeClassId(null);
-              refetch();
+              // Refetch both student data and financial data
+              await Promise.all([refetch(), refetchFinancialData()]);
             }}
             onClose={() => {
               setEditFeeModalOpen(false);
@@ -1167,10 +1178,11 @@ function StudentDetail() {
         onClose={() => setEditStudentModalOpen(false)}
         size="lg"
       >
-        {student && (
+        {student && teachersData && (
           <EditStudentInfoModal
             studentId={id!}
             student={student}
+            teachers={teachersData}
             onSuccess={() => {
               setEditStudentModalOpen(false);
               refetch();
@@ -1199,7 +1211,7 @@ function ExtendSessionsModal({
   onSuccess: () => void;
   onClose: () => void;
 }) {
-  const [sessions, setSessions] = useState<number>(1);
+  const [sessions, setSessions] = useState<string>('1');
   const [loading, setLoading] = useState(false);
 
   const classData = useMemo(() => {
@@ -1249,11 +1261,17 @@ function ExtendSessionsModal({
   }, [referenceUnitPrice]);
 
   const walletBalance = Number(_student.walletBalance || 0);
+  // Convert sessions string to number for calculation
+  const sessionsNum = useMemo(() => {
+    const num = parseFloat(sessions);
+    return isNaN(num) || num <= 0 ? 0 : num;
+  }, [sessions]);
+  
   // Tự động tính tổng tiền khi thay đổi sessions hoặc unitPrice (giống backup updateTotal)
   const totalCost = useMemo(() => {
-    return sessions > 0 && unitPrice > 0 ? sessions * unitPrice : 0;
-  }, [sessions, unitPrice]);
-  const insufficient = totalCost > walletBalance && sessions > 0 && unitPrice > 0;
+    return sessionsNum > 0 && unitPrice > 0 ? sessionsNum * unitPrice : 0;
+  }, [sessionsNum, unitPrice]);
+  const insufficient = totalCost > walletBalance && sessionsNum > 0 && unitPrice > 0;
   
   // Calculate reference info for display
   const referenceInfo = useMemo(() => {
@@ -1282,12 +1300,12 @@ function ExtendSessionsModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     // Validation giống backup: kiểm tra sessions > 0 và unitPrice > 0
-    if (!Number.isFinite(sessions) || sessions <= 0 || !Number.isFinite(unitPrice) || unitPrice <= 0) {
-      toast.error('Vui lòng nhập dữ liệu hợp lệ');
+    if (sessionsNum <= 0 || !Number.isFinite(unitPrice) || unitPrice <= 0) {
+      toast.error('Vui lòng nhập số buổi hợp lệ');
       return;
     }
     // Round sessions như backup
-    const roundedSessions = Math.round(sessions);
+    const roundedSessions = Math.round(sessionsNum);
     const finalTotalCost = roundedSessions * unitPrice;
     if (walletBalance < finalTotalCost) {
       toast.error('Số dư không đủ để gia hạn');
@@ -1317,7 +1335,14 @@ function ExtendSessionsModal({
           min="1"
           step="1"
           value={sessions}
-          onChange={(e) => setSessions(parseInt(e.target.value) || 1)}
+          onChange={(e) => setSessions(e.target.value)}
+          onBlur={(e) => {
+            // Validate on blur: if empty or invalid, set to 1
+            const value = e.target.value.trim();
+            if (!value || isNaN(parseFloat(value)) || parseFloat(value) <= 0) {
+              setSessions('1');
+            }
+          }}
           required
           style={{
             width: '100%',
@@ -1392,7 +1417,7 @@ function RefundSessionsModal({
   onSuccess: () => void;
   onClose: () => void;
 }) {
-  const [sessions, setSessions] = useState<number>(1);
+  const [sessions, setSessions] = useState<string>('1');
   const [loading, setLoading] = useState(false);
 
   const classData = useMemo(() => {
@@ -1440,14 +1465,20 @@ function RefundSessionsModal({
   useEffect(() => {
     if (classData) {
       setUnitPrice(referenceUnitPrice || 0);
-      setSessions(Math.min(1, maxSessions));
+      setSessions(String(Math.min(1, maxSessions)));
     }
   }, [classData, maxSessions, referenceUnitPrice]);
 
+  // Convert sessions string to number for calculation
+  const sessionsNum = useMemo(() => {
+    const num = parseFloat(sessions);
+    return isNaN(num) || num <= 0 ? 0 : num;
+  }, [sessions]);
+
   // Tự động tính tổng tiền hoàn lại khi thay đổi sessions hoặc unitPrice (giống backup updateTotal)
   const totalRefund = useMemo(() => {
-    return sessions > 0 && unitPrice > 0 ? sessions * unitPrice : 0;
-  }, [sessions, unitPrice]);
+    return sessionsNum > 0 && unitPrice > 0 ? sessionsNum * unitPrice : 0;
+  }, [sessionsNum, unitPrice]);
   
   // Calculate reference info for display
   const referenceInfo = useMemo(() => {
@@ -1476,8 +1507,7 @@ function RefundSessionsModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     // Validation giống backup
-    let roundedSessions = Number(sessions);
-    if (!Number.isFinite(roundedSessions) || roundedSessions <= 0 || roundedSessions > maxSessions) {
+    if (sessionsNum <= 0 || sessionsNum > maxSessions) {
       toast.error('Số buổi hoàn trả không hợp lệ');
       return;
     }
@@ -1485,7 +1515,7 @@ function RefundSessionsModal({
       toast.error('Giá buổi không hợp lệ');
       return;
     }
-    roundedSessions = Math.round(roundedSessions);
+    const roundedSessions = Math.round(sessionsNum);
 
     setLoading(true);
     try {
@@ -1511,7 +1541,17 @@ function RefundSessionsModal({
           max={maxSessions}
           step="1"
           value={sessions}
-          onChange={(e) => setSessions(parseInt(e.target.value) || 1)}
+          onChange={(e) => setSessions(e.target.value)}
+          onBlur={(e) => {
+            // Validate on blur: if empty or invalid, set to 1
+            const value = e.target.value.trim();
+            const num = parseFloat(value);
+            if (!value || isNaN(num) || num <= 0) {
+              setSessions('1');
+            } else if (num > maxSessions) {
+              setSessions(String(maxSessions));
+            }
+          }}
           required
           style={{
             width: '100%',
@@ -2180,14 +2220,27 @@ function EditLoginInfoModal({
 function EditStudentInfoModal({
   studentId,
   student,
+  teachers,
   onSuccess,
   onClose,
 }: {
   studentId: string;
   student: any;
+  teachers: any[];
   onSuccess: () => void;
   onClose: () => void;
 }) {
+  // Get CSKH staff (teachers with cskh_sale role)
+  const cskhStaff = useMemo(() => {
+    return teachers.filter((t: any) => {
+      const roles = t.roles || [];
+      return roles.includes('cskh_sale');
+    });
+  }, [teachers]);
+
+  // Get current CSKH staff ID (check both cskh_staff_id and cskhStaffId)
+  const currentCskhStaffId = (student as any).cskh_staff_id || (student as any).cskhStaffId || '';
+
   const [formData, setFormData] = useState({
     fullName: student.fullName || '',
     birthYear: student.birthYear || new Date().getFullYear() - 15,
@@ -2199,6 +2252,7 @@ function EditStudentInfoModal({
     parentPhone: student.parentPhone || '',
     status: student.status || 'active',
     goal: student.goal || '',
+    cskhStaffId: currentCskhStaffId,
   });
   const [loading, setLoading] = useState(false);
 
@@ -2222,6 +2276,14 @@ function EditStudentInfoModal({
 
     if (formData.goal) {
       studentData.goal = formData.goal.trim();
+    }
+
+    // Add CSKH staff assignment (send empty string to unassign, matching backup behavior)
+    if (formData.cskhStaffId) {
+      studentData.cskhStaffId = formData.cskhStaffId;
+    } else {
+      // If empty, send empty string to unassign (backend will handle null conversion)
+      studentData.cskhStaffId = '';
     }
 
     setLoading(true);
@@ -2391,6 +2453,29 @@ function EditStudentInfoModal({
           placeholder="Mục tiêu học tập của học sinh"
           rows={3}
         />
+      </div>
+
+      <div style={{ marginBottom: 'var(--spacing-4)' }}>
+        <label htmlFor="editStudentCskhStaff" style={{ display: 'block', marginBottom: 'var(--spacing-2)', fontWeight: '500' }}>
+          Người phụ trách CSKH
+        </label>
+        <select
+          id="editStudentCskhStaff"
+          className="form-control"
+          value={formData.cskhStaffId}
+          onChange={(e) => setFormData({ ...formData, cskhStaffId: e.target.value })}
+        >
+          <option value="">Chưa phân công</option>
+          {cskhStaff.map((staff: any) => (
+            <option key={staff.id} value={staff.id}>
+              {staff.fullName || staff.name}
+              {staff.email ? ` (${staff.email})` : ''}
+            </option>
+          ))}
+        </select>
+        <small style={{ display: 'block', marginTop: 'var(--spacing-1)', fontSize: 'var(--font-size-xs)', color: 'var(--muted)' }}>
+          Chọn nhân sự có role SALE&CSKH để phụ trách học sinh này
+        </small>
       </div>
 
       <div style={{ marginBottom: 'var(--spacing-4)' }}>

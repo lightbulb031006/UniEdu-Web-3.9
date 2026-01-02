@@ -4,6 +4,7 @@
 @import './assets/css/pages.css';
 @import './assets/css/pages-action-history.css';
 @import './assets/css/coding.css';
+@import './assets/css/sidebar-responsive.css';
 
 /* Tailwind CSS */
 @tailwind base;
@@ -19,6 +20,25 @@ body {
   font-size: var(--font-size-base);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Performance optimizations */
+* {
+  /* Optimize font rendering */
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Optimize image loading */
+img {
+  content-visibility: auto;
+}
+
+/* Optimize scroll performance */
+.scroll-container {
+  will-change: scroll-position;
+  transform: translateZ(0);
 }
 
 #root {

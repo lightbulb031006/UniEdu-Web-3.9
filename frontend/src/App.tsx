@@ -1,44 +1,94 @@
 /**
  * Main App Component
  * Migrated from backup/index.html and logic.js
+ * Optimized with lazy loading for better performance
  */
 
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import Home from './pages/Home';
-import Register from './pages/Register';
-import Dashboard from './pages/Dashboard';
-import Students from './pages/Students';
-import Classes from './pages/Classes';
-import Teachers from './pages/Teachers';
-import Staff from './pages/Staff';
-import Costs from './pages/Costs';
-import Categories from './pages/Categories';
-import LessonPlans from './pages/LessonPlans';
-import ActionHistory from './pages/ActionHistory';
-import Coding from './pages/Coding';
-import Payments from './pages/Payments';
-import Schedule from './pages/Schedule';
-import StudentDetail from './pages/StudentDetail';
-import ClassDetail from './pages/ClassDetail';
-import StaffDetail from './pages/StaffDetail';
-import StaffCSKHDetail from './pages/StaffCSKHDetail';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
+import { SkeletonLoader } from './components/SkeletonLoader';
+
+// Lazy load pages for code splitting - only load when needed
+const Home = lazy(() => import('./pages/Home'));
+const Register = lazy(() => import('./pages/Register'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Students = lazy(() => import('./pages/Students'));
+const Classes = lazy(() => import('./pages/Classes'));
+const Teachers = lazy(() => import('./pages/Teachers'));
+const Staff = lazy(() => import('./pages/Staff'));
+const Costs = lazy(() => import('./pages/Costs'));
+const Categories = lazy(() => import('./pages/Categories'));
+const LessonPlans = lazy(() => import('./pages/LessonPlans'));
+const ActionHistory = lazy(() => import('./pages/ActionHistory'));
+const Coding = lazy(() => import('./pages/Coding'));
+const Payments = lazy(() => import('./pages/Payments'));
+const Schedule = lazy(() => import('./pages/Schedule'));
+const StudentDetail = lazy(() => import('./pages/StudentDetail'));
+const ClassDetail = lazy(() => import('./pages/ClassDetail'));
+const StaffDetail = lazy(() => import('./pages/StaffDetail'));
+const StaffCSKHDetail = lazy(() => import('./pages/StaffCSKHDetail'));
+
+// Loading fallback component
+const PageLoader = () => (
+  <div style={{ 
+    display: 'flex', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    minHeight: '400px',
+    flexDirection: 'column',
+    gap: '16px'
+  }}>
+    <SkeletonLoader />
+    <p style={{ color: 'var(--muted)', fontSize: '0.875rem' }}>Đang tải trang...</p>
+  </div>
+);
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/home" element={<Home />} />
-        <Route path="/login" element={<Home initialAuthMode="login" />} />
-        <Route path="/register" element={<Register />} />
+        <Route 
+          path="/" 
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <Home />
+            </Suspense>
+          } 
+        />
+        <Route 
+          path="/home" 
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <Home />
+            </Suspense>
+          } 
+        />
+        <Route 
+          path="/login" 
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <Home initialAuthMode="login" />
+            </Suspense>
+          } 
+        />
+        <Route 
+          path="/register" 
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <Register />
+            </Suspense>
+          } 
+        />
         <Route
           path="/dashboard"
           element={
             <ProtectedRoute>
               <Layout>
-                <Dashboard />
+                <Suspense fallback={<PageLoader />}>
+                  <Dashboard />
+                </Suspense>
               </Layout>
             </ProtectedRoute>
           }
@@ -48,7 +98,9 @@ function App() {
           element={
             <ProtectedRoute>
               <Layout>
-                <Students />
+                <Suspense fallback={<PageLoader />}>
+                  <Students />
+                </Suspense>
               </Layout>
             </ProtectedRoute>
           }
@@ -58,7 +110,9 @@ function App() {
           element={
             <ProtectedRoute>
               <Layout>
-                <StudentDetail />
+                <Suspense fallback={<PageLoader />}>
+                  <StudentDetail />
+                </Suspense>
               </Layout>
             </ProtectedRoute>
           }
@@ -68,7 +122,9 @@ function App() {
           element={
             <ProtectedRoute>
               <Layout>
-                <Classes />
+                <Suspense fallback={<PageLoader />}>
+                  <Classes />
+                </Suspense>
               </Layout>
             </ProtectedRoute>
           }
@@ -78,7 +134,9 @@ function App() {
           element={
             <ProtectedRoute>
               <Layout>
-                <ClassDetail />
+                <Suspense fallback={<PageLoader />}>
+                  <ClassDetail />
+                </Suspense>
               </Layout>
             </ProtectedRoute>
           }
@@ -88,7 +146,9 @@ function App() {
           element={
             <ProtectedRoute>
               <Layout>
-                <Teachers />
+                <Suspense fallback={<PageLoader />}>
+                  <Teachers />
+                </Suspense>
               </Layout>
             </ProtectedRoute>
           }
@@ -98,7 +158,9 @@ function App() {
           element={
             <ProtectedRoute>
               <Layout>
-                <Staff />
+                <Suspense fallback={<PageLoader />}>
+                  <Staff />
+                </Suspense>
               </Layout>
             </ProtectedRoute>
           }
@@ -108,7 +170,9 @@ function App() {
           element={
             <ProtectedRoute>
               <Layout>
-                <StaffDetail />
+                <Suspense fallback={<PageLoader />}>
+                  <StaffDetail />
+                </Suspense>
               </Layout>
             </ProtectedRoute>
           }
@@ -118,7 +182,9 @@ function App() {
           element={
             <ProtectedRoute>
               <Layout>
-                <StaffCSKHDetail />
+                <Suspense fallback={<PageLoader />}>
+                  <StaffCSKHDetail />
+                </Suspense>
               </Layout>
             </ProtectedRoute>
           }
@@ -128,7 +194,9 @@ function App() {
           element={
             <ProtectedRoute>
               <Layout>
-                <Costs />
+                <Suspense fallback={<PageLoader />}>
+                  <Costs />
+                </Suspense>
               </Layout>
             </ProtectedRoute>
           }
@@ -138,7 +206,9 @@ function App() {
           element={
             <ProtectedRoute>
               <Layout>
-                <Categories />
+                <Suspense fallback={<PageLoader />}>
+                  <Categories />
+                </Suspense>
               </Layout>
             </ProtectedRoute>
           }
@@ -148,7 +218,9 @@ function App() {
           element={
             <ProtectedRoute>
               <Layout>
-                <LessonPlans />
+                <Suspense fallback={<PageLoader />}>
+                  <LessonPlans />
+                </Suspense>
               </Layout>
             </ProtectedRoute>
           }
@@ -158,7 +230,9 @@ function App() {
           element={
             <ProtectedRoute>
               <Layout>
-                <ActionHistory />
+                <Suspense fallback={<PageLoader />}>
+                  <ActionHistory />
+                </Suspense>
               </Layout>
             </ProtectedRoute>
           }
@@ -168,7 +242,9 @@ function App() {
           element={
             <ProtectedRoute>
               <Layout>
-                <Coding />
+                <Suspense fallback={<PageLoader />}>
+                  <Coding />
+                </Suspense>
               </Layout>
             </ProtectedRoute>
           }
@@ -178,7 +254,9 @@ function App() {
           element={
             <ProtectedRoute>
               <Layout>
-                <Payments />
+                <Suspense fallback={<PageLoader />}>
+                  <Payments />
+                </Suspense>
               </Layout>
             </ProtectedRoute>
           }
@@ -188,7 +266,9 @@ function App() {
           element={
             <ProtectedRoute>
               <Layout>
-                <Schedule />
+                <Suspense fallback={<PageLoader />}>
+                  <Schedule />
+                </Suspense>
               </Layout>
             </ProtectedRoute>
           }

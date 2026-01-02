@@ -6,6 +6,7 @@ import { useDataLoading } from '../hooks/useDataLoading';
 import { fetchTeachers } from '../services/teachersService';
 import { userHasStaffRole } from '../utils/permissions';
 import AdminProfileModal from './AdminProfileModal';
+import { Sidebar } from './Sidebar';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -21,6 +22,7 @@ function Layout({ children }: LayoutProps) {
   const { user, logout } = useAuthStore();
   const { theme, setTheme, THEME_DEFAULT, THEME_DARK, THEME_SAKURA } = useTheme();
   const [isAdminProfileModalOpen, setIsAdminProfileModalOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const isActive = (path: string) => location.pathname === path;
   const isAdmin = user?.role === 'admin';
@@ -47,7 +49,7 @@ function Layout({ children }: LayoutProps) {
     { path: '/staff', label: 'Nhân sự', icon: ['M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2', 'M9 7a4 4 0 1 0 8 0 4 4 0 0 0-8 0', 'M23 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'], roles: ['admin'], requireStaffRole: 'accountant' }, // Only admin and accountant can access
     { path: '/classes', label: 'Lớp học', icon: ['M4 19.5A2.5 2.5 0 0 1 6.5 17H20', 'M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'], roles: ['admin'], requireStaffRole: 'accountant' }, // Only admin and accountant can access
     { path: '/coding', label: 'Lập trình', icon: ['M2 4h20v14H2z', 'M8 20h8', 'M12 16v4'], roles: ['admin', 'teacher', 'student'] },
-    { path: '/students', label: 'Học sinh', icon: ['M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2', 'M9 7a4 4 0 1 0 8 0 4 4 0 0 0-8 0', 'M23 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'], roles: ['admin'] },
+    { path: '/students', label: 'Học sinh', icon: ['M22 10v6M2 10l10-5 10 5M2 17l10 5 10-5M2 12l10 5 10-5'], roles: ['admin'] },
     { path: '/costs', label: 'Chi phí', icon: ['M12 1v22', 'M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'], roles: ['admin'] },
     { path: '/categories', label: 'Phân loại lớp', icon: ['M4 7h16', 'M4 12h16', 'M4 17h16'], roles: ['admin'] },
     { path: '/lesson-plans', label: 'Giáo Án', icon: ['M4 19.5A2.5 2.5 0 0 1 6.5 17H20', 'M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z', 'M8 7h8', 'M8 11h8', 'M8 15h4'], roles: ['admin', 'teacher'], requireStaffRole: 'lesson_plan' },
@@ -260,108 +262,30 @@ function Layout({ children }: LayoutProps) {
         />
       )}
 
-      <div className="layout" style={{ display: 'flex', minHeight: '100vh' }}>
+      <div className="layout" style={{ display: 'flex', minHeight: '100vh', position: 'relative' }}>
         {/* Sidebar - Only for admin, always show when logged in as admin (except on landing page) */}
         {isAdmin && user && !isLandingPage && (
-          <aside className="sidebar" style={{ width: '240px', flex: '0 0 240px' }}>
-            <div className="brand">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M12 2l3 6 6 3-6 3-3 6-3-6-6-3 6-3 3-6z" fill="currentColor" />
-              </svg>
-              <div>
-                <div>Unicorns Edu</div>
-                <div className="muted text-sm">Education Center</div>
-              </div>
-            </div>
-
-            <nav className="tabs" role="tablist" aria-label="Sidebar Navigation" style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
-              {menuItems.map((item) => (
-                <button
-                  key={item.path}
-                  className={`tab ${isActive(item.path) ? 'active' : ''}`}
-                  onClick={() => navigate(item.path)}
-                  type="button"
-                  aria-current={isActive(item.path) ? 'page' : undefined}
-                  style={{ width: '100%', textAlign: 'left', padding: 'var(--spacing-2) var(--spacing-3)', border: 'none', background: 'transparent', color: 'var(--muted)', borderRadius: 'var(--radius)', cursor: 'pointer', transition: 'all 0.2s ease-in-out', display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)', fontSize: 'var(--font-size-sm)', fontWeight: '500', position: 'relative', minHeight: '42px' }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: isActive(item.path) ? 1 : 0.7 }}>
-                    {Array.isArray(item.icon) ? item.icon.map((path, idx) => <path key={idx} d={path} />) : <path d={item.icon} />}
-                  </svg>
-                  {item.label}
-                </button>
-              ))}
-            </nav>
-
-            <div className="actions" style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div className="theme-switcher" style={{ display: 'flex', gap: '4px' }}>
-                <button
-                  className={`btn theme-btn theme-icon-only ${theme === THEME_DEFAULT ? 'theme-active' : ''}`}
-                  data-theme-option="light"
-                  onClick={() => setTheme(THEME_DEFAULT)}
-                  aria-label="Chế độ sáng"
-                  title="Chế độ sáng"
-                  style={{ padding: '6px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 'var(--radius)' }}
-                >
-                  <span aria-hidden="true">☀️</span>
-                </button>
-                <button
-                  className={`btn theme-btn theme-icon-only ${theme === THEME_DARK ? 'theme-active' : ''}`}
-                  data-theme-option="dark"
-                  onClick={() => setTheme(THEME_DARK)}
-                  aria-label="Chế độ tối"
-                  title="Chế độ tối"
-                  style={{ padding: '6px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 'var(--radius)' }}
-                >
-                  <span aria-hidden="true">🌙</span>
-                </button>
-                <button
-                  className={`btn theme-btn theme-icon-only ${theme === THEME_SAKURA ? 'theme-active' : ''}`}
-                  data-theme-option="sakura"
-                  onClick={() => setTheme(THEME_SAKURA)}
-                  aria-label="Hoa Anh Đào"
-                  title="Hoa Anh Đào"
-                  style={{ padding: '6px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 'var(--radius)' }}
-                >
-                  <span aria-hidden="true">🌸</span>
-                </button>
-              </div>
-              {user && (
-                <div className="sidebar-user-section" style={{ paddingTop: 'var(--spacing-4)', borderTop: '1px solid var(--border)', marginTop: 'var(--spacing-4)' }}>
-                  <div className="user-account-card" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <button
-                      className="user-account-btn"
-                      onClick={() => isAdmin && setIsAdminProfileModalOpen(true)}
-                      style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 'var(--radius)', flex: 1 }}
-                      title={isAdmin ? 'Thông tin tài khoản' : undefined}
-                      aria-label={isAdmin ? 'Thông tin tài khoản' : undefined}
-                    >
-                      <div className="user-avatar">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="12" cy="8" r="4" />
-                          <path d="M6 20v-1a6 6 0 0 1 12 0v1" />
-                        </svg>
-                      </div>
-                      <div className="user-info-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1 }}>
-                        <div className="user-name" style={{ fontSize: 'var(--font-size-sm)', fontWeight: '500' }}>{user.name || user.email || 'Admin'}</div>
-                        <div className="user-role" style={{ fontSize: 'var(--font-size-xs)', color: 'var(--muted)' }}>{getRoleLabel(user.role || 'admin')}</div>
-                      </div>
-                    </button>
-                    <button className="logout-btn btn-icon-only" onClick={handleLogout} title="Đăng xuất" aria-label="Đăng xuất" type="button" style={{ padding: '6px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 'var(--radius)' }}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                        <polyline points="16 17 21 12 16 7" />
-                        <line x1="21" y1="12" x2="9" y2="12" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </aside>
+          <Sidebar
+            menuItems={menuItems}
+            user={user}
+            onLogout={handleLogout}
+            onProfileClick={() => setIsAdminProfileModalOpen(true)}
+            onCollapseChange={setIsSidebarCollapsed}
+          />
         )}
 
         {/* Main Content */}
-        <main id="main-content" className="main-content" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <main
+          id="main-content"
+          className="main-content"
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            marginLeft: isAdmin && !isLandingPage && isSidebarCollapsed && window.innerWidth > 768 ? '56px' : '0',
+            transition: 'margin-left 0.3s ease-in-out',
+          }}
+        >
           {children}
         </main>
       </div>

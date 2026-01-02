@@ -24,10 +24,20 @@ export async function fetchStaffWorkItems(staffId: string, month: string): Promi
 
 /**
  * Get bonuses for a staff member
+ * Returns: { bonuses: Bonus[], statistics: { totalMonth, paid, unpaid } }
  */
-export async function fetchStaffBonuses(staffId: string, month: string) {
-  const response = await api.get(`/staff/${staffId}/bonuses?month=${month}`);
-  return response.data || [];
+export interface BonusesResponse {
+  bonuses: any[];
+  statistics: {
+    totalMonth: number;
+    paid: number;
+    unpaid: number;
+  };
+}
+
+export async function fetchStaffBonuses(staffId: string, month: string): Promise<BonusesResponse> {
+  const response = await api.get<BonusesResponse>(`/staff/${staffId}/bonuses?month=${month}`);
+  return response.data || { bonuses: [], statistics: { totalMonth: 0, paid: 0, unpaid: 0 } };
 }
 
 /**
@@ -44,6 +54,74 @@ export async function getStaffUnpaidAmount(staffId: string): Promise<number> {
 export async function getStaffUnpaidAmounts(staffIds: string[]): Promise<Record<string, number>> {
   const response = await api.post('/staff/unpaid-amounts', { staffIds });
   return response.data || {};
+}
+
+/**
+ * Get CSKH detail data with all calculations done in backend
+ */
+export interface CSKHDetailData {
+  students: Array<{
+    student: {
+      id: string;
+      fullName: string;
+      birthYear?: number;
+      province?: string;
+      classIds: string[];
+    };
+    totalPaid: number;
+    profitPercent: number;
+    profit: number;
+    paymentStatus: 'paid' | 'unpaid' | 'deposit';
+  }>;
+  defaultProfitPercent: number;
+  totals: {
+    totalUnpaidProfit: number;
+    totalPaidProfit: number;
+    totalPaidAll: number;
+    totalProfitAll: number;
+  };
+}
+
+export async function fetchCSKHDetailData(staffId: string, month: string): Promise<CSKHDetailData> {
+  const response = await api.get<CSKHDetailData>(`/staff/${staffId}/cskh/detail?month=${month}`);
+  return response.data;
+}
+
+/**
+ * Get staff detail data with all calculations done in backend (for teachers)
+ */
+export interface StaffDetailData {
+  teacherClassStats: Array<{
+    class: {
+      id: string;
+      name: string;
+      status: string;
+    };
+    totalMonth: number;
+    totalPaid: number;
+    totalUnpaid: number;
+    monthSessionsCount: number;
+    isActive: boolean;
+  }>;
+  incomeStats: {
+    totalMonthAllClasses: number;
+    totalPaidByStatus: number;
+    totalUnpaidByStatus: number;
+    totalPaidAllTime: number;
+    totalDepositAllTime: number;
+  };
+  sessionStats: {
+    total: number;
+    paid: number;
+    unpaid: number;
+    totalAllowance: number;
+    paidAllowance: number;
+  };
+}
+
+export async function fetchStaffDetailData(staffId: string, month: string): Promise<StaffDetailData> {
+  const response = await api.get<StaffDetailData>(`/staff/${staffId}/detail-data?month=${month}`);
+  return response.data;
 }
 
 /**

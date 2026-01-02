@@ -583,3 +583,89 @@ export async function moveStudentToClass(studentId: string, fromClassId: string,
   return data;
 }
 
+/**
+ * Get class detail data with teacher statistics calculated in backend
+ * Returns teacher stats (totalReceived, allowance) for each teacher in the class
+ */
+export async function getClassDetailData(classId: string) {
+  // Get class data
+  const classData = await getClassById(classId);
+  if (!classData) {
+    throw new Error('Class not found');
+  }
+
+  // Get class teachers
+  const { data: classTeachersData, error: classTeachersError } = await supabase
+    .from('class_teachers')
+    .select('teacher_id')
+    .eq('class_id', classId);
+
+  if (classTeachersError) {
+    console.error('Failed to fetch class_teachers:', classTeachersError);
+  }
+
+  const teacherIds = (classTeachersData || []).map((ct: any) => ct.teacher_id);
+
+  if (teacherIds.length === 0) {
+    return {
+      teacherStats: [],
+    };
+  }
+
+  // Get teachers
+  const { data: teachers, error: teachersError } = await supabase
+    .from('teachers')
+    .select('id, full_name, email, phone')
+    .in('id', teacherIds);
+
+  if (teachersError) {
+    console.error('Failed to fetch teachers:', teachersError);
+  }
+
+  // Get all sessions for this class
+  const { data: sessions, error: sessionsError } = await supabase
+    .from('sessions')
+    .select('*')
+    .eq('class_id', classId)
+    .order('date', { ascending: false });
+
+  if (sessionsError) {
+    console.error('Failed to fetch sessions:', sessionsError);
+  }
+
+  // Get custom allowances
+  const customAllowances = ((classData as any)?.custom_teacher_allowances || {}) as Record<string, number>;
+  const defaultSalary = Number(classData.tuition_per_session) || 0;
+
+  // Calculate teacher stats
+  const teacherStats = (teachers || []).map((teacher: any) => {
+    const teacherSessions = (sessions || []).filter((s: any) => s.teacher_id === teacher.id);
+    
+    // Calculate total received from paid sessions
+    const totalReceived = teacherSessions
+      .filter((s: any) => s.payment_status === 'paid')
+      .reduce((sum: number, s: any) => {
+        // Use allowance_amount if available
+        const allowance = s.allowance_amount != null ? Number(s.allowance_amount) : 0;
+        return sum + allowance;
+      }, 0);
+
+    const allowance = customAllowances[teacher.id] ?? defaultSalary;
+
+    return {
+      teacher: {
+        id: teacher.id,
+        fullName: teacher.full_name,
+        email: teacher.email,
+        phone: teacher.phone,
+      },
+      allowance,
+      totalReceived,
+    };
+  });
+
+  return {
+    teacherStats,
+  };
+}
+

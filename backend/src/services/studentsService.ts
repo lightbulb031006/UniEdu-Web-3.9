@@ -101,7 +101,8 @@ export async function getStudents(filters: StudentFilters = {}) {
  * Get student by ID
  */
 export async function getStudentById(id: string) {
-  const { data, error } = await supabase.from('students').select('*').eq('id', id).single();
+  // Use maybeSingle() instead of single() to avoid error when student doesn't exist
+  const { data, error } = await supabase.from('students').select('*').eq('id', id).maybeSingle();
 
   if (error) {
     throw new Error(`Failed to fetch student: ${error.message}`);
@@ -181,14 +182,68 @@ export async function createStudent(studentData: Omit<Student, 'id' | 'class_id'
  */
 export async function updateStudent(id: string, studentData: Partial<Student> & { classIds?: string[]; gender?: string; cskhStaffId?: string; cskh_staff_id?: string }) {
   // Extract classIds and other non-database fields
-  const { classIds, gender, cskhStaffId, ...studentFields } = studentData as any;
+  const { classIds, gender, cskhStaffId, cskh_staff_id, ...studentFields } = studentData as any;
   
   // Remove classIds from studentFields if present (it's handled separately)
   delete studentFields.classIds;
   
   // Handle cskhStaffId -> cskh_staff_id mapping
-  if (cskhStaffId !== undefined) {
-    studentFields.cskh_staff_id = cskhStaffId;
+  // Frontend service may send either cskhStaffId (camelCase) or cskh_staff_id (snake_case)
+  // Empty string means unassign (set to null in DB)
+  const cskhStaffIdValue = cskhStaffId !== undefined ? cskhStaffId : cskh_staff_id;
+  if (cskhStaffIdValue !== undefined) {
+    try {
+      console.log(`[updateStudent] Processing CSKH assignment for student ${id}: cskhStaffIdValue=${cskhStaffIdValue}`);
+      
+      // Get current student's cskh_staff_id directly from database to check if it's changing
+      const { data: currentStudentData, error: fetchError } = await supabase
+        .from('students')
+        .select('cskh_staff_id, cskh_assigned_date, cskh_unassigned_date')
+        .eq('id', id)
+        .maybeSingle();
+      
+      if (fetchError) {
+        console.error('[updateStudent] Error fetching current student for CSKH assignment:', fetchError);
+        // Continue anyway - just set the cskh_staff_id without auto-setting dates
+        const newCskhStaffId = cskhStaffIdValue === '' ? null : cskhStaffIdValue;
+        studentFields.cskh_staff_id = newCskhStaffId;
+      } else {
+        const currentCskhStaffId = currentStudentData?.cskh_staff_id || null;
+        const newCskhStaffId = cskhStaffIdValue === '' ? null : cskhStaffIdValue;
+        
+        console.log(`[updateStudent] Current CSKH staff: ${currentCskhStaffId}, New CSKH staff: ${newCskhStaffId}`);
+        console.log(`[updateStudent] Current assigned_date: ${currentStudentData?.cskh_assigned_date || 'null'}, unassigned_date: ${currentStudentData?.cskh_unassigned_date || 'null'}`);
+        
+        studentFields.cskh_staff_id = newCskhStaffId;
+        
+        // Auto-set cskh_assigned_date when assigning (if not already set or if changing to different staff)
+        if (newCskhStaffId) {
+          if (currentCskhStaffId !== newCskhStaffId || !currentStudentData?.cskh_assigned_date) {
+            const assignedDate = new Date().toISOString().split('T')[0];
+            studentFields.cskh_assigned_date = assignedDate;
+            console.log(`[updateStudent] Auto-setting cskh_assigned_date to ${assignedDate}`);
+          }
+          // Clear unassigned date if reassigning
+          if (currentCskhStaffId !== newCskhStaffId && currentStudentData?.cskh_unassigned_date) {
+            studentFields.cskh_unassigned_date = null;
+            console.log(`[updateStudent] Clearing cskh_unassigned_date`);
+          }
+        }
+        
+        // Auto-set cskh_unassigned_date when unassigning
+        if (!newCskhStaffId && currentCskhStaffId) {
+          const unassignedDate = new Date().toISOString().split('T')[0];
+          studentFields.cskh_unassigned_date = unassignedDate;
+          console.log(`[updateStudent] Auto-setting cskh_unassigned_date to ${unassignedDate}`);
+        }
+      }
+    } catch (error: any) {
+      // If query fails, just set the cskh_staff_id without auto-setting dates
+      console.error('[updateStudent] Exception getting current student for CSKH assignment:', error);
+      console.error('[updateStudent] Error stack:', error?.stack);
+      const newCskhStaffId = cskhStaffIdValue === '' ? null : cskhStaffIdValue;
+      studentFields.cskh_staff_id = newCskhStaffId;
+    }
   }
   
   // Handle gender if provided (only include if database supports it)
@@ -196,24 +251,49 @@ export async function updateStudent(id: string, studentData: Partial<Student> & 
     studentFields.gender = gender;
   }
 
-  // Filter out undefined values to avoid sending them to database
+  // Filter out undefined values and fields that don't exist in students table
+  // Fields like account_handle, account_password, wallet_balance, loan_balance
+  // are handled separately or don't exist in students table
+  const validStudentFields = [
+    'full_name', 'birth_year', 'school', 'province', 'parent_name', 'parent_phone',
+    'email', 'status', 'gender', 'goal', 'cskh_staff_id', 'cskh_assigned_date', 'cskh_unassigned_date'
+  ];
+  
   const cleanFields: any = {};
   Object.keys(studentFields).forEach((key) => {
-    if (studentFields[key] !== undefined) {
+    // Only include valid fields and non-undefined values
+    if (studentFields[key] !== undefined && validStudentFields.includes(key)) {
       cleanFields[key] = studentFields[key];
     }
   });
 
   // Update student basic info
-  const { data, error } = await supabase
-    .from('students')
-    .update(cleanFields)
-    .eq('id', id)
-    .select()
-    .single();
+  // Only update if there are fields to update
+  if (Object.keys(cleanFields).length > 0) {
+    console.log(`[updateStudent] Updating student ${id} with fields:`, JSON.stringify(cleanFields, null, 2));
+    
+    const { data, error } = await supabase
+      .from('students')
+      .update(cleanFields)
+      .eq('id', id)
+      .select();
 
-  if (error) {
-    throw new Error(`Failed to update student: ${error.message}`);
+    if (error) {
+      // Provide more detailed error message
+      console.error('[updateStudent] Error updating student:', error);
+      console.error('[updateStudent] Error details:', JSON.stringify(error, null, 2));
+      throw new Error(`Failed to update student: ${error.message}`);
+    }
+
+    // Check if student exists (update returns empty array if no rows matched)
+    if (!data || data.length === 0) {
+      console.error(`[updateStudent] Student with id ${id} not found`);
+      throw new Error(`Student with id ${id} not found`);
+    }
+    
+    console.log(`[updateStudent] Successfully updated student ${id}`);
+  } else {
+    console.log(`[updateStudent] No fields to update for student ${id}`);
   }
 
   // Handle class assignments if classIds provided
