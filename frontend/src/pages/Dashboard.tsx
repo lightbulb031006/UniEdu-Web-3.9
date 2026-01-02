@@ -242,6 +242,50 @@ function Dashboard() {
     }
   );
 
+  // Optimistic revenue updates - chỉ cộng/trừ transaction mới, không tính lại từ đầu
+  const [revenueAdjustment, setRevenueAdjustment] = useState<number>(0);
+
+  // Listen for wallet transaction events to update revenue optimistically
+  useEffect(() => {
+    if (user?.role !== 'admin') return;
+
+    const handleWalletTransactionCreated = (event: CustomEvent) => {
+      const { type, amount, date } = event.detail || {};
+      
+      // Chỉ cập nhật nếu là topup (cả số dương và số âm đều ảnh hưởng đến doanh thu)
+      if (type === 'topup' && amount !== 0) {
+        // Kiểm tra xem transaction có trong range hiện tại không
+        const range = getFilterRange(state);
+        const transactionDate = new Date(date);
+        if (transactionDate >= range.start && transactionDate <= range.end) {
+          // Cộng/trừ transaction mới vào doanh thu hiện tại (optimistic update)
+          setRevenueAdjustment((prev) => prev + amount);
+          
+          // Invalidate backend cache để lần sau refetch sẽ có dữ liệu mới
+          // Nhưng không refetch ngay để tránh tính lại từ đầu
+          const cacheKey = `dashboard-${state.filterType}-${state.filterValue}`;
+          try {
+            sessionStorage.removeItem(cacheKey);
+            localStorage.removeItem(cacheKey);
+          } catch (e) {
+            // Ignore storage errors
+          }
+        }
+      }
+    };
+
+    window.addEventListener('wallet-transaction-created', handleWalletTransactionCreated as EventListener);
+
+    return () => {
+      window.removeEventListener('wallet-transaction-created', handleWalletTransactionCreated as EventListener);
+    };
+  }, [user?.role, state]);
+
+  // Reset revenue adjustment khi filter thay đổi
+  useEffect(() => {
+    setRevenueAdjustment(0);
+  }, [state.filterType, state.filterValue]);
+
   // Fetch quick view data
   // Chỉ fetch nếu user là admin (teacher sẽ được redirect)
   const { data: quickView, isLoading: quickViewLoading } = useDataLoading(
@@ -286,7 +330,7 @@ function Dashboard() {
   // Cache summary data với useMemo để tránh tính toán lại
   // PHẢI GỌI TẤT CẢ HOOKS TRƯỚC KHI RETURN
   const summary = useMemo(() => {
-    return data?.summary || {
+    const baseSummary = data?.summary || {
       totalClasses: 0,
       activeClasses: 0,
       totalStudents: 0,
@@ -295,12 +339,34 @@ function Dashboard() {
       revenue: 0,
       uncollected: 0,
     };
-  }, [data?.summary]);
+    
+    // Áp dụng optimistic revenue adjustment (chỉ cộng/trừ transaction mới)
+    return {
+      ...baseSummary,
+      revenue: baseSummary.revenue + revenueAdjustment,
+    };
+  }, [data?.summary, revenueAdjustment]);
 
   // Cache finance report với useMemo
   const financeReport = useMemo(() => {
-    return data?.financeReport || { rows: [] };
-  }, [data?.financeReport]);
+    const baseReport = data?.financeReport || { rows: [] };
+    
+    // Áp dụng optimistic revenue adjustment cho row "Doanh Thu"
+    const adjustedRows = baseReport.rows.map((row: any) => {
+      if (row.key === 'revenue') {
+        return {
+          ...row,
+          amount: (row.amount || 0) + revenueAdjustment,
+        };
+      }
+      return row;
+    });
+    
+    return {
+      ...baseReport,
+      rows: adjustedRows,
+    };
+  }, [data?.financeReport, revenueAdjustment]);
 
   // Cache charts với useMemo
   const charts = useMemo(() => {

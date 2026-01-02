@@ -251,9 +251,18 @@ export async function updateStudent(id: string, studentData: Partial<Student> & 
     studentFields.gender = gender;
   }
 
+  // Handle wallet_balance and loan_balance separately (they need to be updated directly)
+  const walletBalance = (studentFields as any).wallet_balance !== undefined ? (studentFields as any).wallet_balance : (studentFields as any).walletBalance;
+  const loanBalance = (studentFields as any).loan_balance !== undefined ? (studentFields as any).loan_balance : (studentFields as any).loanBalance;
+  
+  // Remove wallet_balance and loan_balance from studentFields (they're handled separately)
+  delete (studentFields as any).wallet_balance;
+  delete (studentFields as any).walletBalance;
+  delete (studentFields as any).loan_balance;
+  delete (studentFields as any).loanBalance;
+
   // Filter out undefined values and fields that don't exist in students table
-  // Fields like account_handle, account_password, wallet_balance, loan_balance
-  // are handled separately or don't exist in students table
+  // Fields like account_handle, account_password are handled separately or don't exist in students table
   const validStudentFields = [
     'full_name', 'birth_year', 'school', 'province', 'parent_name', 'parent_phone',
     'email', 'status', 'gender', 'goal', 'cskh_staff_id', 'cskh_assigned_date', 'cskh_unassigned_date'
@@ -294,6 +303,31 @@ export async function updateStudent(id: string, studentData: Partial<Student> & 
     console.log(`[updateStudent] Successfully updated student ${id}`);
   } else {
     console.log(`[updateStudent] No fields to update for student ${id}`);
+  }
+
+  // Update wallet_balance and loan_balance separately if provided
+  const balanceUpdates: any = {};
+  if (walletBalance !== undefined) {
+    balanceUpdates.wallet_balance = walletBalance;
+  }
+  if (loanBalance !== undefined) {
+    balanceUpdates.loan_balance = loanBalance;
+  }
+
+  if (Object.keys(balanceUpdates).length > 0) {
+    console.log(`[updateStudent] Updating balances for student ${id}:`, balanceUpdates);
+    
+    const { error: balanceError } = await supabase
+      .from('students')
+      .update(balanceUpdates)
+      .eq('id', id);
+
+    if (balanceError) {
+      console.error('[updateStudent] Error updating student balances:', balanceError);
+      throw new Error(`Failed to update student balances: ${balanceError.message}`);
+    }
+    
+    console.log(`[updateStudent] Successfully updated balances for student ${id}`);
   }
 
   // Handle class assignments if classIds provided
@@ -531,31 +565,25 @@ export async function extendStudentSessions(
     throw new Error(`Không thể cập nhật lớp học: ${updateError.message}`);
   }
 
-  // Update student wallet balance
-  const newWalletBalance = walletBalance - totalCost;
-  const { error: studentUpdateError } = await supabase
-    .from('students')
-    .update({ wallet_balance: newWalletBalance })
-    .eq('id', studentId);
-
-  if (studentUpdateError) {
-    throw new Error(`Không thể cập nhật số dư: ${studentUpdateError.message}`);
-  }
-
-  // Create wallet transaction (negative amount for payment)
+  // Create wallet transaction - backend will automatically update wallet balance
+  // Use negative amount to indicate payment (decrease balance)
   const walletService = await import('./walletService');
   await walletService.createWalletTransaction({
     student_id: studentId,
-    type: 'topup',
-    amount: -totalCost, // Negative because it's a payment
+    type: 'topup', // Will be handled as payment when amount is negative
+    amount: -totalCost, // Negative because it's a payment (decrease balance)
     note: `Gia hạn ${sessions} buổi học`,
     date: new Date().toISOString().slice(0, 10),
   });
 
+  // Get updated wallet balance after transaction
+  const updatedStudent = await getStudentById(studentId);
+  const finalWalletBalance = Number((updatedStudent as any)?.wallet_balance || (updatedStudent as any)?.walletBalance || 0);
+
   return {
     success: true,
     remainingSessions: newRemainingSessions,
-    newWalletBalance,
+    newWalletBalance: finalWalletBalance,
   };
 }
 
@@ -616,39 +644,76 @@ export async function refundStudentSessions(
     throw new Error(`Không thể cập nhật lớp học: ${updateError.message}`);
   }
 
-  // Update student wallet balance
-  const student = await getStudentById(studentId);
-  if (!student) {
-    throw new Error('Học sinh không tồn tại');
-  }
-
-  const walletBalance = Number((student as any).wallet_balance || (student as any).walletBalance || 0);
-  const newWalletBalance = walletBalance + totalRefund;
-
-  const { error: studentUpdateError } = await supabase
-    .from('students')
-    .update({ wallet_balance: newWalletBalance })
-    .eq('id', studentId);
-
-  if (studentUpdateError) {
-    throw new Error(`Không thể cập nhật số dư: ${studentUpdateError.message}`);
-  }
-
-  // Create wallet transaction
+  // Create wallet transaction - backend will automatically update wallet balance
   const walletService = await import('./walletService');
   await walletService.createWalletTransaction({
     student_id: studentId,
     type: 'topup',
-    amount: totalRefund,
+    amount: totalRefund, // Positive amount for refund (increase balance)
     note: `Hoàn trả ${sessions} buổi học`,
     date: new Date().toISOString().slice(0, 10),
   });
 
+  // Get updated wallet balance after transaction
+  const updatedStudent = await getStudentById(studentId);
+  const finalWalletBalance = Number((updatedStudent as any)?.wallet_balance || (updatedStudent as any)?.walletBalance || 0);
+
   return {
     success: true,
     remainingSessions: newRemainingSessions,
-    newWalletBalance,
+    newWalletBalance: finalWalletBalance,
   };
+}
+
+/**
+ * Update student class fee
+ * Cập nhật học phí cho học sinh trong một lớp
+ */
+export async function updateStudentClassFee(studentId: string, classId: string, feeTotal: number, feeSessions: number) {
+  // Validate inputs
+  if (!studentId || !classId) {
+    throw new Error('Student ID and Class ID are required');
+  }
+  if (!Number.isFinite(feeTotal) || feeTotal < 0) {
+    throw new Error('Fee total must be a non-negative number');
+  }
+  if (!Number.isFinite(feeSessions) || feeSessions <= 0) {
+    throw new Error('Fee sessions must be a positive number');
+  }
+
+  // Find the student_class record
+  const { data: studentClass, error: findError } = await supabase
+    .from('student_classes')
+    .select('id')
+    .eq('student_id', studentId)
+    .eq('class_id', classId)
+    .eq('status', 'active')
+    .maybeSingle();
+
+  if (findError) {
+    throw new Error(`Failed to find student class: ${findError.message}`);
+  }
+
+  if (!studentClass) {
+    throw new Error('Student is not enrolled in this class');
+  }
+
+  // Update the student_class record
+  const { data, error } = await supabase
+    .from('student_classes')
+    .update({
+      student_fee_total: feeTotal,
+      student_fee_sessions: feeSessions,
+    })
+    .eq('id', studentClass.id)
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to update student class fee: ${error.message}`);
+  }
+
+  return data;
 }
 
 /**

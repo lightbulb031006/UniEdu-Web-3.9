@@ -81,6 +81,36 @@ export async function cleanupExpiredCache(): Promise<void> {
   }
 }
 
+/**
+ * Invalidate dashboard cache for a specific date range
+ * Used when wallet transactions are created/updated
+ */
+export async function invalidateDashboardCache(date: string): Promise<void> {
+  try {
+    // Parse date to get month, quarter, and year
+    const transactionDate = new Date(date);
+    const year = transactionDate.getFullYear();
+    const month = transactionDate.getMonth() + 1;
+    const quarter = Math.floor((month - 1) / 3) + 1;
+    
+    // Invalidate cache for month
+    const monthKey = `dashboard:month:${year}-${String(month).padStart(2, '0')}`;
+    // Invalidate cache for quarter
+    const quarterKey = `dashboard:quarter:${year}-Q${quarter}`;
+    // Invalidate cache for year
+    const yearKey = `dashboard:year:${year}`;
+    
+    // Delete all matching cache entries
+    await Promise.all([
+      supabase.from('dashboard_cache').delete().eq('cache_key', monthKey),
+      supabase.from('dashboard_cache').delete().eq('cache_key', quarterKey),
+      supabase.from('dashboard_cache').delete().eq('cache_key', yearKey),
+    ]);
+  } catch (error) {
+    console.error('[Dashboard Cache] Error invalidating cache:', error);
+  }
+}
+
 export interface DashboardParams {
   filterType: 'month' | 'quarter' | 'year';
   filterValue: string;
@@ -192,8 +222,15 @@ export async function getDashboardData(params: DashboardParams) {
   const lessonOutputs = lessonOutputsResult.data || [];
 
   // Calculate summary
+  // Doanh thu: Tổng số tiền học sinh nạp vào tài khoản trong tháng (không tính tiền ứng)
+  // Số dương = tăng doanh thu, số âm = giảm doanh thu
   const totalRevenue = walletTransactions
-    .filter((tx: any) => tx.type === 'topup' && isWithinRange(tx.date, range))
+    .filter((tx: any) => {
+      if (tx.type !== 'topup') return false; // Chỉ tính tiền nạp, không tính tiền ứng
+      if (!isWithinRange(tx.date, range)) return false;
+      const amount = Number(tx.amount) || 0;
+      return amount !== 0; // Tính cả số dương (nạp) và số âm (trừ)
+    })
     .reduce((sum: number, tx: any) => sum + (Number(tx.amount) || 0), 0);
 
   const outstandingTuition = students.reduce((sum: number, student: any) => {
@@ -612,7 +649,15 @@ export async function getQuickViewData(year: string) {
 
   // Filter by year
   const walletTxYear = walletTransactions.filter((tx: any) => (tx.date || '').startsWith(yearStr));
-  const revenueYear = walletTxYear.filter((tx: any) => tx.type === 'topup').reduce((sum: number, tx: any) => sum + (Number(tx.amount) || 0), 0);
+  // Chỉ tính tiền nạp, không tính tiền ứng
+  // Số dương = tăng doanh thu, số âm = giảm doanh thu
+  const revenueYear = walletTxYear
+    .filter((tx: any) => {
+      if (tx.type !== 'topup') return false; // Chỉ tính tiền nạp, không tính tiền ứng
+      const amount = Number(tx.amount) || 0;
+      return amount !== 0; // Tính cả số dương (nạp) và số âm (trừ)
+    })
+    .reduce((sum: number, tx: any) => sum + (Number(tx.amount) || 0), 0);
   const advanceCount = walletTxYear.filter((tx: any) => tx.type === 'advance' || tx.type === 'loan').length;
 
   const sessionsYear = sessions.filter((session: any) => (session.date || '').startsWith(yearStr));

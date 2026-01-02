@@ -5,6 +5,7 @@
  */
 
 import React, { Suspense, lazy } from 'react';
+import './utils/clearCache'; // Initialize cache clearing utilities
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';

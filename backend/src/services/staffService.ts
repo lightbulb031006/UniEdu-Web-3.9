@@ -116,6 +116,7 @@ export async function getStaffUnpaidAmounts(staffIds: string[]): Promise<Record<
   // 3. Unpaid from bonuses
 
   // Get unpaid bonuses for uncached staff - also check cache first
+  // Logic: unpaid bonuses = unpaid from current month + previous month (matching getStaffBonusesStatistics)
   const bonusesCachePromises = uncachedStaffIds.map(async (staffId) => {
     const cachedStats = await getStaffMonthlyStats(staffId, currentMonth);
     if (cachedStats) {
@@ -141,12 +142,14 @@ export async function getStaffUnpaidAmounts(staffIds: string[]): Promise<Record<
   });
   
   // Only query database for staff without cache
+  // Query bonuses from current month + previous month only (matching getStaffBonusesStatistics logic)
   const { data: bonuses, error: bonusesError } = bonusesUncachedIds.length > 0
     ? await supabase
         .from('bonuses')
-        .select('staff_id, amount')
+        .select('staff_id, amount, month')
         .in('staff_id', bonusesUncachedIds)
         .eq('status', 'unpaid')
+        .in('month', [currentMonth, previousMonth])
     : { data: [], error: null };
 
   // Add bonuses from database query to existing cache results
@@ -256,14 +259,14 @@ export async function getStaffUnpaidAmounts(staffIds: string[]): Promise<Record<
         unpaidSessions[s.teacher_id] = 0;
       }
       
-      // Calculate allowance (same logic as getSessionAllowance)
+      // Calculate allowance using the same logic as getStaffDetailData
       const cls = classMap.get(s.class_id);
       const classTuition = cls ? (Number(cls.tuition_per_session) || 0) : 0;
       const customAllowances = cls ? ((cls.custom_teacher_allowances as Record<string, number>) || {}) : {};
       const teacherAllowance = customAllowances[s.teacher_id] ?? classTuition;
       
-      // Use allowance_amount if available, otherwise calculate
-      const allowance = s.allowance_amount || teacherAllowance;
+      // Use getSessionAllowance function to ensure consistency with getStaffDetailData
+      const allowance = getSessionAllowance(s, teacherAllowance);
       unpaidSessions[s.teacher_id] += allowance;
     });
   }

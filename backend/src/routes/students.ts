@@ -15,6 +15,7 @@ import {
   extendStudentSessions,
   refundStudentSessions,
   removeStudentClass,
+  updateStudentClassFee,
 } from '../services/studentsService';
 
 const router = Router();
@@ -150,6 +151,24 @@ router.post('/:id/remove-class', authenticate, async (req, res, next) => {
       return res.status(400).json({ error: 'Missing required field: classId' });
     }
     const result = await removeStudentClass(req.params.id, classId, refundRemaining !== false);
+    res.json(result);
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+/**
+ * PATCH /api/students/:id/class-fee
+ * Update student class fee
+ * Body: { classId: string, student_fee_total: number, student_fee_sessions: number }
+ */
+router.patch('/:id/class-fee', authenticate, async (req, res, next) => {
+  try {
+    const { classId, student_fee_total, student_fee_sessions } = req.body;
+    if (!classId || student_fee_total === undefined || student_fee_sessions === undefined) {
+      return res.status(400).json({ error: 'Missing required fields: classId, student_fee_total, student_fee_sessions' });
+    }
+    const result = await updateStudentClassFee(req.params.id, classId, student_fee_total, student_fee_sessions);
     res.json(result);
   } catch (error: any) {
     next(error);

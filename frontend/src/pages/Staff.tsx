@@ -82,18 +82,56 @@ function Staff() {
     return await getStaffUnpaidAmounts(staffIds);
   }, [teachers]);
   
-  const { data: unpaidAmountsData, isLoading: isLoadingUnpaid } = useDataLoading(
+  const { data: unpaidAmountsData, isLoading: isLoadingUnpaid, refetch: refetchUnpaidAmounts } = useDataLoading(
     fetchUnpaidAmountsFn,
     [teachers.length > 0 ? teachers.map(t => t.id).join(',') : ''],
     {
       cacheKey: 'staff-unpaid-amounts',
-      staleTime: 5 * 60 * 1000, // Cache 5 phút
-      persistCache: true, // Lưu vào localStorage
+      staleTime: 10 * 1000, // Giảm cache time xuống 10 giây để cập nhật nhanh hơn
+      persistCache: false, // Không persist để tránh cache cũ
       enabled: teachers.length > 0,
+      refetchInterval: 30 * 1000, // Tự động refetch mỗi 30 giây
     }
   );
   
   const unpaidAmounts = unpaidAmountsData || {};
+  
+  // Refetch unpaid amounts when component becomes visible (user navigates back from detail page)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && teachers.length > 0) {
+        // Refetch when page becomes visible (user quay lại từ tab khác)
+        refetchUnpaidAmounts();
+      }
+    };
+    
+    const handleFocus = () => {
+      if (teachers.length > 0) {
+        // Refetch when window gains focus (user quay lại từ window khác)
+        refetchUnpaidAmounts();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [refetchUnpaidAmounts, teachers.length]);
+  
+  // Refetch when navigating to this page (using location change)
+  const location = window.location;
+  useEffect(() => {
+    if (teachers.length > 0) {
+      // Small delay to ensure page is fully loaded
+      const timeoutId = setTimeout(() => {
+        refetchUnpaidAmounts();
+      }, 500);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [location.pathname, refetchUnpaidAmounts, teachers.length]);
 
   // Get unique provinces for filter
   const provinces = React.useMemo(() => {

@@ -1061,9 +1061,10 @@ function StudentDetail() {
           <TopUpModal
             studentId={id!}
             student={student}
-            onSuccess={() => {
+            onSuccess={async () => {
               setTopUpModalOpen(false);
-              refetch();
+              // Refetch cả student data và financial data để đảm bảo số dư được cập nhật
+              await Promise.all([refetch(), refetchFinancialData()]);
             }}
             onClose={() => setTopUpModalOpen(false)}
           />
@@ -1080,9 +1081,10 @@ function StudentDetail() {
           <LoanModal
             studentId={id!}
             student={student}
-            onSuccess={() => {
+            onSuccess={async () => {
               setLoanModalOpen(false);
-              refetch();
+              // Refetch cả student data và financial data để đảm bảo số dư được cập nhật
+              await Promise.all([refetch(), refetchFinancialData()]);
             }}
             onClose={() => setLoanModalOpen(false)}
           />
@@ -1724,15 +1726,14 @@ function TopUpModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!Number.isFinite(amount) || amount <= 0) {
+    if (!Number.isFinite(amount) || amount === 0) {
       toast.error('Số tiền không hợp lệ');
       return;
     }
 
     setLoading(true);
     try {
-      const newWalletBalance = Number(student.walletBalance || 0) + amount;
-      await updateStudent(studentId, { walletBalance: newWalletBalance });
+      // Tạo transaction - backend sẽ tự động cập nhật walletBalance
       await createWalletTransaction({
         studentId,
         type: 'topup',
@@ -1740,7 +1741,16 @@ function TopUpModal({
         note: '',
         date: new Date().toISOString().split('T')[0],
       });
-      toast.success('Đã nạp tiền vào tài khoản');
+      
+      // Dispatch event để Dashboard tự động refetch
+      // Cả số dương (nạp) và số âm (trừ) đều ảnh hưởng đến doanh thu
+      if (amount !== 0) {
+        window.dispatchEvent(new CustomEvent('wallet-transaction-created', {
+          detail: { type: 'topup', amount, date: new Date().toISOString().split('T')[0] }
+        }));
+      }
+      
+      toast.success(amount > 0 ? 'Đã nạp tiền vào tài khoản' : 'Đã trừ tiền khỏi tài khoản');
       onSuccess();
     } catch (error: any) {
       toast.error('Không thể nạp tiền: ' + (error.response?.data?.error || error.message));
@@ -1768,7 +1778,7 @@ function TopUpModal({
           }}
         />
         <div style={{ marginTop: 'var(--spacing-1)', fontSize: '0.875rem', color: 'var(--muted)' }}>
-          Có thể nhập số lẻ ({'>='} 1.000₫).
+          Có thể nhập số dương (nạp tiền) hoặc số âm (trừ tiền).
         </div>
       </div>
       <div style={{ display: 'flex', gap: 'var(--spacing-2)', justifyContent: 'flex-end' }}>
@@ -1801,19 +1811,14 @@ function LoanModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!Number.isFinite(amount) || amount <= 0) {
-      toast.error('Số tiền vay không hợp lệ');
+    if (!Number.isFinite(amount) || amount === 0) {
+      toast.error('Số tiền không hợp lệ');
       return;
     }
 
     setLoading(true);
     try {
-      const newWalletBalance = Number(student.walletBalance || 0) + amount;
-      const newLoanBalance = Number(student.loanBalance || 0) + amount;
-      await updateStudent(studentId, {
-        walletBalance: newWalletBalance,
-        loanBalance: newLoanBalance,
-      });
+      // Tạo transaction - backend sẽ tự động cập nhật walletBalance và loanBalance
       await createWalletTransaction({
         studentId,
         type: 'advance',
@@ -1821,7 +1826,13 @@ function LoanModal({
         note: note.trim() || '',
         date: new Date().toISOString().split('T')[0],
       });
-      toast.success('Đã cộng tiền vay vào tài khoản');
+      
+      // Dispatch event để Dashboard tự động refetch (nếu cần)
+      window.dispatchEvent(new CustomEvent('wallet-transaction-created', {
+        detail: { type: 'advance', amount, date: new Date().toISOString().split('T')[0] }
+      }));
+      
+      toast.success(amount > 0 ? 'Đã cộng tiền vay vào tài khoản' : 'Đã trừ tiền vay khỏi tài khoản');
       onSuccess();
     } catch (error: any) {
       toast.error('Không thể ứng tiền: ' + (error.response?.data?.error || error.message));
@@ -1849,7 +1860,7 @@ function LoanModal({
           }}
         />
         <div style={{ marginTop: 'var(--spacing-1)', fontSize: '0.875rem', color: 'var(--muted)' }}>
-          Số tiền vay sẽ được cộng vào tài khoản hiện tại.
+          Có thể nhập số dương (ứng tiền) hoặc số âm (trừ tiền ứng).
         </div>
       </div>
       <div style={{ marginBottom: 'var(--spacing-4)' }}>
