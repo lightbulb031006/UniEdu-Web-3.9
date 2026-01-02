@@ -188,8 +188,17 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     // Extract page name from path (remove leading slash)
     const pageName = location.pathname.replace(/^\//, '') || 'home';
     
-    // Normalize page name (remove detail IDs)
-    const normalizedPage = pageName.split('/')[0];
+    // Normalize page name - handle detail pages correctly
+    let normalizedPage = pageName.split('/')[0];
+    
+    // Map detail pages to their normalized names
+    if (normalizedPage === 'classes' && pageName.split('/').length > 1) {
+      normalizedPage = 'class-detail';
+    } else if (normalizedPage === 'students' && pageName.split('/').length > 1) {
+      normalizedPage = 'student-detail';
+    } else if (normalizedPage === 'staff' && pageName.split('/').length > 1) {
+      normalizedPage = 'staff-detail';
+    }
     
     // Get default page for user's role
     const defaultPage = getDefaultPageForRole(user.role || 'guest');
@@ -197,12 +206,27 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     // Avoid redirect loop: don't redirect if already on default page or staff detail
     const isOnDefaultPage = location.pathname === defaultPage || location.pathname === defaultPage + '/';
     const isOnStaffDetail = user.role === 'teacher' && location.pathname.startsWith('/staff/');
+    const isOnClassDetail = user.role === 'teacher' && isClassDetailPage;
     
     // Check if user can access this page
-    if (!canAccessPage(normalizedPage, user, teachers)) {
+    const canAccess = canAccessPage(normalizedPage, user, teachers);
+    
+    console.log('[ProtectedRoute] Access check:', {
+      pathname: location.pathname,
+      normalizedPage,
+      canAccess,
+      userRole: user.role,
+      isOnDefaultPage,
+      isOnStaffDetail,
+      isOnClassDetail,
+    });
+    
+    if (!canAccess) {
       // Only redirect if not already on default page and haven't redirected yet
-      if (!isOnDefaultPage && !isOnStaffDetail && !hasRedirectedRef.current) {
+      // Also skip redirect for class detail pages (we handle that separately above)
+      if (!isOnDefaultPage && !isOnStaffDetail && !isOnClassDetail && !hasRedirectedRef.current) {
         hasRedirectedRef.current = true;
+        console.warn('[ProtectedRoute] Redirecting to default page:', defaultPage);
         return <Navigate to={defaultPage} replace />;
       }
     }
