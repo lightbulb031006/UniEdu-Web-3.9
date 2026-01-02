@@ -200,15 +200,19 @@ function StaffDetail() {
     enabled: !!staff && !isLoading,
   });
   
-  // Prefetch current month data immediately when staff is loaded (before debounce)
-  // This helps load data faster on first visit
+  // Background refresh: Load fresh data in background after showing cached data
+  // This ensures UI shows immediately while data is being updated
   useEffect(() => {
-    if (!id || !staff || isLoading) return;
-    // Prefetch immediately with current month (not debounced)
-    fetchStaffDetailData(id, currentMonth).catch(() => {
-      // Ignore errors - this is just prefetching
-    });
-  }, [id, staff, isLoading, currentMonth]);
+    if (!id || !staff || isLoading || !staffDetailData) return;
+    
+    // If we have cached data, refresh in background to ensure it's up-to-date
+    // But don't show loading state - just update silently
+    const timeoutId = setTimeout(() => {
+      refetchStaffDetailData();
+    }, 500); // Small delay to let UI render first
+    
+    return () => clearTimeout(timeoutId);
+  }, [id, staff, isLoading, staffDetailData, refetchStaffDetailData]);
   
   // Prefetch next month detail data
   useEffect(() => {
@@ -446,33 +450,147 @@ function StaffDetail() {
     });
   }, [staffDetailData, staffClasses, sessions, selectedMonth, staff?.id, getSessionAllowance]);
 
-  // Use income stats from backend
+  // Calculate income stats directly from UI data (workItems, bonuses, classes) - no need for API call
+  // Tính từ TẤT CẢ dữ liệu đã load từ các bảng, không chỉ tháng hiện tại
+  // Khi các bảng load xong thì tự động tính toán
   const incomeStats = useMemo(() => {
-    if (staffDetailData) {
-      return staffDetailData.incomeStats;
+    // Chỉ tính khi các bảng đã có dữ liệu
+    if (!workItemsData && !bonusesData && !sessions.length) {
+      return {
+        totalMonthAllClasses: 0,
+        totalPaidByStatus: 0,
+        totalUnpaidByStatus: 0,
+        totalMonthWorkItems: 0,
+        totalPaidWorkItems: 0,
+        totalUnpaidWorkItems: 0,
+        totalMonthBonuses: 0,
+        totalPaidBonuses: 0,
+        totalUnpaidBonuses: 0,
+        totalMonthAll: 0,
+        totalPaidAll: 0,
+        totalUnpaidAll: 0,
+        totalPaidAllTime: 0,
+        totalDepositAllTime: 0,
+      };
     }
-    // Fallback calculation (should not happen in production)
-    const totalMonthAllClasses = teacherClassStats.reduce((sum, stat) => sum + stat.totalMonth, 0);
-    const totalPaidByStatus = teacherClassStats.reduce((sum, stat) => sum + stat.totalPaid, 0);
-    const totalUnpaidByStatus = teacherClassStats.reduce((sum, stat) => sum + stat.totalUnpaid, 0);
-    const allSessions = sessions.filter((s) => s.teacherId === id);
-    const totalPaidAllTime = allSessions
+
+    // Calculate from work items (bảng công việc) - tính từ TẤT CẢ work items đã load
+    const totalMonthWorkItems = workItems.reduce((sum, item) => sum + (item.total || 0), 0);
+    const totalPaidWorkItems = workItems.reduce((sum, item) => sum + (item.paid || 0), 0);
+    const totalUnpaidWorkItems = workItems.reduce((sum, item) => sum + (item.unpaid || 0), 0);
+    
+    // Calculate from bonuses (bảng thưởng) - tính từ TẤT CẢ bonuses đã load
+    // Nếu có statistics thì dùng, nếu không thì tính từ bonuses array
+    let totalMonthBonuses = bonusesStatistics.totalMonth || 0;
+    let totalPaidBonuses = bonusesStatistics.paid || 0;
+    let totalUnpaidBonuses = bonusesStatistics.unpaid || 0;
+    
+    // Nếu không có statistics, tính từ bonuses array
+    if (totalMonthBonuses === 0 && bonuses.length > 0) {
+      totalMonthBonuses = bonuses.reduce((sum, b) => sum + (b.amount || 0), 0);
+      totalPaidBonuses = bonuses.filter(b => b.status === 'paid').reduce((sum, b) => sum + (b.amount || 0), 0);
+      totalUnpaidBonuses = bonuses.filter(b => b.status === 'unpaid').reduce((sum, b) => sum + (b.amount || 0), 0);
+    }
+    
+    // Calculate from classes (bảng các lớp dạy) - tính từ TẤT CẢ sessions đã load, không filter theo tháng
+    // Tính từ tất cả sessions, không chỉ tháng hiện tại
+    const allClassSessions = sessions.filter((s) => s.teacher_id === id || s.teacherId === id);
+    
+    // Tính tổng cho tháng hiện tại (selectedMonth)
+    const monthSessions = allClassSessions.filter((s) => {
+      if (!s.date) return false;
+      return s.date.slice(0, 7) === selectedMonth;
+    });
+    
+    const totalMonthAllClasses = monthSessions.reduce((sum, s) => sum + getSessionAllowance(s), 0);
+    const totalPaidByStatus = monthSessions
       .filter((s) => s.payment_status === 'paid')
       .reduce((sum, s) => sum + getSessionAllowance(s), 0);
-    const totalDepositAllTime = allSessions
-      .filter((s) => s.payment_status === 'deposit')
-      .reduce((sum, s) => sum + getSessionAllowance(s), 0);
+    
+    // Tính unpaid từ tháng hiện tại + tháng trước (theo logic backend)
+    const [year, month] = selectedMonth.split('-').map(Number);
+    let previousYear = year;
+    let previousMonth = month - 1;
+    if (previousMonth === 0) {
+      previousMonth = 12;
+      previousYear = year - 1;
+    }
+    const previousMonthStr = `${previousYear}-${String(previousMonth).padStart(2, '0')}`;
+    
+    const unpaidSessions = allClassSessions.filter((s) => {
+      if (!s.date || s.payment_status !== 'unpaid') return false;
+      const sessionMonth = s.date.slice(0, 7);
+      return sessionMonth === selectedMonth || sessionMonth === previousMonthStr;
+    });
+    
+    const totalUnpaidByStatus = unpaidSessions.reduce((sum, s) => sum + getSessionAllowance(s), 0);
+    
+    // Calculate total paid in current year from TẤT CẢ 3 bảng (Classes + Work Items + Bonuses)
+    const currentYear = selectedMonth.split('-')[0]; // Lấy năm từ selectedMonth
+    
+    // Tính từ Classes (sessions) trong năm hiện tại
+    const yearSessions = allClassSessions.filter((s) => {
+      if (!s.date) return false;
+      return s.date.slice(0, 4) === currentYear && s.payment_status === 'paid';
+    });
+    const totalPaidClassesYear = yearSessions.reduce((sum, s) => sum + getSessionAllowance(s), 0);
+    
+    // Tính từ Work Items trong năm hiện tại
+    const yearWorkItems = workItems.filter((item) => {
+      if (!item.month) return false;
+      return item.month.slice(0, 4) === currentYear;
+    });
+    const totalPaidWorkItemsYear = yearWorkItems.reduce((sum, item) => sum + (item.paid || 0), 0);
+    
+    // Tính từ Bonuses trong năm hiện tại
+    const yearBonuses = bonuses.filter((b) => {
+      if (!b.month) return false;
+      return b.month.slice(0, 4) === currentYear && b.status === 'paid';
+    });
+    const totalPaidBonusesYear = yearBonuses.reduce((sum, b) => sum + (b.amount || 0), 0);
+    
+    // Tổng năm = Classes + Work Items + Bonuses (đã thanh toán trong năm)
+    const totalPaidAllTime = totalPaidClassesYear + totalPaidWorkItemsYear + totalPaidBonusesYear;
+    
+    // Tính cọc từ sessions trong năm hiện tại
+    const yearDepositSessions = allClassSessions.filter((s) => {
+      if (!s.date) return false;
+      return s.date.slice(0, 4) === currentYear && s.payment_status === 'deposit';
+    });
+    const totalDepositAllTime = yearDepositSessions.reduce((sum, s) => sum + getSessionAllowance(s), 0);
+
+    // Calculate totals: classes + work items + bonuses
+    const totalMonthAll = totalMonthAllClasses + totalMonthWorkItems + totalMonthBonuses;
+    const totalPaidAll = totalPaidByStatus + totalPaidWorkItems + totalPaidBonuses;
+    const totalUnpaidAll = totalUnpaidByStatus + totalUnpaidWorkItems + totalUnpaidBonuses;
+
     return {
+      // Classes (bảng các lớp dạy)
       totalMonthAllClasses,
       totalPaidByStatus,
       totalUnpaidByStatus,
+      // Work items (bảng công việc)
+      totalMonthWorkItems,
+      totalPaidWorkItems,
+      totalUnpaidWorkItems,
+      // Bonuses (bảng thưởng)
+      totalMonthBonuses,
+      totalPaidBonuses,
+      totalUnpaidBonuses,
+      // Totals (tổng tất cả)
+      totalMonthAll,
+      totalPaidAll,
+      totalUnpaidAll,
+      // All time
       totalPaidAllTime,
       totalDepositAllTime,
     };
-  }, [staffDetailData, teacherClassStats, sessions, id, getSessionAllowance]);
+  }, [workItems, workItemsData, bonuses, bonusesData, bonusesStatistics, sessions, selectedMonth, id, getSessionAllowance]);
   
-  // Check if income stats are loading (when month changes and data is being fetched)
-  const isIncomeStatsLoading = staffDetailDataLoading || (debouncedMonth !== selectedMonth);
+  // Check if income stats are loading
+  // Income stats are calculated from UI data, so only show loading if work items are loading
+  // Không cần đợi debounce vì tính từ dữ liệu đã có
+  const isIncomeStatsLoading = workItemsLoading;
 
   // Use session stats from backend
   const sessionStats = useMemo(() => {
@@ -1056,7 +1174,7 @@ function StaffDetail() {
             </div>
             <div className="staff-detail-stats-grid" style={{ position: 'relative' }}>
               {/* Loading overlay khi đang refetch nhưng đã có data */}
-              {isIncomeStatsLoading && staffDetailData && (
+              {isIncomeStatsLoading && (workItemsData || bonusesData) && (
                 <div
                   style={{
                     position: 'absolute',
@@ -1089,7 +1207,7 @@ function StaffDetail() {
                   </div>
                 </div>
               )}
-              {isIncomeStatsLoading && !staffDetailData ? (
+              {isIncomeStatsLoading && !workItemsData && !bonusesData ? (
                 // Show skeleton loaders when loading for the first time
                 Array.from({ length: 5 }).map((_, idx) => (
                   <div key={idx} className="staff-detail-stat-item">
@@ -1112,7 +1230,7 @@ function StaffDetail() {
                           Đang tải...
                         </span>
                       ) : (
-                        formatCurrencyVND(incomeStats.totalMonthAllClasses)
+                        formatCurrencyVND(incomeStats.totalMonthAll)
                       )}
                     </div>
                   </div>
@@ -1128,7 +1246,7 @@ function StaffDetail() {
                       Đang tải...
                     </span>
                   ) : (
-                    formatCurrencyVND(incomeStats.totalPaidByStatus)
+                    formatCurrencyVND(incomeStats.totalPaidAll)
                   )}
                 </div>
               </div>
@@ -1144,12 +1262,12 @@ function StaffDetail() {
                       Đang tải...
                     </span>
                   ) : (
-                    formatCurrencyVND(incomeStats.totalUnpaidByStatus)
+                    formatCurrencyVND(incomeStats.totalUnpaidAll)
                   )}
                 </div>
               </div>
               <div className="staff-detail-stat-item">
-                <div className="staff-detail-stat-label">Tổng nhận (từ trước)</div>
+                <div className="staff-detail-stat-label">Tổng năm</div>
                 <div className="staff-detail-stat-value" style={{ color: 'var(--primary)', opacity: isIncomeStatsLoading ? 0.5 : 1, transition: 'opacity 0.2s', minHeight: '24px', display: 'flex', alignItems: 'center' }}>
                   {isIncomeStatsLoading ? (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>

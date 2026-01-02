@@ -282,7 +282,7 @@ function Layout({ children }: LayoutProps) {
             flex: 1,
             display: 'flex',
             flexDirection: 'column',
-            marginLeft: isAdmin && !isLandingPage && isSidebarCollapsed && window.innerWidth > 768 ? '56px' : '0',
+            marginLeft: isAdmin && !isLandingPage ? (isSidebarCollapsed && window.innerWidth > 768 ? '56px' : '240px') : '0',
             transition: 'margin-left 0.3s ease-in-out',
           }}
         >

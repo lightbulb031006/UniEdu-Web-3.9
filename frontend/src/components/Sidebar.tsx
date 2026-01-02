@@ -4,7 +4,7 @@ import { useAuthStore } from '../store/authStore';
 import { useTheme } from '../hooks/useTheme';
 
 // Export version constant
-export const APP_VERSION = '3.9';
+export const APP_VERSION = '3.9.1';
 
 interface MenuItem {
   path: string;
@@ -102,16 +102,18 @@ export function Sidebar({ menuItems, user, onLogout, onProfileClick, onCollapseC
           width: sidebarWidth,
           flex: `0 0 ${sidebarWidth}`,
           transition: `width ${transitionDuration} ease-in-out`,
-          position: isMobile ? 'fixed' : 'relative',
-          height: isMobile ? '100vh' : 'auto',
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          height: '100vh',
+          maxHeight: '100vh',
           zIndex: 999,
           background: 'var(--surface)',
           borderRight: '1px solid var(--border)',
           display: 'flex',
           flexDirection: 'column',
           padding: isCollapsed ? 'var(--spacing-3)' : 'var(--spacing-5) var(--spacing-4)',
-          overflow: isMobile && isCollapsed ? 'visible' : 'hidden',
-          minHeight: '100vh',
+          overflow: 'hidden',
         }}
       >
         {/* Brand Section - Giống backup */}

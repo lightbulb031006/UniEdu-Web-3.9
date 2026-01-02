@@ -4,6 +4,7 @@
  */
 
 import supabase from '../config/database';
+import { invalidateStaffMonthlyStatsForMonths } from './staffMonthlyStatsService';
 
 export interface Session {
   id: string;
@@ -204,6 +205,27 @@ export async function applySessionToStudents(classId: string): Promise<void> {
  * Create a new session
  */
 export async function createSession(sessionData: Omit<Session, 'id' | 'created_at' | 'updated_at'>): Promise<Session> {
+  // Invalidate cache for affected months (current month and previous month for unpaid calculation)
+  const sessionDate = new Date(sessionData.date);
+  const year = sessionDate.getFullYear();
+  const month = sessionDate.getMonth() + 1;
+  const currentMonth = `${year}-${String(month).padStart(2, '0')}`;
+  
+  // Calculate previous month
+  let previousYear = year;
+  let previousMonth = month - 1;
+  if (previousMonth === 0) {
+    previousMonth = 12;
+    previousYear = year - 1;
+  }
+  const previousMonthStr = `${previousYear}-${String(previousMonth).padStart(2, '0')}`;
+  
+  // Invalidate cache in background (don't wait)
+  if (sessionData.teacher_id) {
+    invalidateStaffMonthlyStatsForMonths(sessionData.teacher_id, [currentMonth, previousMonthStr]).catch(() => {
+      // Ignore errors - this is background operation
+    });
+  }
   if (!sessionData.class_id || !sessionData.date) {
     throw new Error('Class ID and date are required');
   }
@@ -236,10 +258,35 @@ export async function createSession(sessionData: Omit<Session, 'id' | 'created_a
  * Update an existing session
  */
 export async function updateSession(id: string, updates: Partial<Omit<Session, 'id' | 'created_at'>>): Promise<Session> {
+  // Get existing session to check teacher_id and date
+  const existing = await getSessionById(id);
+  if (!existing) {
+    throw new Error('Session not found');
+  }
+  
   const { data, error } = await supabase.from('sessions').update(updates).eq('id', id).select().single();
 
   if (error) {
     throw new Error(`Failed to update session: ${error.message}`);
+  }
+
+  // Invalidate cache for affected months
+  const sessionDate = new Date(updates.date || existing.date);
+  const year = sessionDate.getFullYear();
+  const month = sessionDate.getMonth() + 1;
+  const currentMonth = `${year}-${String(month).padStart(2, '0')}`;
+  
+  let previousYear = year;
+  let previousMonth = month - 1;
+  if (previousMonth === 0) {
+    previousMonth = 12;
+    previousYear = year - 1;
+  }
+  const previousMonthStr = `${previousYear}-${String(previousMonth).padStart(2, '0')}`;
+  
+  const teacherId = updates.teacher_id || existing.teacher_id;
+  if (teacherId) {
+    invalidateStaffMonthlyStatsForMonths(teacherId, [currentMonth, previousMonthStr]).catch(() => {});
   }
 
   return data as Session;
@@ -249,6 +296,29 @@ export async function updateSession(id: string, updates: Partial<Omit<Session, '
  * Delete a session
  */
 export async function deleteSession(id: string): Promise<void> {
+  // Get existing session to check teacher_id and date before deleting
+  const existing = await getSessionById(id);
+  if (!existing) {
+    throw new Error('Session not found');
+  }
+  
+  // Invalidate cache for affected months
+  const sessionDate = new Date(existing.date);
+  const year = sessionDate.getFullYear();
+  const month = sessionDate.getMonth() + 1;
+  const currentMonth = `${year}-${String(month).padStart(2, '0')}`;
+  
+  let previousYear = year;
+  let previousMonth = month - 1;
+  if (previousMonth === 0) {
+    previousMonth = 12;
+    previousYear = year - 1;
+  }
+  const previousMonthStr = `${previousYear}-${String(previousMonth).padStart(2, '0')}`;
+  
+  if (existing.teacher_id) {
+    invalidateStaffMonthlyStatsForMonths(existing.teacher_id, [currentMonth, previousMonthStr]).catch(() => {});
+  }
   const { error } = await supabase.from('sessions').delete().eq('id', id);
 
   if (error) {

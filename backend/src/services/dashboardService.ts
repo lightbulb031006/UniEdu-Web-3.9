@@ -344,130 +344,103 @@ export async function getDashboardData(params: DashboardParams) {
   const totalPendingAllowance = pendingTeacherAllowance + pendingLessonPlanAllowance + pendingCskhAllowance + pendingBonusAllowance;
 
   // Calculate alerts
-  // 1. Students need renewal (students with remainingSessions <= 0)
-  // Note: remainingSessions is not in student_classes table, so we'll use a simplified check
-  // In production, this should be calculated based on sessions attended vs total sessions
+  // 1. Students need renewal (students with remainingSessions = 0 or 1)
+  // remainingSessions = 0: màu đỏ, remainingSessions = 1: màu vàng
   const studentsNeedRenewal = studentClasses
     .filter((sc: any) => (sc.status || 'active') !== 'inactive')
     .map((sc: any) => {
       const student = students.find((s: any) => s.id === sc.student_id);
       const classItem = classes.find((c: any) => c.id === sc.class_id);
+      // Get remaining sessions from student_classes table
+      const remaining = Number(sc.remaining_sessions || sc.remainingSessions || 0);
       return {
         id: sc.id,
         studentId: sc.student_id,
         studentName: student?.full_name || student?.fullName || student?.id || '',
         className: classItem?.name || sc.class_id || '',
-        remaining: 0, // Simplified - should calculate from sessions
+        remaining: remaining,
       };
     })
+    .filter((item: any) => item.remaining <= 1) // Chỉ lấy học sinh có số buổi <= 1
+    .sort((a: any, b: any) => a.remaining - b.remaining) // Sắp xếp: 0 trước, 1 sau
     .slice(0, 10); // Limit to 10 for display
 
-  // 2. Pending staff payouts
-  const pendingStaffPayouts: any[] = [];
+  // 2. Pending staff payouts - Group by staff and aggregate from 3 tables
+  // Gia sư (màu vàng) + Công việc/Giáo án (màu đỏ) + Bonus (màu xanh)
+  const pendingStaffMap = new Map<string, any>();
 
-  // Group by teacher
-  const pendingTeacherMap = new Map<string, any>();
+  // Group by teacher (Gia sư - màu vàng)
   pendingTeacherSessions.forEach((session: any) => {
     const teacherId = session.teacher_id || '';
     if (!teacherId) return;
 
-    if (!pendingTeacherMap.has(teacherId)) {
+    if (!pendingStaffMap.has(teacherId)) {
       const teacher = teachers.find((t: any) => t.id === teacherId);
-      pendingTeacherMap.set(teacherId, {
+      pendingStaffMap.set(teacherId, {
         staffId: teacherId,
         staffName: teacher?.full_name || teacher?.fullName || 'Chưa xác định',
-        workType: 'Gia sư',
-        totalAllowance: 0,
-        sessions: [],
+        unpaidTeacher: 0, // Gia sư (màu vàng)
+        unpaidWorkItems: 0, // Công việc/Giáo án (màu đỏ)
+        unpaidBonuses: 0, // Bonus (màu xanh)
       });
     }
-    const entry = pendingTeacherMap.get(teacherId)!;
-    entry.totalAllowance += session.allowance || 0;
-    entry.sessions.push(session);
+    const entry = pendingStaffMap.get(teacherId)!;
+    entry.unpaidTeacher += session.allowance || 0;
   });
 
-  Array.from(pendingTeacherMap.values()).forEach((item) => {
-    if (item.totalAllowance > 0) {
-      pendingStaffPayouts.push({
-        staffId: item.staffId,
-        staffName: item.staffName,
-        workType: 'Gia sư',
-        totalAllowance: item.totalAllowance,
-        detail: `${item.sessions.length} buổi dạy`,
-      });
-    }
-  });
-
-  // Group by lesson plan staff
-  const pendingLessonPlanMap = new Map<string, any>();
+  // Group by lesson plan staff (Công việc/Giáo án - màu đỏ)
   pendingLessonOutputs.forEach((output: any) => {
     const staffId = output.staff_id || output.teacher_id || '';
     if (!staffId) return;
 
-    if (!pendingLessonPlanMap.has(staffId)) {
+    if (!pendingStaffMap.has(staffId)) {
       const staff = teachers.find((t: any) => t.id === staffId);
-      pendingLessonPlanMap.set(staffId, {
+      pendingStaffMap.set(staffId, {
         staffId,
         staffName: staff?.full_name || staff?.fullName || 'Chưa xác định',
-        workType: 'Giáo án',
-        totalAllowance: 0,
-        outputCount: 0,
+        unpaidTeacher: 0,
+        unpaidWorkItems: 0,
+        unpaidBonuses: 0,
       });
     }
-    const entry = pendingLessonPlanMap.get(staffId)!;
+    const entry = pendingStaffMap.get(staffId)!;
     const amount = Number(output.amount || output.payment_amount || DEFAULT_LESSON_OUTPUT_ALLOWANCE) || DEFAULT_LESSON_OUTPUT_ALLOWANCE;
-    entry.totalAllowance += amount;
-    entry.outputCount += 1;
+    entry.unpaidWorkItems += amount;
   });
 
-  Array.from(pendingLessonPlanMap.values()).forEach((item) => {
-    if (item.totalAllowance > 0) {
-      pendingStaffPayouts.push({
-        staffId: item.staffId,
-        staffName: item.staffName,
-        workType: 'Giáo án',
-        totalAllowance: item.totalAllowance,
-        detail: `${item.outputCount} bài đã làm`,
-      });
-    }
-  });
-
-  // Group by bonuses
-  const pendingBonusMap = new Map<string, any>();
+  // Group by bonuses (Bonus - màu xanh)
   bonuses
     .filter((b: any) => (b.status || 'unpaid') === 'unpaid')
     .forEach((bonus: any) => {
       const staffId = bonus.staff_id || '';
       if (!staffId) return;
 
-      if (!pendingBonusMap.has(staffId)) {
+      if (!pendingStaffMap.has(staffId)) {
         const staff = teachers.find((t: any) => t.id === staffId);
-        pendingBonusMap.set(staffId, {
+        pendingStaffMap.set(staffId, {
           staffId,
           staffName: staff?.full_name || staff?.fullName || 'Chưa xác định',
-          workType: 'Thưởng',
-          totalAllowance: 0,
-          bonusCount: 0,
+          unpaidTeacher: 0,
+          unpaidWorkItems: 0,
+          unpaidBonuses: 0,
         });
       }
-      const entry = pendingBonusMap.get(staffId)!;
-      entry.totalAllowance += Number(bonus.amount || 0);
-      entry.bonusCount += 1;
+      const entry = pendingStaffMap.get(staffId)!;
+      entry.unpaidBonuses += Number(bonus.amount || 0);
     });
 
-  Array.from(pendingBonusMap.values()).forEach((item) => {
-    if (item.totalAllowance > 0) {
-      pendingStaffPayouts.push({
-        staffId: item.staffId,
-        staffName: item.staffName,
-        workType: 'Thưởng',
-        totalAllowance: item.totalAllowance,
-        detail: `${item.bonusCount} thưởng`,
-      });
-    }
-  });
-
-  pendingStaffPayouts.sort((a, b) => b.totalAllowance - a.totalAllowance);
+  // Convert to array and filter only staff with unpaid amounts
+  const pendingStaffPayouts = Array.from(pendingStaffMap.values())
+    .filter((item) => item.unpaidTeacher > 0 || item.unpaidWorkItems > 0 || item.unpaidBonuses > 0)
+    .map((item) => ({
+      staffId: item.staffId,
+      staffName: item.staffName,
+      unpaidTeacher: item.unpaidTeacher,
+      unpaidWorkItems: item.unpaidWorkItems,
+      unpaidBonuses: item.unpaidBonuses,
+      totalAllowance: item.unpaidTeacher + item.unpaidWorkItems + item.unpaidBonuses,
+    }))
+    .sort((a, b) => b.totalAllowance - a.totalAllowance);
 
   // 3. Classes without teacher
   const classTeacherMap = new Map<string, string[]>();

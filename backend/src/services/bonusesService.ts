@@ -4,6 +4,7 @@
  */
 
 import supabase from '../config/database';
+import { invalidateStaffMonthlyStats } from './staffMonthlyStatsService';
 
 export interface Bonus {
   id: string;
@@ -94,6 +95,11 @@ export async function createBonus(bonusData: Omit<Bonus, 'id' | 'created_at' | '
     throw new Error(`Failed to create bonus: ${error.message}`);
   }
 
+  // Invalidate cache for the affected month in background
+  invalidateStaffMonthlyStats(bonusData.staff_id, bonusData.month).catch(() => {
+    // Ignore errors - this is background operation
+  });
+
   return data as Bonus;
 }
 
@@ -125,10 +131,19 @@ export async function updateBonus(id: string, bonusData: Partial<Bonus>) {
  * Delete bonus
  */
 export async function deleteBonus(id: string) {
+  // Get bonus before deleting to invalidate cache
+  const bonus = await getBonusById(id);
+  if (!bonus) {
+    throw new Error('Bonus not found');
+  }
+  
   const { error } = await supabase.from('bonuses').delete().eq('id', id);
 
   if (error) {
     throw new Error(`Failed to delete bonus: ${error.message}`);
   }
+
+  // Invalidate cache for the affected month in background
+  invalidateStaffMonthlyStats(bonus.staff_id, bonus.month).catch(() => {});
 }
 

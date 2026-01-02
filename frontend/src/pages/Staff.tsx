@@ -72,32 +72,28 @@ function Staff() {
     }
   }, [user, isTutor, isAdmin, isAccountant, navigate, teachers]);
 
-  // State for unpaid amounts
-  const [unpaidAmounts, setUnpaidAmounts] = useState<Record<string, number>>({});
-  const [isLoadingUnpaid, setIsLoadingUnpaid] = useState(false);
+  // Unpaid amounts will be loaded via useDataLoading hook below
 
   // Fetch unpaid amounts when teachers data changes
-  useEffect(() => {
-    if (teachers.length > 0) {
-      setIsLoadingUnpaid(true);
-      const staffIds = teachers.map((t) => t.id);
-      getStaffUnpaidAmounts(staffIds)
-        .then((amounts) => {
-          setUnpaidAmounts(amounts);
-        })
-        .catch((err) => {
-          console.error('Failed to fetch unpaid amounts:', err);
-          // Set all to 0 on error
-          setUnpaidAmounts({});
-        })
-        .finally(() => {
-          setIsLoadingUnpaid(false);
-        });
-    } else {
-      setUnpaidAmounts({});
-      setIsLoadingUnpaid(false);
-    }
+  // Use useDataLoading for caching and better performance
+  const fetchUnpaidAmountsFn = useCallback(async () => {
+    if (teachers.length === 0) return {};
+    const staffIds = teachers.map((t) => t.id);
+    return await getStaffUnpaidAmounts(staffIds);
   }, [teachers]);
+  
+  const { data: unpaidAmountsData, isLoading: isLoadingUnpaid } = useDataLoading(
+    fetchUnpaidAmountsFn,
+    [teachers.length > 0 ? teachers.map(t => t.id).join(',') : ''],
+    {
+      cacheKey: 'staff-unpaid-amounts',
+      staleTime: 5 * 60 * 1000, // Cache 5 phút
+      persistCache: true, // Lưu vào localStorage
+      enabled: teachers.length > 0,
+    }
+  );
+  
+  const unpaidAmounts = unpaidAmountsData || {};
 
   // Get unique provinces for filter
   const provinces = React.useMemo(() => {

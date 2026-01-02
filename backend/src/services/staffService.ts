@@ -115,14 +115,41 @@ export async function getStaffUnpaidAmounts(staffIds: string[]): Promise<Record<
   // 2. Unpaid from work items
   // 3. Unpaid from bonuses
 
-  // Get unpaid bonuses for uncached staff
-  const { data: bonuses, error: bonusesError } = await supabase
-    .from('bonuses')
-    .select('staff_id, amount')
-    .in('staff_id', uncachedStaffIds)
-    .eq('status', 'unpaid');
-
+  // Get unpaid bonuses for uncached staff - also check cache first
+  const bonusesCachePromises = uncachedStaffIds.map(async (staffId) => {
+    const cachedStats = await getStaffMonthlyStats(staffId, currentMonth);
+    if (cachedStats) {
+      return { staffId, unpaidBonuses: cachedStats.bonuses_total_unpaid || 0 };
+    }
+    const previousMonthCached = await getStaffMonthlyStats(staffId, previousMonth);
+    if (previousMonthCached) {
+      return { staffId, unpaidBonuses: previousMonthCached.bonuses_total_unpaid || 0 };
+    }
+    return { staffId, unpaidBonuses: null };
+  });
+  
+  const bonusesCacheResults = await Promise.all(bonusesCachePromises);
+  const bonusesUncachedIds: string[] = [];
   const unpaidBonuses: Record<string, number> = {};
+  
+  bonusesCacheResults.forEach(({ staffId, unpaidBonuses: unpaid }) => {
+    if (unpaid !== null) {
+      unpaidBonuses[staffId] = unpaid;
+    } else {
+      bonusesUncachedIds.push(staffId);
+    }
+  });
+  
+  // Only query database for staff without cache
+  const { data: bonuses, error: bonusesError } = bonusesUncachedIds.length > 0
+    ? await supabase
+        .from('bonuses')
+        .select('staff_id, amount')
+        .in('staff_id', bonusesUncachedIds)
+        .eq('status', 'unpaid')
+    : { data: [], error: null };
+
+  // Add bonuses from database query to existing cache results
   if (!bonusesError && bonuses) {
     bonuses.forEach((b) => {
       if (!unpaidBonuses[b.staff_id]) {
@@ -132,34 +159,65 @@ export async function getStaffUnpaidAmounts(staffIds: string[]): Promise<Record<
     });
   }
 
-  // Get unpaid work items for uncached staff (need to call getStaffWorkItems for each)
-  // This is complex, so we'll calculate it for each staff
-  const workItemsPromises = uncachedStaffIds.map(async (staffId) => {
-    try {
-      const workItems = await getStaffWorkItems(staffId, currentMonth);
-      const totalUnpaidWorkItems = workItems.reduce((sum, item) => sum + (item.unpaid || 0), 0);
-      return { staffId, unpaidWorkItems: totalUnpaidWorkItems };
-    } catch (error) {
-      console.error(`Failed to get work items for staff ${staffId}:`, error);
-      return { staffId, unpaidWorkItems: 0 };
+  // Get unpaid work items for uncached staff - optimize by checking cache for previous month too
+  // Try to get from cache for both current and previous month first
+  const workItemsCachePromises = uncachedStaffIds.map(async (staffId) => {
+    // Check cache for current month work items
+    const cachedStats = await getStaffMonthlyStats(staffId, currentMonth);
+    if (cachedStats) {
+      return { staffId, unpaidWorkItems: cachedStats.work_items_total_unpaid || 0 };
+    }
+    // If not found, try previous month cache (work items unpaid might be similar)
+    const previousMonthCached = await getStaffMonthlyStats(staffId, previousMonth);
+    if (previousMonthCached) {
+      return { staffId, unpaidWorkItems: previousMonthCached.work_items_total_unpaid || 0 };
+    }
+    return { staffId, unpaidWorkItems: null };
+  });
+  
+  const workItemsCacheResults = await Promise.all(workItemsCachePromises);
+  const workItemsUncachedIds: string[] = [];
+  const unpaidWorkItems: Record<string, number> = {};
+  
+  workItemsCacheResults.forEach(({ staffId, unpaidWorkItems: unpaid }) => {
+    if (unpaid !== null) {
+      unpaidWorkItems[staffId] = unpaid;
+    } else {
+      workItemsUncachedIds.push(staffId);
     }
   });
   
-  const workItemsResults = await Promise.all(workItemsPromises);
-  const unpaidWorkItems: Record<string, number> = {};
-  workItemsResults.forEach(({ staffId, unpaidWorkItems: unpaid }) => {
-    unpaidWorkItems[staffId] = unpaid;
-  });
+  // Only calculate for staff without cache - run in parallel
+  if (workItemsUncachedIds.length > 0) {
+    const workItemsPromises = workItemsUncachedIds.map(async (staffId) => {
+      try {
+        const workItems = await getStaffWorkItems(staffId, currentMonth);
+        const totalUnpaidWorkItems = workItems.reduce((sum, item) => sum + (item.unpaid || 0), 0);
+        return { staffId, unpaidWorkItems: totalUnpaidWorkItems };
+      } catch (error) {
+        console.error(`Failed to get work items for staff ${staffId}:`, error);
+        return { staffId, unpaidWorkItems: 0 };
+      }
+    });
+    
+    const workItemsResults = await Promise.all(workItemsPromises);
+    workItemsResults.forEach(({ staffId, unpaidWorkItems: unpaid }) => {
+      unpaidWorkItems[staffId] = unpaid;
+    });
+  }
 
   // Get unpaid sessions for teachers (in current month + previous month only)
   // This matches the logic in getStaffDetailData
-  const { data: sessions, error: sessionsError } = await supabase
-    .from('sessions')
-    .select('teacher_id, class_id, date, payment_status, allowance_amount')
-    .in('teacher_id', uncachedStaffIds)
-    .eq('payment_status', 'unpaid')
-    .gte('date', previousMonthStartStr)
-    .lte('date', monthEndStr);
+  // Only query for staff without cache
+  const { data: sessions, error: sessionsError } = uncachedStaffIds.length > 0
+    ? await supabase
+        .from('sessions')
+        .select('teacher_id, class_id, date, payment_status, allowance_amount')
+        .in('teacher_id', uncachedStaffIds)
+        .eq('payment_status', 'unpaid')
+        .gte('date', previousMonthStartStr)
+        .lte('date', monthEndStr)
+    : { data: [], error: null };
 
   const unpaidSessions: Record<string, number> = {};
   if (!sessionsError && sessions) {
@@ -210,7 +268,8 @@ export async function getStaffUnpaidAmounts(staffIds: string[]): Promise<Record<
     });
   }
 
-  // Combine all unpaid amounts for each staff
+  // Combine all unpaid amounts for each uncached staff
+  // For cached staff, result already has the value from cache
   uncachedStaffIds.forEach((staffId) => {
     result[staffId] = (unpaidSessions[staffId] || 0) + (unpaidWorkItems[staffId] || 0) + (unpaidBonuses[staffId] || 0);
   });

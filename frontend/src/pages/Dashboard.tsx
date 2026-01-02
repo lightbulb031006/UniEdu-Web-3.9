@@ -283,39 +283,8 @@ function Dashboard() {
     }));
   };
 
-  // Chỉ hiển thị admin dashboard cho admin role
-  // Teacher sẽ được redirect trong useEffect ở trên (không hiển thị trang loading)
-  // PHẢI ĐỢI TẤT CẢ HOOKS ĐƯỢC GỌI TRƯỚC KHI RETURN
-  if (user?.role !== 'admin') {
-    // Nếu là teacher và đã redirect, không hiển thị gì (đang redirect)
-    if (user?.role === 'teacher' && hasRedirectedRef.current) {
-      return null;
-    }
-    // Nếu là teacher và chưa redirect nhưng đang load, không hiển thị gì
-    if (user?.role === 'teacher' && (isLoadingTeachers || teachers.length === 0)) {
-      return null;
-    }
-    // Các role khác (student, etc.) - không hiển thị gì
-    return null;
-  }
-
-  if (error) {
-    return (
-      <div className="page-container" style={{ padding: 'var(--spacing-6)' }}>
-        <div className="card" style={{ textAlign: 'center', padding: 'var(--spacing-8)' }}>
-          <h2 style={{ color: 'var(--danger)', marginBottom: 'var(--spacing-4)' }}>Lỗi tải dữ liệu</h2>
-          <p style={{ color: 'var(--muted)', marginBottom: 'var(--spacing-4)' }}>
-            {error.message || 'Không thể tải dữ liệu dashboard'}
-          </p>
-          <button className="btn btn-primary" onClick={() => refetch()}>
-            Thử lại
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   // Cache summary data với useMemo để tránh tính toán lại
+  // PHẢI GỌI TẤT CẢ HOOKS TRƯỚC KHI RETURN
   const summary = useMemo(() => {
     return data?.summary || {
       totalClasses: 0,
@@ -366,6 +335,37 @@ function Dashboard() {
   const filterRange = useMemo(() => {
     return getFilterRange(state);
   }, [state.filterType, state.filterValue]);
+
+  // Chỉ hiển thị admin dashboard cho admin role
+  // Teacher sẽ được redirect trong useEffect ở trên (không hiển thị trang loading)
+  if (user?.role !== 'admin') {
+    // Nếu là teacher và đã redirect, không hiển thị gì (đang redirect)
+    if (user?.role === 'teacher' && hasRedirectedRef.current) {
+      return null;
+    }
+    // Nếu là teacher và chưa redirect nhưng đang load, không hiển thị gì
+    if (user?.role === 'teacher' && (isLoadingTeachers || teachers.length === 0)) {
+      return null;
+    }
+    // Các role khác (student, etc.) - không hiển thị gì
+    return null;
+  }
+
+  if (error) {
+    return (
+      <div className="page-container" style={{ padding: 'var(--spacing-6)' }}>
+        <div className="card" style={{ textAlign: 'center', padding: 'var(--spacing-8)' }}>
+          <h2 style={{ color: 'var(--danger)', marginBottom: 'var(--spacing-4)' }}>Lỗi tải dữ liệu</h2>
+          <p style={{ color: 'var(--muted)', marginBottom: 'var(--spacing-4)' }}>
+            {error.message || 'Không thể tải dữ liệu dashboard'}
+          </p>
+          <button className="btn btn-primary" onClick={() => refetch()}>
+            Thử lại
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page-container" style={{ padding: 'var(--spacing-6)', position: 'relative' }}>
@@ -936,37 +936,46 @@ function Dashboard() {
               <div className="alert-body" style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)', minHeight: 0, maxHeight: '200px' }}>
                 <ul className="alert-list" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
                   {alerts.studentsNeedRenewal && alerts.studentsNeedRenewal.length > 0 ? (
-                    alerts.studentsNeedRenewal.map((item: any) => (
-                      <li
-                        key={item.id}
-                        style={{
-                          padding: 'var(--spacing-2)',
-                          borderBottom: '1px solid var(--border)',
-                          transition: 'background 0.2s ease',
-                        }}
-                      >
-                        <button
-                          className="alert-link"
-                          onClick={() => item.studentId && navigate(`/students/${item.studentId}`)}
+                    alerts.studentsNeedRenewal.map((item: any) => {
+                      const remaining = item.remaining || 0;
+                      const isZero = remaining === 0;
+                      const isOne = remaining === 1;
+                      const color = isZero ? '#dc2626' : isOne ? '#f59e0b' : 'var(--muted)';
+                      
+                      return (
+                        <li
+                          key={item.id}
                           style={{
-                            background: 'none',
-                            border: 'none',
-                            color: 'var(--primary)',
-                            cursor: 'pointer',
-                            fontWeight: '500',
-                            textAlign: 'left',
-                            padding: 0,
-                            margin: 0,
-                            width: '100%',
+                            padding: 'var(--spacing-2)',
+                            borderBottom: '1px solid var(--border)',
+                            transition: 'background 0.2s ease',
+                            borderLeft: `3px solid ${color}`,
                           }}
                         >
-                          {item.studentName}
-                        </button>
-                        <span className="alert-meta" style={{ display: 'block', marginTop: 'var(--spacing-1)', color: 'var(--muted)', fontSize: 'var(--font-size-sm)' }}>
-                          • {item.className}
-                        </span>
-                      </li>
-                    ))
+                          <button
+                            className="alert-link"
+                            onClick={() => item.studentId && navigate(`/students/${item.studentId}`)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: color,
+                              cursor: 'pointer',
+                              fontWeight: '500',
+                              textAlign: 'left',
+                              padding: 0,
+                              margin: 0,
+                              width: '100%',
+                              fontSize: 'var(--font-size-sm)',
+                            }}
+                          >
+                            {item.studentName}
+                          </button>
+                          <span className="alert-meta" style={{ display: 'block', marginTop: 'var(--spacing-1)', color: 'var(--muted)', fontSize: 'var(--font-size-xs)' }}>
+                            {item.className}
+                          </span>
+                        </li>
+                      );
+                    })
                   ) : (
                     <li className="text-muted" style={{ padding: 'var(--spacing-3)', textAlign: 'center' }}>
                       Không có học sinh cần gia hạn
@@ -1043,64 +1052,69 @@ function Dashboard() {
               <div className="alert-body" style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)', minHeight: 0, maxHeight: '200px' }}>
                 <ul className="alert-list" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
                   {alerts.pendingStaffPayouts && alerts.pendingStaffPayouts.length > 0 ? (
-                    alerts.pendingStaffPayouts.map((item: any, index: number) => (
-                      <li
-                        key={index}
-                        style={{
-                          padding: 'var(--spacing-2)',
-                          borderBottom: '1px solid var(--border)',
-                          transition: 'background 0.2s ease',
-                        }}
-                      >
-                        <button
-                          className="alert-link"
-                          onClick={() => item.staffId && navigate(`/staff/${item.staffId}`)}
+                    alerts.pendingStaffPayouts.map((item: any, index: number) => {
+                      const unpaidTeacher = item.unpaidTeacher || 0;
+                      const unpaidWorkItems = item.unpaidWorkItems || 0;
+                      const unpaidBonuses = item.unpaidBonuses || 0;
+                      
+                      return (
+                        <li
+                          key={index}
                           style={{
-                            background: 'none',
-                            border: 'none',
-                            color: 'var(--primary)',
-                            cursor: 'pointer',
-                            fontWeight: '500',
-                            textAlign: 'left',
-                            padding: 0,
-                            margin: 0,
-                            fontSize: '12px',
-                            lineHeight: '1.4',
-                            width: '100%',
+                            padding: 'var(--spacing-2)',
+                            borderBottom: '1px solid var(--border)',
+                            transition: 'background 0.2s ease',
                           }}
                         >
-                          {item.staffName}
-                        </button>
-                        <div
-                          className="alert-meta"
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            marginTop: '4px',
-                            flexWrap: 'wrap',
-                          }}
-                        >
-                          <span
-                            className="badge"
+                          <button
+                            className="alert-link"
+                            onClick={() => item.staffId && navigate(`/staff/${item.staffId}`)}
                             style={{
-                              background: 'rgba(168, 85, 247, 0.1)',
-                              color: '#6b21a8',
-                              border: '1px solid rgba(168, 85, 247, 0.3)',
-                              fontSize: '10px',
-                              padding: '1px 6px',
-                              borderRadius: 'var(--radius)',
+                              background: 'none',
+                              border: 'none',
+                              color: 'var(--primary)',
+                              cursor: 'pointer',
+                              fontWeight: '500',
+                              textAlign: 'left',
+                              padding: 0,
+                              margin: 0,
+                              fontSize: 'var(--font-size-sm)',
+                              lineHeight: '1.4',
+                              width: '100%',
                             }}
                           >
-                            {item.workType}
-                          </span>
-                          <span style={{ color: 'var(--muted)', fontSize: '11px', lineHeight: '1.3' }}>{item.detail}</span>
-                          <span style={{ color: 'var(--danger)', fontWeight: '600', fontSize: '11px', lineHeight: '1.3' }}>
-                            {formatCurrencyVND(item.totalAllowance || 0)}
-                          </span>
-                        </div>
-                      </li>
-                    ))
+                            {item.staffName}
+                          </button>
+                          <div
+                            className="alert-meta"
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              marginTop: '4px',
+                              flexWrap: 'wrap',
+                              fontSize: 'var(--font-size-xs)',
+                            }}
+                          >
+                            {unpaidTeacher > 0 && (
+                              <span style={{ color: '#f59e0b', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                                {formatCurrencyVND(unpaidTeacher)}
+                              </span>
+                            )}
+                            {unpaidWorkItems > 0 && (
+                              <span style={{ color: '#dc2626', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                                {formatCurrencyVND(unpaidWorkItems)}
+                              </span>
+                            )}
+                            {unpaidBonuses > 0 && (
+                              <span style={{ color: '#059669', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                                {formatCurrencyVND(unpaidBonuses)}
+                              </span>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })
                   ) : (
                     <li className="text-muted" style={{ padding: 'var(--spacing-2)', textAlign: 'center', fontSize: '12px' }}>
                       Không có trợ cấp nào đang chờ thanh toán
