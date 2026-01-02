@@ -177,14 +177,8 @@ function StudentDetail() {
 
     try {
       toast.info('Đang xử lý...');
-      const newWalletBalance = wallet - paidAmount;
-      const newLoanBalance = Math.max(0, totalDebt - paidAmount);
       
-      await updateStudent(id!, {
-        walletBalance: newWalletBalance,
-        loanBalance: newLoanBalance,
-      });
-
+      // Tạo transaction - backend sẽ tự động cập nhật walletBalance và loanBalance
       await createWalletTransaction({
         studentId: id!,
         type: 'repayment',
@@ -193,7 +187,11 @@ function StudentDetail() {
         date: new Date().toISOString().split('T')[0],
       });
 
-      await refetch();
+      // Refetch để lấy dữ liệu mới từ backend
+      await Promise.all([refetch(), refetchFinancialData()]);
+      
+      // Tính toán lại loan balance (backend đã tự động cập nhật)
+      const newLoanBalance = Math.max(0, totalDebt - paidAmount);
       
       if (newLoanBalance <= 0.01) {
         toast.success('Đã thanh toán toàn bộ nợ học phí.');

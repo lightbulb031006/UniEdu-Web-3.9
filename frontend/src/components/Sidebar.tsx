@@ -4,7 +4,7 @@ import { useAuthStore } from '../store/authStore';
 import { useTheme } from '../hooks/useTheme';
 
 // Export version constant
-export const APP_VERSION = '3.9.1';
+export const APP_VERSION = '3.9.2';
 
 interface MenuItem {
   path: string;

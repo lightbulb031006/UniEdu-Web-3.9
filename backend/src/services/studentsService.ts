@@ -759,27 +759,15 @@ export async function removeStudentClass(
     if (unitPrice > 0) {
       const refundAmount = remainingSessions * unitPrice;
 
-      // Update student wallet balance
-      const student = await getStudentById(studentId);
-      if (student) {
-        const walletBalance = Number((student as any).wallet_balance || (student as any).walletBalance || 0);
-        const newWalletBalance = walletBalance + refundAmount;
-
-        await supabase
-          .from('students')
-          .update({ wallet_balance: newWalletBalance })
-          .eq('id', studentId);
-
-        // Create wallet transaction
-        const walletService = await import('./walletService');
-        await walletService.createWalletTransaction({
-          student_id: studentId,
-          type: 'topup',
-          amount: refundAmount,
-          note: `Hoàn trả do xóa lớp ${classInfo?.name || classId} khỏi học sinh`,
-          date: new Date().toISOString().slice(0, 10),
-        });
-      }
+      // Create wallet transaction - backend will automatically update wallet balance
+      const walletService = await import('./walletService');
+      await walletService.createWalletTransaction({
+        student_id: studentId,
+        type: 'topup',
+        amount: refundAmount,
+        note: `Hoàn trả do xóa lớp ${classInfo?.name || classId} khỏi học sinh`,
+        date: new Date().toISOString().slice(0, 10),
+      });
     }
   }
 
