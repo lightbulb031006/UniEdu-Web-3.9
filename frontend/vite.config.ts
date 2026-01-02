@@ -14,5 +14,27 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    // Optimize build for better performance
+    rollupOptions: {
+      output: {
+        // Manual chunk splitting for better caching
+        manualChunks: {
+          // Vendor chunks
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          // Large libraries
+          'ui-vendor': ['@supabase/supabase-js'],
+        },
+      },
+    },
+    // Enable source maps for production debugging (optional)
+    sourcemap: false,
+    // Optimize chunk size
+    chunkSizeWarningLimit: 1000,
+  },
+  // Optimize dependencies
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'react-router-dom'],
+  },
 })
 
