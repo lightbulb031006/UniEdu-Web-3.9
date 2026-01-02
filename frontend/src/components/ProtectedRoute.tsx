@@ -89,7 +89,11 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { data: classData, isLoading: isLoadingClass } = useDataLoading(
     () => {
       if (!classId || user?.role !== 'teacher') return Promise.resolve(null);
-      return fetchClassById(classId);
+      return fetchClassById(classId).catch((error) => {
+        // Log error but don't throw - allow page to load and show error
+        console.error('[ProtectedRoute] Error fetching class for access check:', error);
+        return null; // Return null on error to allow access check to proceed
+      });
     },
     [classId, user?.role],
     {
@@ -102,18 +106,26 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   // Check if teacher is assigned to this class
   if (isClassDetailPage && user?.role === 'teacher' && classData && !isLoadingClass) {
     const teacherId = user.linkId;
-    const classTeacherIds = classData.teacherIds || (classData.teacherId ? [classData.teacherId] : []);
+    // Normalize classTeacherIds - handle both array and single value
+    let classTeacherIds: string[] = [];
+    if (Array.isArray(classData.teacherIds)) {
+      classTeacherIds = classData.teacherIds.filter(Boolean);
+    } else if (classData.teacherId) {
+      classTeacherIds = [classData.teacherId];
+    } else if (classData.teacher_ids && Array.isArray(classData.teacher_ids)) {
+      classTeacherIds = classData.teacher_ids.filter(Boolean);
+    }
     
     // Nếu không có linkId, thử tìm teacher record
     let actualTeacherId = teacherId;
-    if (!actualTeacherId && teachers.length > 0) {
+    if (!actualTeacherId && !isLoadingTeachers && teachers.length > 0) {
       let teacherRecord = null;
       if (user.id) {
-        teacherRecord = teachers.find((t: any) => t.userId === user.id);
+        teacherRecord = teachers.find((t: any) => (t as any).userId === user.id);
       }
       if (!teacherRecord && user.email) {
         teacherRecord = teachers.find((t) => 
-          t.email?.toLowerCase() === user.email?.toLowerCase()
+          (t.email || '').toLowerCase() === (user.email || '').toLowerCase()
         );
       }
       if (teacherRecord) {
@@ -121,9 +133,29 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
       }
     }
     
-    // Nếu teacher không được assign vào lớp này, redirect về home
-    if (actualTeacherId && !classTeacherIds.includes(actualTeacherId)) {
+    // Chỉ redirect nếu:
+    // 1. Đã có actualTeacherId (đã tìm được teacher record)
+    // 2. VÀ teacher không được assign vào lớp này
+    // 3. VÀ đã load xong teachers data (không còn đang loading)
+    // 4. VÀ class có ít nhất 1 teacher được assign (để tránh block khi class chưa có teacher)
+    if (!isLoadingTeachers && actualTeacherId && classTeacherIds.length > 0 && !classTeacherIds.includes(actualTeacherId)) {
+      console.warn('[ProtectedRoute] Teacher not assigned to class:', {
+        teacherId: actualTeacherId,
+        classId,
+        classTeacherIds,
+        userEmail: user.email,
+        userLinkId: user.linkId,
+      });
       return <Navigate to="/home" replace />;
+    }
+    
+    // Nếu chưa có actualTeacherId và đã load xong teachers, cho phép truy cập
+    // (có thể là admin hoặc có quyền khác, hoặc teacher record chưa được link)
+    // Chỉ block nếu chắc chắn teacher không được assign
+    // Nếu class không có teacher nào được assign, cho phép truy cập (có thể là class mới)
+    if (!isLoadingTeachers && actualTeacherId && classTeacherIds.length === 0) {
+      // Class chưa có teacher được assign - cho phép truy cập
+      console.log('[ProtectedRoute] Class has no teachers assigned, allowing access:', classId);
     }
   }
 
@@ -133,8 +165,19 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   }
 
   // Wait for class data to load before checking access (only if needed)
-  if (isLoadingClass && isClassDetailPage && user?.role === 'teacher') {
-    return null; // Show nothing while loading class data for access check
+  // Also wait for teachers data if we need it to find teacher ID
+  if (isClassDetailPage && user?.role === 'teacher') {
+    const needsTeachersData = !user.linkId;
+    if (isLoadingClass || (needsTeachersData && isLoadingTeachers)) {
+      return null; // Show nothing while loading data for access check
+    }
+    
+    // If class data failed to load or is null, allow access (let ClassDetail page handle the error)
+    // This prevents redirect loop if there's a temporary network issue
+    if (!isLoadingClass && !classData && classId) {
+      // Class not found or error loading - allow access, let ClassDetail page show error
+      console.warn('[ProtectedRoute] Class data not loaded, allowing access to let page handle error:', classId);
+    }
   }
 
   // Check role-based page access (only check once per path change)

@@ -49,3 +49,22 @@ backend/.env
 # Frontend specific
 frontend/dist/
 frontend/.env
+
+# Backup files (not needed in git)
+backup/
+a/
+
+# Build artifacts
+*.map
+*.d.ts
+backend/dist/
+
+# Backup files (not needed in git)
+backup/
+a/
+
+# Build artifacts
+*.map
+*.d.ts
+backend/dist/
+frontend/dist/
