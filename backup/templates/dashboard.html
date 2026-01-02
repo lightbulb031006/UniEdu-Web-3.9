@@ -1,0 +1,42 @@
+<div class="dashboard-page">
+    <div class="grid gap-4" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));">
+        <div class="card">
+            <h3>Classes</h3>
+            <div class="text-xl font-bold" id="classCount">0</div>
+            <div class="text-muted text-sm">Active classes</div>
+        </div>
+        <div class="card">
+            <h3>Students</h3>
+            <div class="text-xl font-bold" id="studentCount">0</div>
+            <div class="text-muted text-sm">Enrolled students</div>
+        </div>
+        <div class="card">
+            <h3>Teachers</h3>
+            <div class="text-xl font-bold" id="teacherCount">0</div>
+            <div class="text-muted text-sm">Active teachers</div>
+        </div>
+        <div class="card">
+            <h3>Revenue</h3>
+            <div class="text-xl font-bold" id="revenueTotal">$0</div>
+            <div class="text-muted text-sm">This month</div>
+        </div>
+    </div>
+
+    <div class="grid gap-4 mt-4" style="grid-template-columns: 2fr 1fr;">
+        <div class="card">
+            <div class="flex justify-between items-center">
+                <h3>Recent Activities</h3>
+                <button class="btn btn-text">View all</button>
+            </div>
+            <div class="activities-list mt-2" id="recentActivities">
+                <!-- Activities will be inserted here -->
+            </div>
+        </div>
+        <div class="card">
+            <h3>Upcoming Classes</h3>
+            <div class="upcoming-classes mt-2" id="upcomingClasses">
+                <!-- Upcoming classes will be inserted here -->
+            </div>
+        </div>
+    </div>
+</div>

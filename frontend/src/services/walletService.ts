@@ -8,7 +8,7 @@ import api from './api';
 export interface WalletTransaction {
   id: string;
   studentId: string;
-  type: 'topup' | 'loan' | 'advance' | 'repayment';
+  type: 'topup' | 'loan' | 'advance' | 'repayment' | 'extend' | 'refund';
   amount: number;
   note?: string;
   date: string;
@@ -30,7 +30,7 @@ function normalizeWalletTransaction(tx: any): WalletTransaction {
 
 export async function fetchWalletTransactions(filters?: {
   studentId?: string;
-  type?: 'topup' | 'loan' | 'advance' | 'repayment';
+  type?: 'topup' | 'loan' | 'advance' | 'repayment' | 'extend' | 'refund';
   startDate?: string;
   endDate?: string;
 }): Promise<WalletTransaction[]> {

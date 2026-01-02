@@ -5,11 +5,14 @@
 
 import api from './api';
 
+export type AttendanceStatus = 'present' | 'excused' | 'absent';
+
 export interface Attendance {
   id: string;
   session_id: string;
   student_id: string;
-  present: boolean;
+  present?: boolean; // Deprecated: Use status instead
+  status: AttendanceStatus;
   remark?: string;
   created_at?: string;
   updated_at?: string;
@@ -19,11 +22,20 @@ export interface Attendance {
  * Normalize attendance data from API response
  */
 function normalizeAttendance(attendance: any): Attendance {
+  // Normalize status: use status if provided, otherwise convert present boolean
+  let status: AttendanceStatus = 'present';
+  if (attendance.status && ['present', 'excused', 'absent'].includes(attendance.status)) {
+    status = attendance.status as AttendanceStatus;
+  } else if (attendance.present !== undefined) {
+    status = attendance.present ? 'present' : 'absent';
+  }
+
   return {
     id: attendance.id,
     session_id: attendance.session_id || attendance.sessionId || '',
     student_id: attendance.student_id || attendance.studentId || '',
-    present: attendance.present !== undefined ? attendance.present : true,
+    status,
+    present: status === 'present', // Keep for backward compatibility
     remark: attendance.remark,
     created_at: attendance.created_at || attendance.createdAt,
     updated_at: attendance.updated_at || attendance.updatedAt,
@@ -51,7 +63,7 @@ export async function fetchAttendanceBySession(sessionId: string): Promise<Atten
  */
 export async function saveAttendanceForSession(
   sessionId: string,
-  attendanceData: Array<{ student_id: string; present: boolean; remark?: string }>
+  attendanceData: Array<{ student_id: string; present?: boolean; status?: AttendanceStatus; remark?: string }>
 ): Promise<Attendance[]> {
   const response = await api.post<Attendance[]>(`/attendance/session/${sessionId}`, {
     attendance: attendanceData,

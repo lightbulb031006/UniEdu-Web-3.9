@@ -1,0 +1,185 @@
+<div class="classes-page">
+    <div class="flex justify-between items-center mb-4">
+        <h2>Classes</h2>
+        <button class="btn" onclick="window.ClassPage.showAddClassForm()">
+            <i class="fas fa-plus"></i> Add Class
+        </button>
+    </div>
+
+    <div class="card">
+        <div class="flex justify-between items-center mb-4">
+            <div class="search-box">
+                <input type="text" id="classSearch" placeholder="Search classes..." class="form-control">
+            </div>
+            <div class="flex gap-2">
+                <select id="classStatusFilter" class="form-control">
+                    <option value="all">All Status</option>
+                    <option value="running">Running</option>
+                    <option value="completed">Completed</option>
+                    <option value="scheduled">Scheduled</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table class="table-striped">
+                <thead>
+                    <tr>
+                        <th>Class Name</th>
+                        <th>Teacher</th>
+                        <th>Students</th>
+                        <th>Schedule</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="classesTableBody">
+                    <!-- Classes will be inserted here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Add/Edit Class Modal Template -->
+<template id="classFormModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="classFormTitle">Add New Class</h3>
+            <button class="btn-close" onclick="window.Modal.close()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="classForm">
+                <div class="form-group">
+                    <label for="className">Class Name*</label>
+                    <input type="text" id="className" name="name" class="form-control" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="classTeacher">Teacher*</label>
+                    <select id="classTeacher" name="teacherId" class="form-control" required>
+                        <option value="">Select Teacher</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="classSchedule">Schedule*</label>
+                    <div class="grid gap-2" style="grid-template-columns: 1fr 1fr;">
+                        <select id="classDay" name="scheduleDay" class="form-control" required>
+                            <option value="">Select Day</option>
+                            <option value="monday">Monday</option>
+                            <option value="tuesday">Tuesday</option>
+                            <option value="wednesday">Wednesday</option>
+                            <option value="thursday">Thursday</option>
+                            <option value="friday">Friday</option>
+                            <option value="saturday">Saturday</option>
+                            <option value="sunday">Sunday</option>
+                        </select>
+                        <input type="time" id="classTime" name="scheduleTime" class="form-control" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="classDuration">Duration (minutes)*</label>
+                    <input type="number" id="classDuration" name="duration" class="form-control" min="30" step="30" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="classStatus">Status*</label>
+                    <select id="classStatus" name="status" class="form-control" required>
+                        <option value="scheduled">Scheduled</option>
+                        <option value="running">Running</option>
+                        <option value="completed">Completed</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="classDescription">Description</label>
+                    <textarea id="classDescription" name="description" class="form-control" rows="3"></textarea>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-muted" onclick="window.Modal.close()">Cancel</button>
+            <button class="btn" id="saveClassBtn">Save Class</button>
+        </div>
+    </div>
+</template>
+
+<!-- View Class Details Modal Template -->
+<template id="classDetailsModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="classDetailsTitle"></h3>
+            <button class="btn-close" onclick="window.Modal.close()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="grid gap-4" style="grid-template-columns: 2fr 1fr;">
+                <div>
+                    <div class="card">
+                        <h4>Class Information</h4>
+                        <div class="details-grid mt-2">
+                            <div class="label">Teacher:</div>
+                            <div id="classDetailsTeacher"></div>
+                            <div class="label">Schedule:</div>
+                            <div id="classDetailsSchedule"></div>
+                            <div class="label">Duration:</div>
+                            <div id="classDetailsDuration"></div>
+                            <div class="label">Status:</div>
+                            <div id="classDetailsStatus"></div>
+                        </div>
+                        <div class="mt-2">
+                            <div class="label">Description:</div>
+                            <p id="classDetailsDescription" class="mt-1"></p>
+                        </div>
+                    </div>
+                    
+                    <div class="card mt-4">
+                        <div class="flex justify-between items-center">
+                            <h4>Students</h4>
+                            <button class="btn btn-sm" onclick="window.ClassPage.showAddStudentForm()">
+                                <i class="fas fa-user-plus"></i> Add Student
+                            </button>
+                        </div>
+                        <div class="table-container mt-2">
+                            <table class="table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Email</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="classStudentsTable">
+                                    <!-- Students will be inserted here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                <div>
+                    <div class="card">
+                        <h4>Statistics</h4>
+                        <div class="details-grid mt-2">
+                            <div class="label">Total Students:</div>
+                            <div id="classStatsStudents">0</div>
+                            <div class="label">Active Students:</div>
+                            <div id="classStatsActiveStudents">0</div>
+                            <div class="label">Total Revenue:</div>
+                            <div id="classStatsRevenue">$0</div>
+                        </div>
+                    </div>
+                    
+                    <div class="card mt-4">
+                        <h4>Recent Activities</h4>
+                        <div class="activities-list mt-2" id="classActivities">
+                            <!-- Activities will be inserted here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>

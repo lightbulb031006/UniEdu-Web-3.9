@@ -5,13 +5,15 @@ import { fetchClassById, fetchClassStudentsWithRemaining, updateClass, addStuden
 import { fetchTeachers } from '../services/teachersService';
 import { fetchStudents, updateStudent } from '../services/studentsService';
 import { fetchSessions, createSession, updateSession, deleteSession } from '../services/sessionsService';
-import { saveAttendanceForSession, fetchAttendanceBySession } from '../services/attendanceService';
+import { saveAttendanceForSession, fetchAttendanceBySession, AttendanceStatus } from '../services/attendanceService';
 import { fetchCategories } from '../services/categoriesService';
 import { useAuthStore } from '../store/authStore';
 import { formatCurrencyVND, formatDate, formatMonthLabel } from '../utils/formatters';
 import { hasRole, userHasStaffRole, getUserStaffRoles } from '../utils/permissions';
 import Modal from '../components/Modal';
 import { CurrencyInput } from '../components/CurrencyInput';
+import AttendanceIcon from '../components/AttendanceIcon';
+import { useAttendance } from '../hooks/useAttendance';
 import { toast } from '../utils/toast';
 
 /**
@@ -2523,46 +2525,62 @@ function AddSessionModal({
   const [paymentStatus, setPaymentStatus] = useState<'paid' | 'unpaid' | 'deposit'>('unpaid');
   const [loading, setLoading] = useState(false);
   
-  // Attendance state
-  const [attendance, setAttendance] = useState<Record<string, { present: boolean; remark: string }>>({});
+  // Attendance state using hook
+  const initialAttendanceState = useMemo(() => {
+    const state: Record<string, { status: AttendanceStatus; remark: string }> = {};
+    students.forEach((student) => {
+      const hasRemaining = (student.remainingSessions || 0) > 0;
+      state[student.id] = {
+        status: hasRemaining ? 'present' : 'absent',
+        remark: '',
+      };
+    });
+    return state;
+  }, [students]);
+  
+  const {
+    attendance,
+    toggleAttendance,
+    updateAttendance,
+    getAttendanceSummary,
+    getEligibleCount,
+  } = useAttendance(initialAttendanceState);
   
   // Calculate initial paid count (students with remaining sessions > 0) - fixed value, not affected by attendance changes
   const initialPaidCount = useMemo(() => {
     return students.filter((student) => (student.remainingSessions || 0) > 0).length;
   }, [students]);
   
-  // Initialize attendance: default to present for students with remaining sessions > 0
-  useEffect(() => {
-    const initialAttendance: Record<string, { present: boolean; remark: string }> = {};
-    students.forEach((student) => {
-      const hasRemaining = (student.remainingSessions || 0) > 0;
-      initialAttendance[student.id] = {
-        present: hasRemaining,
-        remark: '',
-      };
-    });
-    setAttendance(initialAttendance);
-  }, [students]);
+  // Get attendance summary for display
+  const attendanceSummary = useMemo(() => getAttendanceSummary(), [attendance, getAttendanceSummary]);
   
-  // Calculate estimated paid count (students with remaining sessions > 0 and present)
-  // Note: This is used for display purposes only, not for allowance calculation
-  const estimatedPaidCount = useMemo(() => {
-    return Object.values(attendance).filter((att) => att.present).length;
-  }, [attendance]);
+  // Calculate eligible count (present + excused) for allowance calculation
+  const eligibleCount = useMemo(() => getEligibleCount(), [attendance, getEligibleCount]);
   
-  // Calculate allowance preview - uses initialPaidCount (fixed), not affected by attendance changes
+  // Calculate allowance preview - uses eligible count (present + excused) with remaining sessions > 0
   const allowancePreview = useMemo(() => {
     if (!teacherId || coefficient === 0) return 0;
+    
+    // Count students who are present or excused AND have remaining sessions > 0
+    const paidCount = students.filter((student) => {
+      const att = attendance[student.id];
+      const hasRemaining = (student.remainingSessions || 0) > 0;
+      const isEligible = att?.status === 'present' || att?.status === 'excused';
+      return isEligible && hasRemaining;
+    }).length;
+    
+    if (paidCount === 0) return 0;
+    
     const customAllowances = (classData as any)?.customTeacherAllowances || {};
     const baseAllowance = customAllowances[teacherId] ?? (classData?.tuitionPerSession || 0);
     const scaleAmount = classData?.scaleAmount || 0;
     const maxPerSession = (classData as any)?.maxAllowancePerSession || 0;
-    let allowance = baseAllowance * coefficient * initialPaidCount + scaleAmount;
+    let allowance = baseAllowance * coefficient * paidCount + scaleAmount;
     if (maxPerSession > 0 && allowance > maxPerSession) {
       allowance = maxPerSession;
     }
     return Math.round(allowance > 0 ? allowance : 0);
-  }, [teacherId, coefficient, initialPaidCount, classData]);
+  }, [teacherId, coefficient, attendance, students, classData]);
   
   // Calculate duration
   const duration = useMemo(() => {
@@ -2592,13 +2610,15 @@ function AddSessionModal({
 
     setLoading(true);
     try {
-      // Calculate allowance amount based on actual attendance (students marked as present with remaining sessions > 0)
+      // Calculate allowance amount based on actual attendance (students with status 'present' or 'excused' AND have remaining sessions > 0)
       let calculatedAllowance: number | undefined = undefined;
       if (teacherId && coefficient !== 0) {
-        // Count students who are present AND have remaining sessions > 0
+        // Count students who are present or excused AND have remaining sessions > 0
         const paidCount = students.filter((student) => {
           const att = attendance[student.id];
-          return att?.present && (student.remainingSessions || 0) > 0;
+          const hasRemaining = (student.remainingSessions || 0) > 0;
+          const isEligible = att?.status === 'present' || att?.status === 'excused';
+          return isEligible && hasRemaining;
         }).length;
         
         if (paidCount > 0) {
@@ -2629,11 +2649,14 @@ function AddSessionModal({
       
       // Then save attendance records
       if (students.length > 0) {
-        const attendanceData = students.map((student) => ({
-          student_id: student.id,
-          present: attendance[student.id]?.present ?? false,
-          remark: attendance[student.id]?.remark || undefined,
-        }));
+        const attendanceData = students.map((student) => {
+          const att = attendance[student.id] || { status: 'absent' as AttendanceStatus, remark: '' };
+          return {
+            student_id: student.id,
+            status: att.status,
+            remark: att.remark || undefined,
+          };
+        });
         
         await saveAttendanceForSession(newSession.id, attendanceData);
       }
@@ -2864,7 +2887,12 @@ function AddSessionModal({
         </div>
         <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--muted)', marginTop: 'var(--spacing-1)' }}>
           {teacherId
-            ? `Ước tính dựa trên ${initialPaidCount} học sinh hiện còn buổi • Hệ số ${coefficient}`
+            ? `Ước tính dựa trên ${students.filter((s) => {
+                const att = attendance[s.id];
+                const hasRemaining = (s.remainingSessions || 0) > 0;
+                const isEligible = att?.status === 'present' || att?.status === 'excused';
+                return isEligible && hasRemaining;
+              }).length} học sinh (Học + Phép) • Hệ số ${coefficient}`
             : 'Chọn gia sư để xem trợ cấp dự kiến'}
         </div>
       </div>
@@ -2939,48 +2967,15 @@ function AddSessionModal({
                 </thead>
                 <tbody>
                   {students.map((student) => {
-                    const att = attendance[student.id] || { present: false, remark: '' };
+                    const att = attendance[student.id] || { status: 'absent' as AttendanceStatus, remark: '' };
                     return (
                       <tr key={student.id}>
                         <td style={{ textAlign: 'center', verticalAlign: 'middle', padding: 'var(--spacing-2)' }}>
-                          <button
-                            type="button"
-                            className={`attendance-icon-btn ${att.present ? 'present' : 'absent'}`}
-                            onClick={() => {
-                              setAttendance((prev) => ({
-                                ...prev,
-                                [student.id]: {
-                                  present: !prev[student.id]?.present,
-                                  remark: prev[student.id]?.remark || '',
-                                },
-                              }));
-                            }}
-                            title={att.present ? 'Có mặt' : 'Vắng mặt'}
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              cursor: 'pointer',
-                              padding: 'var(--spacing-1)',
-                              borderRadius: 'var(--radius)',
-                              transition: 'all 0.2s ease',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              width: '32px',
-                              height: '32px',
-                            }}
-                          >
-                            {att.present ? (
-                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ color: 'var(--success)' }}>
-                                <path d="M20 6L9 17l-5-5" />
-                              </svg>
-                            ) : (
-                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ color: 'var(--danger)' }}>
-                                <line x1="18" y1="6" x2="6" y2="18" />
-                                <line x1="6" y1="6" x2="18" y2="18" />
-                              </svg>
-                            )}
-                          </button>
+                          <AttendanceIcon
+                            status={att.status}
+                            onClick={() => toggleAttendance(student.id)}
+                            size={20}
+                          />
                         </td>
                         <td style={{ verticalAlign: 'middle', padding: 'var(--spacing-2)' }}>{student.fullName}</td>
                         <td style={{ verticalAlign: 'middle', padding: 'var(--spacing-2)' }}>
@@ -2989,15 +2984,9 @@ function AddSessionModal({
                             className="form-control"
                             value={att.remark}
                             onChange={(e) => {
-                              setAttendance((prev) => ({
-                                ...prev,
-                                [student.id]: {
-                                  present: prev[student.id]?.present ?? false,
-                                  remark: e.target.value,
-                                },
-                              }));
+                              updateAttendance(student.id, { remark: e.target.value });
                             }}
-                            placeholder="Ghi chú (nếu vắng)"
+                            placeholder="Ghi chú (nếu cần)"
                             style={{
                               fontSize: 'var(--font-size-xs)',
                               padding: 'var(--spacing-1) var(--spacing-2)',
@@ -3014,8 +3003,18 @@ function AddSessionModal({
               </table>
             </div>
           </div>
-          <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--muted)', marginTop: 'var(--spacing-2)' }}>
-            Tổng: <span id="presentCount">{Object.values(attendance).filter((att) => att.present).length}</span> có mặt, <span id="absentCount">{Object.values(attendance).filter((att) => !att.present).length}</span> vắng mặt
+          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--muted)', marginTop: 'var(--spacing-2)', lineHeight: '1.6' }}>
+            <div style={{ display: 'flex', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>
+              <span>
+                <span style={{ color: '#10b981', fontWeight: '500' }}>Học</span>: <span id="presentCount">{attendanceSummary.present}</span>
+              </span>
+              <span>
+                <span style={{ color: '#f59e0b', fontWeight: '500' }}>Phép</span>: <span id="excusedCount">{attendanceSummary.excused}</span>
+              </span>
+              <span>
+                <span style={{ color: '#dc2626', fontWeight: '500' }}>Vắng</span>: <span id="absentCount">{attendanceSummary.absent}</span>
+              </span>
+            </div>
           </div>
         </div>
       ) : (
@@ -3088,8 +3087,17 @@ function EditSessionModal({
   const [editingAllowance, setEditingAllowance] = useState(false);
   const [allowanceInputValue, setAllowanceInputValue] = useState<string>('');
   const [loading, setLoading] = useState(false);
-  const [attendance, setAttendance] = useState<Record<string, { present: boolean; remark: string }>>({});
   const [loadingAttendance, setLoadingAttendance] = useState(true);
+  
+  // Attendance state using hook
+  const {
+    attendance,
+    setAttendance,
+    toggleAttendance,
+    updateAttendance,
+    getAttendanceSummary,
+    getEligibleCount,
+  } = useAttendance({});
 
   // Prefill all fields when session changes
   useEffect(() => {
@@ -3159,13 +3167,15 @@ function EditSessionModal({
     const loadAttendance = async () => {
       try {
         const existingAttendance = await fetchAttendanceBySession(session.id);
-        const attendanceMap: Record<string, { present: boolean; remark: string }> = {};
+        const attendanceMap: Record<string, { status: AttendanceStatus; remark: string }> = {};
         
         // Initialize with existing attendance (check if it's an array)
         if (Array.isArray(existingAttendance)) {
           existingAttendance.forEach((att) => {
+            // Use status if available, otherwise convert from present boolean
+            const status: AttendanceStatus = att.status || (att.present ? 'present' : 'absent');
             attendanceMap[att.student_id] = {
-              present: att.present,
+              status,
               remark: att.remark || '',
             };
           });
@@ -3177,7 +3187,7 @@ function EditSessionModal({
             if (!attendanceMap[student.id]) {
               const hasRemaining = (student.remainingSessions || 0) > 0;
               attendanceMap[student.id] = {
-                present: hasRemaining,
+                status: hasRemaining ? 'present' : 'absent',
                 remark: '',
               };
             }
@@ -3188,12 +3198,12 @@ function EditSessionModal({
       } catch (error) {
         console.error('Failed to load attendance:', error);
         // Initialize with default values
-        const defaultAttendance: Record<string, { present: boolean; remark: string }> = {};
+        const defaultAttendance: Record<string, { status: AttendanceStatus; remark: string }> = {};
         if (Array.isArray(students)) {
           students.forEach((student) => {
             const hasRemaining = (student.remainingSessions || 0) > 0;
             defaultAttendance[student.id] = {
-              present: hasRemaining,
+              status: hasRemaining ? 'present' : 'absent',
               remark: '',
             };
           });
@@ -3309,11 +3319,14 @@ function EditSessionModal({
       
       // Update attendance records
       if (students.length > 0) {
-        const attendanceData = students.map((student) => ({
-          student_id: student.id,
-          present: attendance[student.id]?.present ?? false,
-          remark: attendance[student.id]?.remark || undefined,
-        }));
+        const attendanceData = students.map((student) => {
+          const att = attendance[student.id] || { status: 'absent' as AttendanceStatus, remark: '' };
+          return {
+            student_id: student.id,
+            status: att.status,
+            remark: att.remark || undefined,
+          };
+        });
         
         await saveAttendanceForSession(session.id, attendanceData);
       }
@@ -3695,48 +3708,15 @@ function EditSessionModal({
                 </thead>
                 <tbody>
                   {students.map((student) => {
-                    const att = attendance[student.id] || { present: false, remark: '' };
+                    const att = attendance[student.id] || { status: 'absent' as AttendanceStatus, remark: '' };
                     return (
                       <tr key={student.id}>
                         <td style={{ textAlign: 'center', verticalAlign: 'middle', padding: 'var(--spacing-2)' }}>
-                          <button
-                            type="button"
-                            className={`attendance-icon-btn ${att.present ? 'present' : 'absent'}`}
-                            onClick={() => {
-                              setAttendance((prev) => ({
-                                ...prev,
-                                [student.id]: {
-                                  present: !prev[student.id]?.present,
-                                  remark: prev[student.id]?.remark || '',
-                                },
-                              }));
-                            }}
-                            title={att.present ? 'Có mặt' : 'Vắng mặt'}
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              cursor: 'pointer',
-                              padding: 'var(--spacing-1)',
-                              borderRadius: 'var(--radius)',
-                              transition: 'all 0.2s ease',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              width: '32px',
-                              height: '32px',
-                            }}
-                          >
-                            {att.present ? (
-                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ color: 'var(--success)' }}>
-                                <path d="M20 6L9 17l-5-5" />
-                              </svg>
-                            ) : (
-                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ color: 'var(--danger)' }}>
-                                <line x1="18" y1="6" x2="6" y2="18" />
-                                <line x1="6" y1="6" x2="18" y2="18" />
-                              </svg>
-                            )}
-                          </button>
+                          <AttendanceIcon
+                            status={att.status}
+                            onClick={() => toggleAttendance(student.id)}
+                            size={20}
+                          />
                         </td>
                         <td style={{ verticalAlign: 'middle', padding: 'var(--spacing-2)' }}>{student.fullName}</td>
                         <td style={{ verticalAlign: 'middle', padding: 'var(--spacing-2)' }}>
@@ -3745,15 +3725,9 @@ function EditSessionModal({
                             className="form-control"
                             value={att.remark || ''}
                             onChange={(e) => {
-                              setAttendance((prev) => ({
-                                ...prev,
-                                [student.id]: {
-                                  present: prev[student.id]?.present ?? false,
-                                  remark: e.target.value,
-                                },
-                              }));
+                              updateAttendance(student.id, { remark: e.target.value });
                             }}
-                            placeholder="Ghi chú (nếu vắng)"
+                            placeholder="Ghi chú (nếu cần)"
                             style={{
                               fontSize: 'var(--font-size-xs)',
                               padding: 'var(--spacing-1) var(--spacing-2)',
@@ -3770,8 +3744,18 @@ function EditSessionModal({
               </table>
             </div>
           </div>
-          <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--muted)', marginTop: 'var(--spacing-2)' }}>
-            Tổng: <span id="presentCount">{attendanceSummary.present}</span> có mặt, <span id="absentCount">{attendanceSummary.absent}</span> vắng mặt
+          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--muted)', marginTop: 'var(--spacing-2)', lineHeight: '1.6' }}>
+            <div style={{ display: 'flex', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>
+              <span>
+                <span style={{ color: '#10b981', fontWeight: '500' }}>Học</span>: <span id="presentCount">{getAttendanceSummary().present}</span>
+              </span>
+              <span>
+                <span style={{ color: '#f59e0b', fontWeight: '500' }}>Phép</span>: <span id="excusedCount">{getAttendanceSummary().excused}</span>
+              </span>
+              <span>
+                <span style={{ color: '#dc2626', fontWeight: '500' }}>Vắng</span>: <span id="absentCount">{getAttendanceSummary().absent}</span>
+              </span>
+            </div>
           </div>
         </div>
       ) : (

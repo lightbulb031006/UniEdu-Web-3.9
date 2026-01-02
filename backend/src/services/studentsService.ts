@@ -566,11 +566,10 @@ export async function extendStudentSessions(
   }
 
   // Create wallet transaction - backend will automatically update wallet balance
-  // Use negative amount to indicate payment (decrease balance)
   const walletService = await import('./walletService');
   await walletService.createWalletTransaction({
     student_id: studentId,
-    type: 'topup', // Will be handled as payment when amount is negative
+    type: 'extend', // Type riêng cho gia hạn, không tính vào doanh thu
     amount: -totalCost, // Negative because it's a payment (decrease balance)
     note: `Gia hạn ${sessions} buổi học`,
     date: new Date().toISOString().slice(0, 10),
@@ -648,7 +647,7 @@ export async function refundStudentSessions(
   const walletService = await import('./walletService');
   await walletService.createWalletTransaction({
     student_id: studentId,
-    type: 'topup',
+    type: 'refund', // Type riêng cho hoàn trả, không tính vào doanh thu
     amount: totalRefund, // Positive amount for refund (increase balance)
     note: `Hoàn trả ${sessions} buổi học`,
     date: new Date().toISOString().slice(0, 10),

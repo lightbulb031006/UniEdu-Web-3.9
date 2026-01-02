@@ -1,0 +1,153 @@
+<div class="payments-page">
+    <div class="flex justify-between items-center mb-4">
+        <h2>Payments</h2>
+        <button class="btn" onclick="window.PaymentPage.showAddPaymentForm()">
+            <i class="fas fa-plus"></i> Add Payment
+        </button>
+    </div>
+
+    <div class="card">
+        <div class="flex justify-between items-center mb-4">
+            <div class="search-box">
+                <input type="text" id="paymentSearch" placeholder="Search payments..." class="form-control">
+            </div>
+            <div class="flex gap-2">
+                <select id="paymentClassFilter" class="form-control">
+                    <option value="all">All Classes</option>
+                </select>
+                <select id="paymentStatusFilter" class="form-control">
+                    <option value="all">All Status</option>
+                    <option value="paid">Paid</option>
+                    <option value="pending">Pending</option>
+                    <option value="overdue">Overdue</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table class="table-striped">
+                <thead>
+                    <tr>
+                        <th>Invoice #</th>
+                        <th>Student</th>
+                        <th>Class</th>
+                        <th>Amount</th>
+                        <th>Due Date</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="paymentsTableBody">
+                    <!-- Payments will be inserted here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Add/Edit Payment Modal Template -->
+<template id="paymentFormModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="paymentFormTitle">Add New Payment</h3>
+            <button class="btn-close" onclick="window.Modal.close()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="paymentForm">
+                <div class="form-group">
+                    <label for="paymentStudent">Student*</label>
+                    <select id="paymentStudent" name="studentId" class="form-control" required>
+                        <option value="">Select Student</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="paymentClass">Class*</label>
+                    <select id="paymentClass" name="classId" class="form-control" required>
+                        <option value="">Select Class</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="paymentAmount">Amount*</label>
+                    <input type="number" id="paymentAmount" name="amount" class="form-control" min="0" step="0.01" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="paymentDueDate">Due Date*</label>
+                    <input type="date" id="paymentDueDate" name="dueDate" class="form-control" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="paymentStatus">Status*</label>
+                    <select id="paymentStatus" name="status" class="form-control" required>
+                        <option value="pending">Pending</option>
+                        <option value="paid">Paid</option>
+                        <option value="overdue">Overdue</option>
+                    </select>
+                </div>
+
+                <div class="form-group" id="paymentMethodGroup" style="display: none;">
+                    <label for="paymentMethod">Payment Method*</label>
+                    <select id="paymentMethod" name="method" class="form-control">
+                        <option value="cash">Cash</option>
+                        <option value="card">Card</option>
+                        <option value="transfer">Bank Transfer</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="paymentNotes">Notes</label>
+                    <textarea id="paymentNotes" name="notes" class="form-control" rows="2"></textarea>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-muted" onclick="window.Modal.close()">Cancel</button>
+            <button class="btn" id="savePaymentBtn">Save Payment</button>
+        </div>
+    </div>
+</template>
+
+<!-- View Payment Details Modal Template -->
+<template id="paymentDetailsModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Payment Details</h3>
+            <button class="btn-close" onclick="window.Modal.close()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="card">
+                <div class="flex justify-between items-center">
+                    <h4 id="paymentDetailsTitle"></h4>
+                    <div id="paymentDetailsStatus" class="badge"></div>
+                </div>
+                <div class="details-grid mt-4">
+                    <div class="label">Student:</div>
+                    <div id="paymentDetailsStudent"></div>
+                    <div class="label">Class:</div>
+                    <div id="paymentDetailsClass"></div>
+                    <div class="label">Amount:</div>
+                    <div id="paymentDetailsAmount"></div>
+                    <div class="label">Due Date:</div>
+                    <div id="paymentDetailsDueDate"></div>
+                    <div class="label">Payment Date:</div>
+                    <div id="paymentDetailsPaymentDate"></div>
+                    <div class="label">Payment Method:</div>
+                    <div id="paymentDetailsMethod"></div>
+                </div>
+                <div class="mt-4">
+                    <div class="label">Notes:</div>
+                    <p id="paymentDetailsNotes" class="mt-1"></p>
+                </div>
+            </div>
+            
+            <div class="card mt-4">
+                <h4>Payment History</h4>
+                <div class="activities-list mt-2" id="paymentActivities">
+                    <!-- Activities will be inserted here -->
+                </div>
+            </div>
+        </div>
+    </div>
+</template>

@@ -1,0 +1,181 @@
+<div class="students-page">
+    <div class="flex justify-between items-center mb-4">
+        <h2>Students</h2>
+        <button class="btn" onclick="window.StudentPage.showAddStudentForm()">
+            <i class="fas fa-plus"></i> Add Student
+        </button>
+    </div>
+
+    <div class="card">
+        <div class="flex justify-between items-center mb-4">
+            <div class="search-box">
+                <input type="text" id="studentSearch" placeholder="Search students..." class="form-control">
+            </div>
+            <div class="flex gap-2">
+                <select id="studentClassFilter" class="form-control">
+                    <option value="all">All Classes</option>
+                </select>
+                <select id="studentStatusFilter" class="form-control">
+                    <option value="all">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table class="table-striped">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Class</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="studentsTableBody">
+                    <!-- Students will be inserted here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Add/Edit Student Modal Template -->
+<template id="studentFormModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="studentFormTitle">Add New Student</h3>
+            <button class="btn-close" onclick="window.Modal.close()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="studentForm">
+                <div class="form-group">
+                    <label for="studentName">Full Name*</label>
+                    <input type="text" id="studentName" name="fullName" class="form-control" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="studentEmail">Email*</label>
+                    <input type="email" id="studentEmail" name="email" class="form-control" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="studentPhone">Phone Number*</label>
+                    <input type="tel" id="studentPhone" name="phone" class="form-control" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="studentClass">Class*</label>
+                    <select id="studentClass" name="classId" class="form-control" required>
+                        <option value="">Select Class</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="studentStatus">Status*</label>
+                    <select id="studentStatus" name="status" class="form-control" required>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="studentAddress">Address</label>
+                    <textarea id="studentAddress" name="address" class="form-control" rows="2"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="studentNotes">Notes</label>
+                    <textarea id="studentNotes" name="notes" class="form-control" rows="2"></textarea>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-muted" onclick="window.Modal.close()">Cancel</button>
+            <button class="btn" id="saveStudentBtn">Save Student</button>
+        </div>
+    </div>
+</template>
+
+<!-- View Student Details Modal Template -->
+<template id="studentDetailsModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="studentDetailsName"></h3>
+            <button class="btn-close" onclick="window.Modal.close()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="grid gap-4" style="grid-template-columns: 2fr 1fr;">
+                <div>
+                    <div class="card">
+                        <h4>Student Information</h4>
+                        <div class="details-grid mt-2">
+                            <div class="label">Email:</div>
+                            <div id="studentDetailsEmail"></div>
+                            <div class="label">Phone:</div>
+                            <div id="studentDetailsPhone"></div>
+                            <div class="label">Class:</div>
+                            <div id="studentDetailsClass"></div>
+                            <div class="label">Status:</div>
+                            <div id="studentDetailsStatus"></div>
+                            <div class="label">Address:</div>
+                            <div id="studentDetailsAddress"></div>
+                        </div>
+                        <div class="mt-2">
+                            <div class="label">Notes:</div>
+                            <p id="studentDetailsNotes" class="mt-1"></p>
+                        </div>
+                    </div>
+
+                    <div class="card mt-4">
+                        <div class="flex justify-between items-center">
+                            <h4>Payment History</h4>
+                            <button class="btn btn-sm" onclick="window.StudentPage.showAddPaymentForm()">
+                                <i class="fas fa-plus"></i> Add Payment
+                            </button>
+                        </div>
+                        <div class="table-container mt-2">
+                            <table class="table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Amount</th>
+                                        <th>Method</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="studentPaymentsTable">
+                                    <!-- Payments will be inserted here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                <div>
+                    <div class="card">
+                        <h4>Statistics</h4>
+                        <div class="details-grid mt-2">
+                            <div class="label">Total Paid:</div>
+                            <div id="studentStatsPaid">$0</div>
+                            <div class="label">Outstanding:</div>
+                            <div id="studentStatsOutstanding">$0</div>
+                            <div class="label">Last Payment:</div>
+                            <div id="studentStatsLastPayment">-</div>
+                        </div>
+                    </div>
+                    
+                    <div class="card mt-4">
+                        <h4>Recent Activities</h4>
+                        <div class="activities-list mt-2" id="studentActivities">
+                            <!-- Activities will be inserted here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>

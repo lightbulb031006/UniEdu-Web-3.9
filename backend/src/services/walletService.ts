@@ -8,7 +8,7 @@ import supabase from '../config/database';
 export interface WalletTransaction {
   id: string;
   student_id: string;
-  type: 'topup' | 'loan' | 'advance' | 'repayment';
+  type: 'topup' | 'loan' | 'advance' | 'repayment' | 'extend' | 'refund';
   amount: number;
   note?: string;
   date: string;
@@ -17,7 +17,7 @@ export interface WalletTransaction {
 
 export interface WalletTransactionFilters {
   studentId?: string;
-  type?: 'topup' | 'loan' | 'advance' | 'repayment';
+  type?: 'topup' | 'loan' | 'advance' | 'repayment' | 'extend' | 'refund';
   startDate?: string;
   endDate?: string;
 }
@@ -89,11 +89,11 @@ export async function createWalletTransaction(transactionData: Omit<WalletTransa
     throw new Error(`Failed to create wallet transaction: ${error.message}`);
   }
 
-  // Invalidate dashboard cache if this is a revenue transaction (topup, cả số dương và số âm)
+  // Invalidate dashboard cache if this is a revenue transaction (only topup, not extend/refund)
   const amount = Number(transactionData.amount) || 0;
   if (transactionData.type === 'topup' && amount !== 0) {
     // Invalidate dashboard cache in background (don't wait)
-    // Cả số dương (nạp) và số âm (trừ) đều ảnh hưởng đến doanh thu
+    // Chỉ tính topup thực sự vào doanh thu, không tính extend/refund
     import('./dashboardService').then(({ invalidateDashboardCache }) => {
       invalidateDashboardCache(transactionData.date || new Date().toISOString().split('T')[0]).catch(() => {});
     }).catch(() => {});
@@ -142,6 +142,14 @@ export async function createWalletTransaction(transactionData: Omit<WalletTransa
           // Trả nợ: giảm số dư VÀ giảm nợ
           newWalletBalance = currentWalletBalance - absoluteAmount;
           newLoanBalance = Math.max(0, currentLoanBalance - absoluteAmount);
+          break;
+        case 'extend':
+          // Gia hạn: giảm số dư (thanh toán cho buổi học)
+          newWalletBalance = currentWalletBalance - absoluteAmount;
+          break;
+        case 'refund':
+          // Hoàn trả: tăng số dư (hoàn lại tiền)
+          newWalletBalance = currentWalletBalance + absoluteAmount;
           break;
         default:
           // Unknown type, don't update

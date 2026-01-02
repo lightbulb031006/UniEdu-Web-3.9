@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unicorns Edu — Đăng nhập / Đăng ký</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/base.css">
+    <link rel="stylesheet" href="assets/css/components.css">
+    <link rel="stylesheet" href="assets/css/pages.css">
+</head>
+<body style="font-family:'Inter',sans-serif; background: var(--surface-muted); min-height: 100vh;">
+    <main style="max-width: 960px; margin: 0 auto; padding: 48px 24px;">
+        <section class="card hero" style="margin-bottom: 32px; text-align: center;">
+            <h1>Unicorns Edu</h1>
+            <p class="text-muted">Nền tảng quản lý giáo dục cho admin, giáo viên và học sinh.</p>
+        </section>
+
+        <section id="authForms">
+            <div class="grid gap-4" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
+                <div class="card">
+                    <h3>Đăng nhập</h3>
+                    <form id="loginForm" class="grid gap-2">
+                        <input class="form-control" name="email" type="email" placeholder="Email / Số điện thoại" required>
+                        <input class="form-control" name="password" type="password" placeholder="Mật khẩu" autocomplete="current-password" required>
+                        <button class="btn btn-primary" type="submit">Đăng nhập</button>
+                    </form>
+                    <div class="text-muted text-sm mt-3">
+                        <p class="font-semibold">Tài khoản mẫu</p>
+                        <ul class="list-disc ml-4">
+                            <li>Admin: <code>admin@edu.vn</code> / <code>123456</code></li>
+                            <li>Giáo viên: <code>giaovien1@edu.vn</code> / <code>123456</code></li>
+                            <li>Học sinh: <code>hocsinh1@edu.vn</code> / <code>123456</code></li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Đăng ký</h3>
+                    <form id="registerForm" class="grid gap-2">
+                        <input class="form-control" name="fullName" type="text" placeholder="Họ và tên" required>
+                        <input class="form-control" name="email" type="email" placeholder="Email / SĐT" required>
+                        <input class="form-control" name="password" type="password" placeholder="Mật khẩu" autocomplete="new-password" required>
+                        <select class="form-control" name="role" required>
+                            <option value="student">Học sinh</option>
+                            <option value="teacher">Giáo viên</option>
+                        </select>
+                        <button class="btn btn-primary" type="submit">Tạo tài khoản</button>
+                        <p class="text-muted text-xs mt-1">Admin được tạo thủ công, không đăng ký tại đây.</p>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <section class="card mt-4">
+            <h2>Tính năng nổi bật</h2>
+            <div class="grid gap-4" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+                <div>
+                    <strong>Quản lý học sinh</strong>
+                    <p class="text-muted">Theo dõi học phí, lịch sử gia hạn và tiến độ học.</p>
+                </div>
+                <div>
+                    <strong>Lớp học & lịch dạy</strong>
+                    <p class="text-muted">Phân công giáo viên, điểm danh từng buổi rõ ràng.</p>
+                </div>
+                <div>
+                    <strong>Thống kê tài chính</strong>
+                    <p class="text-muted">Xem trợ cấp giáo viên, chi phí, doanh thu theo tháng.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="assets/js/auth.js"></script>
+    <script>
+        (function () {
+            // Sau khi đăng nhập thành công, chuyển về index.html
+            const loginForm = document.getElementById('loginForm');
+            const registerForm = document.getElementById('registerForm');
+
+            function redirectToApp() {
+                window.location.href = 'index.html#dashboard';
+            }
+
+            loginForm?.addEventListener('submit', function (event) {
+                event.preventDefault();
+                const fd = new FormData(loginForm);
+                try {
+                    window.UniAuth.login(fd.get('email'), fd.get('password'));
+                    redirectToApp();
+                } catch (error) {
+                    alert(error.message || 'Đăng nhập thất bại');
+                }
+            });
+
+            registerForm?.addEventListener('submit', function (event) {
+                event.preventDefault();
+                const fd = new FormData(registerForm);
+                try {
+                    window.UniAuth.register(
+                        fd.get('email'),
+                        fd.get('password'),
+                        fd.get('role'),
+                        { fullName: fd.get('fullName') }
+                    );
+                    redirectToApp();
+                } catch (error) {
+                    alert(error.message || 'Đăng ký thất bại');
+                }
+            });
+        })();
+    </script>
+</body>
+</html>
+
