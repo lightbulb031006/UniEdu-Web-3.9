@@ -25,58 +25,72 @@ export interface Class {
 }
 
 export async function getClasses(filters: ClassFilters = {}) {
-  let query = supabase.from('classes').select('*');
+  try {
+    let query = supabase.from('classes').select('*');
 
-  if (filters.status && filters.status !== 'all') {
-    query = query.eq('status', filters.status);
-  }
+    if (filters.status && filters.status !== 'all') {
+      query = query.eq('status', filters.status);
+    }
 
-  if (filters.type && filters.type !== 'all') {
-    query = query.eq('type', filters.type);
-  }
+    if (filters.type && filters.type !== 'all') {
+      query = query.eq('type', filters.type);
+    }
 
-  const { data, error } = await query;
+    const { data, error } = await query;
 
-  if (error) {
-    throw new Error(`Failed to fetch classes: ${error.message}`);
-  }
+    if (error) {
+      console.error('[getClasses] Error fetching classes:', error);
+      throw new Error(`Failed to fetch classes: ${error.message}`);
+    }
 
-  let classes = (data || []) as any[];
+    let classes = (data || []) as any[];
 
-  // Fetch class_teachers relationships to get teacher IDs for each class
-  const { data: classTeachersData, error: classTeachersError } = await supabase
-    .from('class_teachers')
-    .select('class_id, teacher_id');
+    // Fetch class_teachers relationships to get teacher IDs for each class
+    try {
+      const { data: classTeachersData, error: classTeachersError } = await supabase
+        .from('class_teachers')
+        .select('class_id, teacher_id');
 
-  if (!classTeachersError && classTeachersData) {
-    // Group teacher IDs by class ID
-    const teacherMap = new Map<string, string[]>();
-    classTeachersData.forEach((ct: any) => {
-      const classId = ct.class_id;
-      if (!teacherMap.has(classId)) {
-        teacherMap.set(classId, []);
+      if (classTeachersError) {
+        console.error('[getClasses] Error fetching class_teachers:', classTeachersError);
+        // Continue without teacher data rather than failing completely
+      } else if (classTeachersData) {
+        // Group teacher IDs by class ID
+        const teacherMap = new Map<string, string[]>();
+        classTeachersData.forEach((ct: any) => {
+          const classId = ct.class_id;
+          if (!teacherMap.has(classId)) {
+            teacherMap.set(classId, []);
+          }
+          teacherMap.get(classId)!.push(ct.teacher_id);
+        });
+
+        // Add teacher_ids array to each class
+        classes = classes.map((cls: any) => {
+          const teacherIds = teacherMap.get(cls.id) || [];
+          return {
+            ...cls,
+            teacher_ids: teacherIds.length > 0 ? teacherIds : [],
+          };
+        });
       }
-      teacherMap.get(classId)!.push(ct.teacher_id);
-    });
+    } catch (err: any) {
+      console.error('[getClasses] Exception fetching class_teachers:', err);
+      // Continue without teacher data rather than failing completely
+    }
 
-    // Add teacher_ids array to each class
-    classes = classes.map((cls: any) => {
-      const teacherIds = teacherMap.get(cls.id) || [];
-      return {
-        ...cls,
-        teacher_ids: teacherIds.length > 0 ? teacherIds : [],
-      };
-    });
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      classes = classes.filter(
+        (cls: any) => cls.name?.toLowerCase().includes(searchLower) || cls.type?.toLowerCase().includes(searchLower)
+      );
+    }
+
+    return classes as Class[];
+  } catch (err: any) {
+    console.error('[getClasses] Exception:', err);
+    throw err;
   }
-
-  if (filters.search) {
-    const searchLower = filters.search.toLowerCase();
-    classes = classes.filter(
-      (cls: any) => cls.name?.toLowerCase().includes(searchLower) || cls.type?.toLowerCase().includes(searchLower)
-    );
-  }
-
-  return classes as Class[];
 }
 
 export async function getClassById(id: string) {
@@ -134,13 +148,68 @@ export async function createClass(classData: Omit<Class, 'id' | 'teacher_ids'> &
   // Generate ID if not provided
   const id = (classData as any).id || `CLS${Date.now()}${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
 
+  // Prepare insert data - map camelCase fields to snake_case for database
+  const insertData: any = { id };
+  
+  // Map camelCase fields to snake_case for database
+  const fieldMapping: Record<string, string> = {
+    name: 'name',
+    type: 'type',
+    status: 'status',
+    maxStudents: 'max_students',
+    tuitionPerSession: 'tuition_per_session',
+    studentTuitionPerSession: 'student_tuition_per_session',
+    tuitionPackageTotal: 'tuition_package_total',
+    tuitionPackageSessions: 'tuition_package_sessions',
+    scaleAmount: 'scale_amount',
+    maxAllowancePerSession: 'max_allowance_per_session',
+  };
+
+  // Only include valid fields and map them
+  Object.keys(classFields).forEach((key) => {
+    // Skip teacher-related fields - they are handled separately via class_teachers table
+    if (key === 'teacherIds' || key === 'teacher_ids' || key === 'teacherId' || key === 'teacher_id') {
+      return;
+    }
+    
+    if (fieldMapping[key] !== undefined) {
+      const dbField = fieldMapping[key];
+      let value = classFields[key];
+      
+      // Handle empty string for numeric fields - convert to null
+      if ((dbField === 'tuition_package_sessions' || 
+           dbField === 'tuition_package_total' || 
+           dbField === 'student_tuition_per_session' ||
+           dbField === 'tuition_per_session' ||
+           dbField === 'scale_amount' ||
+           dbField === 'max_allowance_per_session') && 
+          value === '') {
+        value = null;
+      }
+      
+      insertData[dbField] = value;
+    } else if (key === 'schedule' || key === 'customTeacherAllowances') {
+      // These are handled separately if needed
+    } else if (key.startsWith('_') || key === 'id' || key === 'created_at' || key === 'updated_at') {
+      // Skip internal fields
+    } else {
+      // For unknown fields, try to use as-is (might be snake_case already)
+      // But skip teacher_ids to avoid database error
+      if (key !== 'teacher_ids') {
+        insertData[key] = classFields[key];
+      }
+    }
+  });
+
   const { data, error } = await supabase
     .from('classes')
-    .insert([{ ...classFields, id }])
+    .insert([insertData])
     .select()
     .single();
 
   if (error) {
+    console.error('[createClass] Error creating class:', error);
+    console.error('[createClass] Insert data:', JSON.stringify(insertData, null, 2));
     throw new Error(`Failed to create class: ${error.message}`);
   }
 
@@ -190,7 +259,21 @@ export async function updateClass(id: string, classData: Partial<Class> & { teac
   // Only include valid fields
   Object.keys(classFields).forEach((key) => {
     if (fieldMapping[key] !== undefined) {
-      updateData[fieldMapping[key]] = classFields[key];
+      const dbField = fieldMapping[key];
+      let value = classFields[key];
+      
+      // Handle empty string for numeric fields - convert to null
+      if ((dbField === 'tuition_package_sessions' || 
+           dbField === 'tuition_package_total' || 
+           dbField === 'student_tuition_per_session' ||
+           dbField === 'tuition_per_session' ||
+           dbField === 'scale_amount' ||
+           dbField === 'max_allowance_per_session') && 
+          value === '') {
+        value = null;
+      }
+      
+      updateData[dbField] = value;
     } else if (key === 'schedule' || key === 'customTeacherAllowances') {
       // These are handled separately
     } else if (key.startsWith('_') || key === 'id' || key === 'created_at' || key === 'updated_at') {

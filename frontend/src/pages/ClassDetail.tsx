@@ -4198,7 +4198,7 @@ function EditClassModal({
     maxAllowancePerSession: classData.maxAllowancePerSession || 0,
     studentTuitionPerSession: classData.studentTuitionPerSession || 0,
     tuitionPackageTotal: classData.tuitionPackageTotal || 0,
-    tuitionPackageSessions: classData.tuitionPackageSessions || 0,
+    tuitionPackageSessions: classData.tuitionPackageSessions || '' as number | '',
   });
   const [loading, setLoading] = useState(false);
 
@@ -4227,7 +4227,7 @@ function EditClassModal({
         maxAllowancePerSession: classData.maxAllowancePerSession || 0,
         studentTuitionPerSession: classData.studentTuitionPerSession || 0,
         tuitionPackageTotal: classData.tuitionPackageTotal || 0,
-        tuitionPackageSessions: classData.tuitionPackageSessions || 0,
+        tuitionPackageSessions: classData.tuitionPackageSessions || '',
       });
     }
   }, [isOpen, classData]);
@@ -4249,13 +4249,14 @@ function EditClassModal({
   }, [formData.maxAllowancePerSession]);
 
   const feePreview = useMemo(() => {
-    if (formData.studentTuitionPerSession > 0 && formData.tuitionPackageSessions > 0) {
-      const total = formData.studentTuitionPerSession * formData.tuitionPackageSessions;
-      return `Hiện tại: ${formData.studentTuitionPerSession.toLocaleString('vi-VN')} / buổi • Tổng ${total.toLocaleString('vi-VN')} cho ${formData.tuitionPackageSessions} buổi.`;
+    const sessions = typeof formData.tuitionPackageSessions === 'number' ? formData.tuitionPackageSessions : 0;
+    if (formData.studentTuitionPerSession > 0 && sessions > 0) {
+      const total = formData.studentTuitionPerSession * sessions;
+      return `Hiện tại: ${formData.studentTuitionPerSession.toLocaleString('vi-VN')} / buổi • Tổng ${total.toLocaleString('vi-VN')} cho ${sessions} buổi.`;
     }
-    if (formData.tuitionPackageTotal > 0 && formData.tuitionPackageSessions > 0) {
-      const perSession = formData.tuitionPackageTotal / formData.tuitionPackageSessions;
-      return `Hiện tại: ${perSession.toLocaleString('vi-VN')} / buổi • Tổng ${formData.tuitionPackageTotal.toLocaleString('vi-VN')} cho ${formData.tuitionPackageSessions} buổi.`;
+    if (formData.tuitionPackageTotal > 0 && sessions > 0) {
+      const perSession = formData.tuitionPackageTotal / sessions;
+      return `Hiện tại: ${perSession.toLocaleString('vi-VN')} / buổi • Tổng ${formData.tuitionPackageTotal.toLocaleString('vi-VN')} cho ${sessions} buổi.`;
     }
     if (formData.studentTuitionPerSession > 0) {
       return `Hiện tại: ${formData.studentTuitionPerSession.toLocaleString('vi-VN')} / buổi`;
@@ -4274,11 +4275,12 @@ function EditClassModal({
     try {
       // Calculate studentTuitionPerSession if needed
       let finalStudentTuitionPerSession = formData.studentTuitionPerSession;
-      if (formData.tuitionPackageTotal > 0 && formData.tuitionPackageSessions > 0 && formData.studentTuitionPerSession === 0) {
-        finalStudentTuitionPerSession = Math.round(formData.tuitionPackageTotal / formData.tuitionPackageSessions);
-      } else if (formData.tuitionPackageSessions > 0 && formData.studentTuitionPerSession > 0 && formData.tuitionPackageTotal === 0) {
+      const sessions = typeof formData.tuitionPackageSessions === 'number' ? formData.tuitionPackageSessions : 0;
+      if (formData.tuitionPackageTotal > 0 && sessions > 0 && formData.studentTuitionPerSession === 0) {
+        finalStudentTuitionPerSession = Math.round(formData.tuitionPackageTotal / sessions);
+      } else if (sessions > 0 && formData.studentTuitionPerSession > 0 && formData.tuitionPackageTotal === 0) {
         // Recalculate total if unit is set
-        const recalculatedTotal = Math.round(formData.studentTuitionPerSession * formData.tuitionPackageSessions);
+        const recalculatedTotal = Math.round(formData.studentTuitionPerSession * sessions);
         setFormData((prev) => ({ ...prev, tuitionPackageTotal: recalculatedTotal }));
       }
 
@@ -4292,7 +4294,7 @@ function EditClassModal({
         maxAllowancePerSession: formData.maxAllowancePerSession > 0 ? formData.maxAllowancePerSession : null,
         studentTuitionPerSession: finalStudentTuitionPerSession,
         tuitionPackageTotal: formData.tuitionPackageTotal,
-        tuitionPackageSessions: formData.tuitionPackageSessions,
+        tuitionPackageSessions: typeof formData.tuitionPackageSessions === 'number' ? formData.tuitionPackageSessions : (formData.tuitionPackageSessions === '' ? 0 : Number(formData.tuitionPackageSessions)),
       });
       toast.success('Đã cập nhật lớp học');
       onSave();
@@ -4503,8 +4505,9 @@ function EditClassModal({
                   setFormData((prev) => {
                     // Auto-calculate studentTuitionPerSession if sessions > 0
                     const newData = { ...prev, tuitionPackageTotal: total };
-                    if (prev.tuitionPackageSessions > 0 && total > 0) {
-                      newData.studentTuitionPerSession = Math.round(total / prev.tuitionPackageSessions);
+                    const sessions = typeof prev.tuitionPackageSessions === 'number' ? prev.tuitionPackageSessions : 0;
+                    if (sessions > 0 && total > 0) {
+                      newData.studentTuitionPerSession = Math.round(total / sessions);
                     }
                     return newData;
                   });
@@ -4522,18 +4525,25 @@ function EditClassModal({
                 className="form-control"
                 value={formData.tuitionPackageSessions}
                 onChange={(e) => {
-                  const sessions = parseInt(e.target.value, 10) || 0;
-                  setFormData((prev) => {
-                    const newData = { ...prev, tuitionPackageSessions: sessions };
-                    // Auto-calculate studentTuitionPerSession if total > 0
-                    if (sessions > 0 && prev.tuitionPackageTotal > 0) {
-                      newData.studentTuitionPerSession = Math.round(prev.tuitionPackageTotal / sessions);
-                    } else if (sessions > 0 && prev.studentTuitionPerSession > 0 && prev.tuitionPackageTotal === 0) {
-                      // Recalculate total if unit is set
-                      newData.tuitionPackageTotal = Math.round(prev.studentTuitionPerSession * sessions);
+                  const value = e.target.value;
+                  if (value === '') {
+                    setFormData((prev) => ({ ...prev, tuitionPackageSessions: '' }));
+                  } else {
+                    const sessions = parseInt(value, 10);
+                    if (!isNaN(sessions) && sessions >= 0) {
+                      setFormData((prev) => {
+                        const newData = { ...prev, tuitionPackageSessions: sessions };
+                        // Auto-calculate studentTuitionPerSession if total > 0
+                        if (sessions > 0 && prev.tuitionPackageTotal > 0) {
+                          newData.studentTuitionPerSession = Math.round(prev.tuitionPackageTotal / sessions);
+                        } else if (sessions > 0 && prev.studentTuitionPerSession > 0 && prev.tuitionPackageTotal === 0) {
+                          // Recalculate total if unit is set
+                          newData.tuitionPackageTotal = Math.round(prev.studentTuitionPerSession * sessions);
+                        }
+                        return newData;
+                      });
                     }
-                    return newData;
-                  });
+                  }
                 }}
                 min="0"
                 step="1"
@@ -4552,8 +4562,9 @@ function EditClassModal({
                   setFormData((prev) => {
                     const newData = { ...prev, studentTuitionPerSession: unit };
                     // Recalculate total if sessions > 0
-                    if (prev.tuitionPackageSessions > 0 && unit > 0) {
-                      newData.tuitionPackageTotal = Math.round(unit * prev.tuitionPackageSessions);
+                    const sessions = typeof prev.tuitionPackageSessions === 'number' ? prev.tuitionPackageSessions : 0;
+                    if (sessions > 0 && unit > 0) {
+                      newData.tuitionPackageTotal = Math.round(unit * sessions);
                     }
                     return newData;
                   });

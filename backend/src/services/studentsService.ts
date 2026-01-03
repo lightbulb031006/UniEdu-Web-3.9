@@ -137,19 +137,61 @@ export async function getStudentById(id: string) {
  * Create new student
  */
 export async function createStudent(studentData: Omit<Student, 'id' | 'class_id' | 'class_ids'> & { classIds?: string[] }) {
-  // Extract classIds if provided
+  // Extract classIds and other non-database fields
   const { classIds, ...studentFields } = studentData as any;
   
   // Generate ID if not provided
   const id = (studentData as any).id || `STU${Date.now()}${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
   
+  // Filter out fields that don't exist in students table
+  // Fields like account_handle, account_password, classIds, wallet_balance, loan_balance are handled separately or don't exist
+  const validStudentFields = [
+    'full_name', 'birth_year', 'school', 'province', 'parent_name', 'parent_phone',
+    'email', 'status', 'gender', 'goal', 'cskh_staff_id', 'cskh_assigned_date', 'cskh_unassigned_date'
+  ];
+  
+  // Also handle camelCase to snake_case mapping
+  const fieldMapping: Record<string, string> = {
+    fullName: 'full_name',
+    birthYear: 'birth_year',
+    parentName: 'parent_name',
+    parentPhone: 'parent_phone',
+    cskhStaffId: 'cskh_staff_id',
+    cskhAssignedDate: 'cskh_assigned_date',
+    cskhUnassignedDate: 'cskh_unassigned_date',
+  };
+  
+  const insertData: any = { id };
+  
+  Object.keys(studentFields).forEach((key) => {
+    // Skip fields that don't exist in database
+    if (key === 'account_handle' || key === 'accountHandle' || 
+        key === 'account_password' || key === 'accountPassword' ||
+        key === 'classIds' || key === 'class_ids' ||
+        key === 'wallet_balance' || key === 'walletBalance' ||
+        key === 'loan_balance' || key === 'loanBalance' ||
+        key === 'class_id' || key === 'classId') {
+      return;
+    }
+    
+    // Map camelCase to snake_case
+    const dbField = fieldMapping[key] || key;
+    
+    // Only include valid fields
+    if (validStudentFields.includes(dbField) && studentFields[key] !== undefined) {
+      insertData[dbField] = studentFields[key];
+    }
+  });
+  
   const { data, error } = await supabase
     .from('students')
-    .insert([{ ...studentFields, id }])
+    .insert([insertData])
     .select()
     .single();
 
   if (error) {
+    console.error('[createStudent] Error creating student:', error);
+    console.error('[createStudent] Insert data:', JSON.stringify(insertData, null, 2));
     throw new Error(`Failed to create student: ${error.message}`);
   }
 

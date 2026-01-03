@@ -36,8 +36,9 @@ function Classes() {
     tuitionPerSession: 0,
     studentTuitionPerSession: 0,
     tuitionPackageTotal: 0,
-    tuitionPackageSessions: 0,
+    tuitionPackageSessions: '' as number | '',
   });
+  const [teacherSearchQuery, setTeacherSearchQuery] = useState('');
 
   const { data, isLoading, error, refetch } = useDataLoading(
     () => fetchClasses(filters),
@@ -93,6 +94,27 @@ function Classes() {
     });
   }, [teachers]);
 
+  // Get teachers available for selection (not already selected)
+  const availableTeachersForSelection = useMemo(() => {
+    const selectedIds = new Set(formData.teacherIds);
+    return availableTeachers.filter((t: any) => !selectedIds.has(t.id));
+  }, [availableTeachers, formData.teacherIds]);
+
+  // Filter teachers based on search query
+  const filteredAvailableTeachers = useMemo(() => {
+    if (!teacherSearchQuery.trim()) return availableTeachersForSelection.slice(0, 6);
+    const normalized = teacherSearchQuery.trim().toLowerCase();
+    return availableTeachersForSelection.filter((t) => 
+      t.fullName?.toLowerCase().includes(normalized) || 
+      t.name?.toLowerCase().includes(normalized)
+    );
+  }, [availableTeachersForSelection, teacherSearchQuery]);
+
+  // Get currently selected teachers
+  const selectedTeachers = useMemo(() => {
+    return teachers.filter((t: any) => formData.teacherIds.includes(t.id));
+  }, [teachers, formData.teacherIds]);
+
   // Get teacher names for a class
   const getClassTeacherNames = (cls: Class): string => {
     const teacherIds = cls.teacherIds || (cls.teacherId ? [cls.teacherId] : []);
@@ -132,8 +154,9 @@ function Classes() {
       tuitionPerSession: 0,
       studentTuitionPerSession: 0,
       tuitionPackageTotal: 0,
-      tuitionPackageSessions: 0,
+      tuitionPackageSessions: '',
     });
+    setTeacherSearchQuery('');
     setShowModal(true);
   };
 
@@ -149,9 +172,21 @@ function Classes() {
       tuitionPerSession: cls.tuitionPerSession || 0,
       studentTuitionPerSession: cls.studentTuitionPerSession || 0,
       tuitionPackageTotal: cls.tuitionPackageTotal || 0,
-      tuitionPackageSessions: cls.tuitionPackageSessions || 0,
+      tuitionPackageSessions: cls.tuitionPackageSessions || '',
     });
+    setTeacherSearchQuery('');
     setShowModal(true);
+  };
+
+  const handleAddTeacher = (teacherId: string) => {
+    if (!formData.teacherIds.includes(teacherId)) {
+      setFormData({ ...formData, teacherIds: [...formData.teacherIds, teacherId] });
+      setTeacherSearchQuery('');
+    }
+  };
+
+  const handleRemoveTeacher = (teacherId: string) => {
+    setFormData({ ...formData, teacherIds: formData.teacherIds.filter(id => id !== teacherId) });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -183,8 +218,10 @@ function Classes() {
         classData.tuitionPackageTotal = formData.tuitionPackageTotal;
       }
 
-      if (formData.tuitionPackageSessions > 0) {
-        classData.tuitionPackageSessions = formData.tuitionPackageSessions;
+      if (formData.tuitionPackageSessions !== '' && formData.tuitionPackageSessions > 0) {
+        classData.tuitionPackageSessions = typeof formData.tuitionPackageSessions === 'number' 
+          ? formData.tuitionPackageSessions 
+          : Number(formData.tuitionPackageSessions);
       }
 
       if (editingClass) {
@@ -540,31 +577,128 @@ function Classes() {
           </div>
 
           <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
-            <label htmlFor="classTeachers" className="form-label">
+            <label className="form-label" style={{ marginBottom: 'var(--spacing-2)' }}>
               Gia sư * (có thể chọn nhiều)
             </label>
-            <select
-              id="classTeachers"
-              className="form-control"
-              multiple
-              size={6}
-              value={formData.teacherIds}
-              onChange={(e) => {
-                const selected = Array.from(e.target.selectedOptions, (option) => option.value);
-                setFormData({ ...formData, teacherIds: selected });
-              }}
-              required
-              style={{ minHeight: '120px' }}
-            >
-              {availableTeachers.map((teacher: any) => (
-                <option key={teacher.id} value={teacher.id}>
-                  {teacher.fullName || teacher.name || teacher.id}
-                </option>
-              ))}
-            </select>
-            <small className="text-muted" style={{ fontSize: 'var(--font-size-xs)' }}>
-              Giữ Ctrl (Windows) hoặc Cmd (Mac) để chọn nhiều gia sư
-            </small>
+            
+            {/* Current Teachers List */}
+            <div style={{ marginBottom: 'var(--spacing-3)' }}>
+              <h4 style={{ marginBottom: 'var(--spacing-2)', fontSize: '0.875rem', fontWeight: '600' }}>
+                Gia sư đã chọn
+              </h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-2)' }}>
+                {selectedTeachers.length > 0 ? (
+                  selectedTeachers.map((teacher) => (
+                    <div
+                      key={teacher.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: 'var(--spacing-2)',
+                        background: 'var(--bg-secondary)',
+                        borderRadius: 'var(--radius)',
+                      }}
+                    >
+                      <span>{teacher.fullName || teacher.name || teacher.id}</span>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-danger"
+                        onClick={() => handleRemoveTeacher(teacher.id)}
+                        title="Gỡ khỏi danh sách"
+                      >
+                        Xóa
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <p style={{ fontSize: '0.875rem', color: 'var(--muted)' }}>Chưa chọn gia sư nào.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Add Teacher Search */}
+            <div>
+              <h4 style={{ marginBottom: 'var(--spacing-2)', fontSize: '0.875rem', fontWeight: '600' }}>
+                Thêm gia sư mới
+              </h4>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="search"
+                  value={teacherSearchQuery}
+                  onChange={(e) => setTeacherSearchQuery(e.target.value)}
+                  placeholder="Nhập tên gia sư để tìm kiếm..."
+                  style={{
+                    width: '100%',
+                    padding: 'var(--spacing-2)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius)',
+                  }}
+                />
+                {teacherSearchQuery && filteredAvailableTeachers.length > 0 && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      right: 0,
+                      marginTop: 'var(--spacing-1)',
+                      background: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius)',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                      zIndex: 10,
+                      maxHeight: '200px',
+                      overflowY: 'auto',
+                    }}
+                  >
+                    {filteredAvailableTeachers.map((teacher) => (
+                      <button
+                        key={teacher.id}
+                        type="button"
+                        onClick={() => handleAddTeacher(teacher.id)}
+                        style={{
+                          width: '100%',
+                          padding: 'var(--spacing-2)',
+                          textAlign: 'left',
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: 'var(--text)',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = 'var(--bg-secondary)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'none';
+                        }}
+                      >
+                        {teacher.fullName || teacher.name || teacher.id}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {teacherSearchQuery && filteredAvailableTeachers.length === 0 && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      right: 0,
+                      marginTop: 'var(--spacing-1)',
+                      padding: 'var(--spacing-2)',
+                      background: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius)',
+                      fontSize: '0.875rem',
+                      color: 'var(--muted)',
+                    }}
+                  >
+                    Không tìm thấy gia sư phù hợp.
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
@@ -628,14 +762,21 @@ function Classes() {
                   className="form-control"
                   value={formData.tuitionPackageSessions}
                   onChange={(e) => {
-                    const sessions = parseInt(e.target.value, 10) || 0;
-                    setFormData({ ...formData, tuitionPackageSessions: sessions });
-                    // Auto-calculate student tuition per session
-                    if (sessions > 0 && formData.tuitionPackageTotal > 0) {
-                      setFormData((prev) => ({
-                        ...prev,
-                        studentTuitionPerSession: Math.round(prev.tuitionPackageTotal / sessions),
-                      }));
+                    const value = e.target.value;
+                    if (value === '') {
+                      setFormData({ ...formData, tuitionPackageSessions: '' });
+                    } else {
+                      const sessions = parseInt(value, 10);
+                      if (!isNaN(sessions) && sessions >= 0) {
+                        setFormData({ ...formData, tuitionPackageSessions: sessions });
+                        // Auto-calculate student tuition per session
+                        if (sessions > 0 && formData.tuitionPackageTotal > 0) {
+                          setFormData((prev) => ({
+                            ...prev,
+                            studentTuitionPerSession: Math.round(prev.tuitionPackageTotal / sessions),
+                          }));
+                        }
+                      }
                     }
                   }}
                   min="0"
