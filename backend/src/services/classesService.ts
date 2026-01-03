@@ -26,7 +26,8 @@ export interface Class {
 
 export async function getClasses(filters: ClassFilters = {}) {
   try {
-    let query = supabase.from('classes').select('*');
+    // Select columns including denormalized teacher_ids for fast access
+    let query = supabase.from('classes').select('id, name, type, status, max_students, tuition_per_session, schedule, custom_teacher_allowances, teacher_ids, created_at, updated_at');
 
     if (filters.status && filters.status !== 'all') {
       query = query.eq('status', filters.status);
@@ -45,39 +46,28 @@ export async function getClasses(filters: ClassFilters = {}) {
 
     let classes = (data || []) as any[];
 
-    // Fetch class_teachers relationships to get teacher IDs for each class
-    try {
-      const { data: classTeachersData, error: classTeachersError } = await supabase
-        .from('class_teachers')
-        .select('class_id, teacher_id');
-
-      if (classTeachersError) {
-        console.error('[getClasses] Error fetching class_teachers:', classTeachersError);
-        // Continue without teacher data rather than failing completely
-      } else if (classTeachersData) {
-        // Group teacher IDs by class ID
-        const teacherMap = new Map<string, string[]>();
-        classTeachersData.forEach((ct: any) => {
-          const classId = ct.class_id;
-          if (!teacherMap.has(classId)) {
-            teacherMap.set(classId, []);
+    // Use denormalized teacher_ids from classes table (much faster than joining)
+    // Ensure teacher_ids is always an array
+    classes = classes.map((cls: any) => {
+      let teacherIds: string[] = [];
+      if (cls.teacher_ids) {
+        if (Array.isArray(cls.teacher_ids)) {
+          teacherIds = cls.teacher_ids.filter(Boolean);
+        } else if (typeof cls.teacher_ids === 'string') {
+          // Handle JSONB string format
+          try {
+            const parsed = JSON.parse(cls.teacher_ids);
+            teacherIds = Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+          } catch {
+            teacherIds = [];
           }
-          teacherMap.get(classId)!.push(ct.teacher_id);
-        });
-
-        // Add teacher_ids array to each class
-        classes = classes.map((cls: any) => {
-          const teacherIds = teacherMap.get(cls.id) || [];
-          return {
-            ...cls,
-            teacher_ids: teacherIds.length > 0 ? teacherIds : [],
-          };
-        });
+        }
       }
-    } catch (err: any) {
-      console.error('[getClasses] Exception fetching class_teachers:', err);
-      // Continue without teacher data rather than failing completely
-    }
+      return {
+        ...cls,
+        teacher_ids: teacherIds,
+      };
+    });
 
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
@@ -93,9 +83,10 @@ export async function getClasses(filters: ClassFilters = {}) {
   }
 }
 
-export async function getClassById(id: string) {
+export async function getClassById(id: string, options: { includeTeachers?: boolean } = {}) {
   try {
-    const { data, error } = await supabase.from('classes').select('*').eq('id', id).single();
+    // Select columns including denormalized teacher_ids for fast access
+    const { data, error } = await supabase.from('classes').select('id, name, type, status, max_students, tuition_per_session, schedule, custom_teacher_allowances, teacher_ids, created_at, updated_at').eq('id', id).single();
 
     if (error) {
       console.error(`[getClassById] Error fetching class ${id}:`, error);
@@ -109,32 +100,50 @@ export async function getClassById(id: string) {
 
     const cls = data as any;
 
-    // Fetch class_teachers relationships to get teacher IDs
-    try {
-      const { data: classTeachersData, error: classTeachersError } = await supabase
-        .from('class_teachers')
-        .select('teacher_id')
-        .eq('class_id', id);
+    // Use denormalized teacher_ids from classes table (much faster than querying class_teachers)
+    let teacherIds: string[] = [];
+    if (cls.teacher_ids) {
+      if (Array.isArray(cls.teacher_ids)) {
+        teacherIds = cls.teacher_ids.filter(Boolean);
+      } else if (typeof cls.teacher_ids === 'string') {
+        // Handle JSONB string format
+        try {
+          const parsed = JSON.parse(cls.teacher_ids);
+          teacherIds = Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+        } catch {
+          teacherIds = [];
+        }
+      }
+    }
+    cls.teacher_ids = teacherIds;
 
-      if (classTeachersError) {
-        console.error(`[getClassById] Error fetching class_teachers for class ${id}:`, classTeachersError);
-        cls.teacher_ids = [];
-      } else if (classTeachersData && Array.isArray(classTeachersData)) {
-        cls.teacher_ids = classTeachersData.map((ct: any) => ct.teacher_id).filter(Boolean);
-      } else {
-        cls.teacher_ids = [];
+    // If includeTeachers is true, fetch teacher details
+    if (options.includeTeachers && cls.teacher_ids.length > 0) {
+      try {
+        const { data: teachersData, error: teachersError } = await supabase
+          .from('teachers')
+          .select('id, full_name, email, phone, roles')
+          .in('id', cls.teacher_ids);
+
+        if (teachersError) {
+          console.error(`[getClassById] Error fetching teachers for class ${id}:`, teachersError);
+          cls.teachers = [];
+        } else {
+          cls.teachers = (teachersData || []).map((t: any) => ({
+            id: t.id,
+            fullName: t.full_name,
+            email: t.email,
+            phone: t.phone,
+            roles: t.roles || [],
+          }));
+        }
+      } catch (err: any) {
+        console.error(`[getClassById] Exception fetching teachers for class ${id}:`, err);
+        cls.teachers = [];
       }
-      
-      // Ensure teacher_ids is always an array
-      if (!Array.isArray(cls.teacher_ids)) {
-        cls.teacher_ids = [];
-      }
-    } catch (err: any) {
-      console.error(`[getClassById] Exception fetching class_teachers for class ${id}:`, err);
-      cls.teacher_ids = [];
     }
 
-    return cls as Class;
+    return cls as Class & { teachers?: Array<{ id: string; fullName: string; email?: string; phone?: string; roles?: string[] }> };
   } catch (err: any) {
     console.error(`[getClassById] Exception fetching class ${id}:`, err);
     throw err;

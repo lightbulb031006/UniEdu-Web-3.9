@@ -70,5 +70,5 @@ MIT
 
 ---
 
-**Version:** 4.0.0  
+**Version:** 3.9.5  
 **Last Updated:** 2025-01-XX

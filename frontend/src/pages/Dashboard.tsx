@@ -6,6 +6,7 @@ import { fetchTeachers } from '../services/teachersService';
 import { useAuthStore } from '../store/authStore';
 import { formatCurrencyVND, formatNumber, formatMonthKey } from '../utils/formatters';
 import { DualLineChart } from '../components/DualLineChart';
+import { DashboardAlert } from '../components/DashboardAlert';
 
 /**
  * Dashboard Page Component
@@ -378,7 +379,10 @@ function Dashboard() {
     return data?.alerts || {
       studentsNeedRenewal: [],
       pendingStaffPayouts: [],
-      classesWithoutTeacher: [],
+      classesWithoutSurvey: {
+        maxTestNumber: 0,
+        classes: [],
+      },
       financeRequests: {
         loans: [],
         refunds: [],
@@ -1190,111 +1194,27 @@ function Dashboard() {
               </div>
             </div>
 
-            {/* Classes Without Teacher */}
-            <div
-              className="alert-widget"
-              data-widget="classes"
-              style={{
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius)',
-                overflow: 'hidden',
-                display: 'flex',
-                flexDirection: 'column',
-                background: 'var(--bg)',
-                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-                minWidth: 0,
-              }}
-            >
-              <div
-                className="alert-header"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  padding: 'var(--spacing-2) var(--spacing-3)',
-                  background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.05) 100%)',
-                  borderBottom: '2px solid rgba(239, 68, 68, 0.3)',
-                  gap: 'var(--spacing-2)',
-                  minHeight: '48px',
-                  flexShrink: 0,
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: '28px',
-                    height: '28px',
-                    borderRadius: 'var(--radius)',
-                    background: 'rgba(239, 68, 68, 0.2)',
-                    flexShrink: 0,
-                  }}
-                >
+            {/* Classes Without Survey */}
+            {alerts.classesWithoutSurvey && alerts.classesWithoutSurvey.maxTestNumber > 0 && (
+              <DashboardAlert
+                title={`Lớp chưa báo cáo lần ${alerts.classesWithoutSurvey.maxTestNumber}`}
+                count={alerts.classesWithoutSurvey.classes?.length || 0}
+                icon={
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: '#dc2626' }}>
                     <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
                     <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
                   </svg>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, minWidth: 0 }}>
-                  <span style={{ fontWeight: '600', fontSize: '12px', color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    Lớp chưa có giáo viên
-                  </span>
-                  <span
-                    className="badge badge-danger"
-                    style={{
-                      fontSize: '9px',
-                      padding: '1px 5px',
-                      borderRadius: 'var(--radius-full)',
-                      width: 'fit-content',
-                      background: 'rgba(239, 68, 68, 0.2)',
-                      color: '#991b1b',
-                    }}
-                  >
-                    {alerts.classesWithoutTeacher?.length || 0} mục
-                  </span>
-                </div>
-              </div>
-              <div className="alert-body" style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)', minHeight: 0, maxHeight: '200px' }}>
-                <ul className="alert-list" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                  {alerts.classesWithoutTeacher && alerts.classesWithoutTeacher.length > 0 ? (
-                    alerts.classesWithoutTeacher.map((cls: any) => (
-                      <li
-                        key={cls.id}
-                        style={{
-                          padding: 'var(--spacing-2)',
-                          borderBottom: '1px solid var(--border)',
-                          transition: 'background 0.2s ease',
-                        }}
-                      >
-                        <button
-                          className="alert-link"
-                          onClick={() => navigate(`/classes/${cls.id}`)}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: 'var(--primary)',
-                            cursor: 'pointer',
-                            fontWeight: '500',
-                            textAlign: 'left',
-                            padding: 0,
-                            margin: 0,
-                            fontSize: '12px',
-                            lineHeight: '1.4',
-                            width: '100%',
-                          }}
-                        >
-                          {cls.name}
-                        </button>
-                      </li>
-                    ))
-                  ) : (
-                    <li className="text-muted" style={{ padding: 'var(--spacing-2)', textAlign: 'center', fontSize: '12px' }}>
-                      Không có lớp nào
-                    </li>
-                  )}
-                </ul>
-              </div>
-            </div>
+                }
+                iconColor="#dc2626"
+                iconBg="rgba(239, 68, 68, 0.2)"
+                headerBg="linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.05) 100%)"
+                borderColor="rgba(239, 68, 68, 0.3)"
+                badgeBg="rgba(239, 68, 68, 0.2)"
+                badgeColor="#991b1b"
+                items={alerts.classesWithoutSurvey.classes || []}
+                emptyMessage="Tất cả các lớp đã có báo cáo"
+              />
+            )}
 
             {/* Finance Requests */}
             <div

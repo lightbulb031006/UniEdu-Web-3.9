@@ -15,6 +15,7 @@ import { CurrencyInput } from '../components/CurrencyInput';
 import AttendanceIcon from '../components/AttendanceIcon';
 import { useAttendance } from '../hooks/useAttendance';
 import { toast } from '../utils/toast';
+import SurveyTab from '../components/SurveyTab';
 
 /**
  * Class Detail Page Component
@@ -38,6 +39,9 @@ function ClassDetail() {
   // Collapsible sections state
   const [studentsExpanded, setStudentsExpanded] = useState(true);
   const [sessionsExpanded, setSessionsExpanded] = useState(true);
+  
+  // Tab state for Sessions/Surveys section
+  const [activeTab, setActiveTab] = useState<'sessions' | 'surveys'>('sessions');
 
   // Modal states
   const [addStudentModalOpen, setAddStudentModalOpen] = useState(false);
@@ -58,7 +62,8 @@ function ClassDetail() {
 
   const fetchClassFn = useCallback(() => {
     if (!id) throw new Error('Class ID is required');
-    return fetchClassById(id);
+    // Include teachers in class data to avoid fetching all teachers
+    return fetchClassById(id, { includeTeachers: true });
   }, [id]);
 
   const { data: classData, isLoading, error, refetch: refetchClass } = useDataLoading(fetchClassFn, [id], {
@@ -89,11 +94,22 @@ function ClassDetail() {
     refetchSessions();
   }, [refetchClass, refetchStudents, refetchSessions]);
 
-  // Fetch teachers to get teacher names
-  const { data: teachersData } = useDataLoading(() => fetchTeachers(), [], {
-    cacheKey: 'teachers-for-class-detail',
-    staleTime: 5 * 60 * 1000,
-  });
+  // Fetch all teachers only when needed (for EditTeacherModal) - lazy loading
+  const [allTeachers, setAllTeachers] = useState<any[]>([]);
+  const [isLoadingAllTeachers, setIsLoadingAllTeachers] = useState(false);
+
+  const loadAllTeachers = useCallback(async () => {
+    if (allTeachers.length > 0) return; // Already loaded
+    setIsLoadingAllTeachers(true);
+    try {
+      const teachers = await fetchTeachers();
+      setAllTeachers(teachers);
+    } catch (error) {
+      console.error('Failed to load all teachers:', error);
+    } finally {
+      setIsLoadingAllTeachers(false);
+    }
+  }, [allTeachers.length]);
 
   // Fetch categories for type dropdown
   const { data: categoriesData } = useDataLoading(
@@ -111,38 +127,54 @@ function ClassDetail() {
     staleTime: 5 * 60 * 1000,
   });
 
-
-  const teachers = Array.isArray(teachersData) ? teachersData : [];
   const students = Array.isArray(studentsData) ? studentsData : [];
   const sessions = Array.isArray(sessionsData) ? sessionsData : [];
   const categories = Array.isArray(categoriesData) ? categoriesData : [];
 
-  // Calculate available teachers (teachers not already assigned to this class)
+  // Get class teachers from classData (included in API response via includeTeachers option)
+  // This avoids fetching all teachers just to filter
+  const classTeachers = useMemo(() => {
+    if (!classData) {
+      console.log('[ClassDetail] No classData, returning empty teachers array');
+      return [];
+    }
+    // Use teachers from classData if available (from includeTeachers option)
+    if ((classData as any).teachers && Array.isArray((classData as any).teachers)) {
+      console.log('[ClassDetail] Found teachers in classData:', (classData as any).teachers.length);
+      return (classData as any).teachers;
+    }
+    // Fallback: if teachers not included, return empty array
+    console.warn('[ClassDetail] No teachers found in classData. classData keys:', Object.keys(classData));
+    return [];
+  }, [classData]);
+
+  // Calculate available teachers (for EditTeacherModal) - only when allTeachers is loaded
   const availableTeachers = useMemo(() => {
-    if (!classData) return teachers;
+    if (allTeachers.length === 0) return [];
+    if (!classData) return allTeachers;
     const currentTeacherIds = new Set(classData.teacherIds || (classData.teacherId ? [classData.teacherId] : []));
-    return teachers.filter((t) => {
+    return allTeachers.filter((t) => {
       const roles = Array.isArray(t.roles) ? t.roles : [];
       return (roles.includes('teacher') || roles.length === 0) && !currentTeacherIds.has(t.id);
     });
-  }, [teachers, classData]);
+  }, [allTeachers, classData]);
 
   // Permission checks
   const isAdmin = hasRole('admin');
   const canEdit = isAdmin;
-  const canManage = isAdmin || hasRole('accountant') || userHasStaffRole('cskh_sale', currentUser, teachers);
+  const canManage = isAdmin || hasRole('accountant') || userHasStaffRole('cskh_sale', currentUser, classTeachers);
   const canManageStudents = canManage;
   const canManageTeacherList = canManage;
   const showClassFinancialDetails = isAdmin;
   
   // Payment status management permissions
-  const userStaffRoles = getUserStaffRoles(currentUser, teachers);
-  const hasCskhPrivileges = userHasStaffRole('cskh_sale', currentUser, teachers);
+  const userStaffRoles = getUserStaffRoles(currentUser, classTeachers);
+  const hasCskhPrivileges = userHasStaffRole('cskh_sale', currentUser, classTeachers);
   const canManagePaymentStatus = isAdmin || hasRole('accountant') || hasCskhPrivileges;
   
   // Session management permissions
   // Teacher role hoặc staff role 'teacher' đều có thể tạo/chỉnh sửa session
-  const isTutor = currentUser?.role === 'teacher' || userHasStaffRole('teacher', currentUser, teachers);
+  const isTutor = currentUser?.role === 'teacher' || userHasStaffRole('teacher', currentUser, classTeachers);
   const canShowDelete = canManage && !isTutor;
   const canSelectSessions = canManage || hasCskhPrivileges;
   const canBulkUpdateStatus = isAdmin || hasRole('accountant') || hasCskhPrivileges;
@@ -206,8 +238,7 @@ function ClassDetail() {
   }, [sessions, selectedMonth]);
 
   // Get teacher names
-  const teacherIds = classData?.teacherIds || (classData?.teacherId ? [classData.teacherId] : []);
-  const classTeachers = teachers.filter((t) => teacherIds.includes(t.id));
+  // classTeachers is now computed from classData.teachers (included in API response)
 
   // Get enrolled students with remaining sessions
   const enrolledStudents = useMemo(() => {
@@ -592,7 +623,7 @@ function ClassDetail() {
                       }
                     }}
                   >
-                    <span className={teacherNameClass} style={{ fontWeight: '500' }}>{teacher.fullName || teacher.id}</span>
+                    <span className={teacherNameClass} style={{ fontWeight: '500' }}>{teacher.fullName || teacher.full_name || teacher.id}</span>
                     {showClassFinancialDetails && (
                       <>
                         <span className="teacher-col-allowance" style={{ fontWeight: '500', textAlign: 'left' }}>
@@ -1129,7 +1160,7 @@ function ClassDetail() {
                 <path d="M8 11h8" />
                 <path d="M8 15h4" />
               </svg>
-              Lịch sử buổi học
+              Lịch sử & Khảo sát
             </h3>
             <span className="toggle-icon" id="sessions-toggle-icon" style={{ fontSize: '1.25rem', transition: 'transform 0.2s ease', transform: sessionsExpanded ? 'rotate(0deg)' : 'rotate(-90deg)' }}>
               ▼
@@ -1148,6 +1179,54 @@ function ClassDetail() {
               background: 'var(--surface)',
             }}
           >
+            {/* Tabs */}
+            <div
+              style={{
+                display: 'flex',
+                gap: 'var(--spacing-2)',
+                marginBottom: 'var(--spacing-4)',
+                borderBottom: '1px solid var(--border)',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setActiveTab('sessions')}
+                style={{
+                  padding: 'var(--spacing-2) var(--spacing-4)',
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: activeTab === 'sessions' ? '2px solid var(--primary)' : '2px solid transparent',
+                  color: activeTab === 'sessions' ? 'var(--primary)' : 'var(--muted)',
+                  fontWeight: activeTab === 'sessions' ? '600' : '500',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  fontSize: 'var(--font-size-sm)',
+                }}
+              >
+                Lịch sử buổi học
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('surveys')}
+                style={{
+                  padding: 'var(--spacing-2) var(--spacing-4)',
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: activeTab === 'surveys' ? '2px solid var(--primary)' : '2px solid transparent',
+                  color: activeTab === 'surveys' ? 'var(--primary)' : 'var(--muted)',
+                  fontWeight: activeTab === 'surveys' ? '600' : '500',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  fontSize: 'var(--font-size-sm)',
+                }}
+              >
+                Khảo sát
+              </button>
+            </div>
+
+            {/* Tab Content */}
+            {activeTab === 'sessions' ? (
+              <div>
             {/* Session Toolbar with Month Navigation */}
             <div className="session-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-4)', flexWrap: 'wrap', gap: 'var(--spacing-2)' }}>
               <div style={{ fontSize: '0.875rem', color: 'var(--muted)' }}>Tổng số buổi: {monthSessions.length}</div>
@@ -1455,7 +1534,7 @@ function ClassDetail() {
                     {monthSessions.map((session) => {
                       // Get teacher - check both camelCase and snake_case
                       const teacherId = (session as any).teacherId || session.teacher_id;
-                      const teacher = teacherId ? teachers.find((t) => t.id === teacherId) : null;
+                      const teacher = teacherId ? classTeachers.find((t) => t.id === teacherId) : null;
                       
                       // Get coefficient - handle both 0 and undefined/null
                       const coefficient = (session as any).coefficient !== undefined && (session as any).coefficient !== null 
@@ -1510,7 +1589,7 @@ function ClassDetail() {
                         deposit: 'badge-warning',
                       };
                       // Check payment status management permission in this scope
-                      const canManagePaymentStatusLocal = isAdmin || hasRole('accountant') || userHasStaffRole('cskh_sale', currentUser, teachers);
+                      const canManagePaymentStatusLocal = isAdmin || hasRole('accountant') || userHasStaffRole('cskh_sale', currentUser, classTeachers);
                       const sessionDate = (session as any).date || session.date || '';
                       const sessionStartTime = (session as any).startTime || session.start_time;
                       const sessionEndTime = (session as any).endTime || session.end_time;
@@ -1611,7 +1690,7 @@ function ClassDetail() {
                                       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                                       <circle cx="12" cy="7" r="4" />
                                     </svg>
-                                    <span>{teacher.fullName}</span>
+                                    <span>{teacher.fullName || teacher.full_name}</span>
                                   </>
                                 ) : (
                                   <span style={{ color: 'var(--muted)' }}>-</span>
@@ -1798,6 +1877,12 @@ function ClassDetail() {
                 )}
               </div>
             )}
+              </div>
+            ) : (
+              <div>
+                {id && <SurveyTab classId={id} canManage={canManage} />}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1851,7 +1936,7 @@ function ClassDetail() {
           isOpen={editClassModalOpen}
           onClose={() => setEditClassModalOpen(false)}
           classData={classData}
-          teachers={teachers}
+          teachers={allTeachers}
           classTeachers={classTeachers}
           categories={categories}
           onSave={async () => {
@@ -1879,10 +1964,20 @@ function ClassDetail() {
             classId={id}
             classData={classData}
             teachers={classTeachers}
-            allTeachers={teachers}
+            allTeachers={allTeachers}
+            onLoadAllTeachers={loadAllTeachers}
+            isLoadingAllTeachers={isLoadingAllTeachers}
             onSuccess={async () => {
               try {
+                // Invalidate cache before refetching to ensure fresh data
+                if (id) {
+                  const cacheKey = `class-${id}`;
+                  sessionStorage.removeItem(cacheKey);
+                  localStorage.removeItem(cacheKey);
+                }
                 await refetchClass();
+                // Cache invalidation is handled in handleAddTeacher/handleRemoveTeacher
+                // This callback is called after those functions complete
               } catch (error: any) {
                 console.error('Failed to refetch class after teacher update:', error);
                 toast.error('Đã cập nhật gia sư nhưng không thể tải lại thông tin lớp học');
@@ -2360,7 +2455,10 @@ function TeacherSelector({
       return teachers.slice(0, 6);
     }
     const normalized = searchQuery.trim().toLowerCase();
-    return teachers.filter((t) => t.fullName.toLowerCase().includes(normalized));
+    return teachers.filter((t) => {
+      const name = (t.fullName || t.full_name || '').toLowerCase();
+      return name.includes(normalized);
+    });
   }, [teachers, searchQuery]);
 
   useEffect(() => {
@@ -2399,7 +2497,7 @@ function TeacherSelector({
         }}
       >
         <span style={{ color: selectedTeacher ? 'var(--text)' : 'var(--muted)' }}>
-          {selectedTeacher ? selectedTeacher.fullName : placeholder}
+          {selectedTeacher ? (selectedTeacher.fullName || selectedTeacher.full_name) : placeholder}
         </span>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--muted)' }}>
           <path d="M6 9l6 6 6-6" />
@@ -2468,7 +2566,7 @@ function TeacherSelector({
                   }
                 }}
               >
-                {teacher.fullName}
+                {teacher.fullName || teacher.full_name}
               </button>
             ))
           ) : (
@@ -3781,6 +3879,8 @@ function EditTeacherModal({
   classData,
   teachers,
   allTeachers,
+  onLoadAllTeachers,
+  isLoadingAllTeachers,
   onSuccess,
   onClose,
 }: {
@@ -3788,6 +3888,8 @@ function EditTeacherModal({
   classData: any;
   teachers: any[];
   allTeachers: any[];
+  onLoadAllTeachers?: () => void;
+  isLoadingAllTeachers?: boolean;
   onSuccess: () => void;
   onClose: () => void;
 }) {
@@ -3797,7 +3899,15 @@ function EditTeacherModal({
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Load all teachers when modal opens (lazy loading)
+  useEffect(() => {
+    if (onLoadAllTeachers && allTeachers.length === 0) {
+      onLoadAllTeachers();
+    }
+  }, [onLoadAllTeachers, allTeachers.length]);
+
   const availableTeachers = useMemo(() => {
+    if (allTeachers.length === 0) return [];
     return allTeachers.filter((t) => {
       const roles = Array.isArray(t.roles) ? t.roles : [];
       return (roles.includes('teacher') || roles.length === 0) && !currentTeacherIds.has(t.id);
@@ -3807,7 +3917,10 @@ function EditTeacherModal({
   const filteredTeachers = useMemo(() => {
     if (!searchQuery.trim()) return availableTeachers.slice(0, 6);
     const normalized = searchQuery.trim().toLowerCase();
-    return availableTeachers.filter((t) => t.fullName.toLowerCase().includes(normalized));
+    return availableTeachers.filter((t) => {
+      const name = (t.fullName || t.full_name || '').toLowerCase();
+      return name.includes(normalized);
+    });
   }, [availableTeachers, searchQuery]);
 
   const syncTeachers = async (updatedIds: Set<string>) => {
@@ -3857,6 +3970,28 @@ function EditTeacherModal({
       const updateData = await syncTeachers(newIds);
       await updateClass(classId, updateData);
       toast.success('Đã gỡ gia sư khỏi lớp');
+      
+      // Invalidate class cache to ensure fresh data on refetch
+      const cacheKey = `class-${classId}`;
+      sessionStorage.removeItem(cacheKey);
+      localStorage.removeItem(cacheKey);
+      
+      // Invalidate staff detail cache for the teacher that was just removed
+      // This ensures StaffDetail page updates immediately
+      for (let year = 2020; year <= 2030; year++) {
+        for (let month = 1; month <= 12; month++) {
+          const monthStr = `${year}-${String(month).padStart(2, '0')}`;
+          const cacheKey = `staff-detail-data-${teacherId}-${monthStr}`;
+          localStorage.removeItem(cacheKey);
+          sessionStorage.removeItem(cacheKey);
+        }
+      }
+      
+      // Dispatch event to trigger refetch in StaffDetail if it's open
+      window.dispatchEvent(new CustomEvent('teacher-class-updated', {
+        detail: { teacherId, classId, action: 'removed' }
+      }));
+      
       onSuccess();
     } catch (error: any) {
       toast.error('Không thể gỡ gia sư khỏi lớp: ' + (error.response?.data?.error || error.message));
@@ -3876,6 +4011,28 @@ function EditTeacherModal({
       await updateClass(classId, updateData);
       setSearchQuery('');
       toast.success('Đã thêm gia sư vào lớp');
+      
+      // Invalidate class cache to ensure fresh data on refetch
+      const cacheKey = `class-${classId}`;
+      sessionStorage.removeItem(cacheKey);
+      localStorage.removeItem(cacheKey);
+      
+      // Invalidate staff detail cache for the teacher that was just added
+      // This ensures StaffDetail page updates immediately
+      for (let year = 2020; year <= 2030; year++) {
+        for (let month = 1; month <= 12; month++) {
+          const monthStr = `${year}-${String(month).padStart(2, '0')}`;
+          const cacheKey = `staff-detail-data-${teacherId}-${monthStr}`;
+          localStorage.removeItem(cacheKey);
+          sessionStorage.removeItem(cacheKey);
+        }
+      }
+      
+      // Dispatch event to trigger refetch in StaffDetail if it's open
+      window.dispatchEvent(new CustomEvent('teacher-class-updated', {
+        detail: { teacherId, classId, action: 'added' }
+      }));
+      
       onSuccess();
     } catch (error: any) {
       toast.error('Không thể thêm gia sư vào lớp: ' + (error.response?.data?.error || error.message));
@@ -3906,7 +4063,7 @@ function EditTeacherModal({
                   borderRadius: 'var(--radius)',
                 }}
               >
-                <span>{teacher.fullName}</span>
+                <span>{teacher.fullName || teacher.full_name}</span>
                 <button
                   className="btn btn-sm btn-danger"
                   onClick={() => handleRemoveTeacher(teacher.id)}
@@ -3978,7 +4135,7 @@ function EditTeacherModal({
                     e.currentTarget.style.background = 'none';
                   }}
                 >
-                  {teacher.fullName}
+                  {teacher.fullName || teacher.full_name}
                 </button>
               ))}
             </div>
@@ -4204,11 +4361,15 @@ function EditClassModal({
 
   // Use classTeachers prop if available, otherwise calculate from classData and all teachers
   const currentClassTeachers = useMemo(() => {
-    // Prefer the prop if it's provided (it's calculated from all teachers in parent component)
+    // Prefer the prop if it's provided (it's calculated from classData.teachers in parent component)
     if (classTeachers && Array.isArray(classTeachers)) {
       return classTeachers;
     }
-    // Fallback: calculate from classData and teachers prop
+    // Fallback: use teachers from classData if available
+    if (classData && (classData as any).teachers && Array.isArray((classData as any).teachers)) {
+      return (classData as any).teachers;
+    }
+    // Last fallback: calculate from classData and teachers prop (if teachers prop is provided)
     if (!classData || !teachers || !Array.isArray(teachers)) return [];
     const teacherIds = classData.teacherIds || (classData.teacherId ? [classData.teacherId] : []);
     if (!Array.isArray(teacherIds) || teacherIds.length === 0) return [];
@@ -5025,7 +5186,7 @@ function TeacherAllowanceModal({
     <form onSubmit={handleSubmit}>
       <div className="form-group" style={{ marginBottom: 'var(--spacing-4)' }}>
         <label htmlFor="salaryInput" className="form-label">
-          Trợ cấp / hệ số (VND) - {teacher.fullName}
+          Trợ cấp / hệ số (VND) - {teacher.fullName || teacher.full_name}
         </label>
         <CurrencyInput
           id="salaryInput"

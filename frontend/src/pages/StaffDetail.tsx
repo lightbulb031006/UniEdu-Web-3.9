@@ -213,6 +213,29 @@ function StaffDetail() {
     
     return () => clearTimeout(timeoutId);
   }, [id, staff, isLoading, staffDetailData, refetchStaffDetailData]);
+
+  // Listen for teacher-class-updated events to refetch immediately
+  useEffect(() => {
+    if (!id || !staff) return;
+    
+    const handleTeacherClassUpdated = (event: CustomEvent) => {
+      const { teacherId, action } = event.detail || {};
+      // If this staff is the affected teacher, refetch immediately
+      if (teacherId === id) {
+        // Clear cache for current month
+        const cacheKey = `staff-detail-data-${id}-${debouncedMonth}`;
+        localStorage.removeItem(cacheKey);
+        sessionStorage.removeItem(cacheKey);
+        // Refetch immediately
+        refetchStaffDetailData();
+      }
+    };
+    
+    window.addEventListener('teacher-class-updated', handleTeacherClassUpdated as EventListener);
+    return () => {
+      window.removeEventListener('teacher-class-updated', handleTeacherClassUpdated as EventListener);
+    };
+  }, [id, staff, debouncedMonth, refetchStaffDetailData]);
   
   // Prefetch next month detail data
   useEffect(() => {
@@ -1329,7 +1352,7 @@ function StaffDetail() {
                     <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
                     <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
                   </svg>
-                  Các lớp đang dạy
+                  Các lớp
                 </h3>
               </div>
               <div className="staff-detail-section-content">
@@ -1357,15 +1380,16 @@ function StaffDetail() {
                             data-class-id={stat.class.id}
                             data-is-active={stat.isActive}
                             onClick={() => {
-                              if (stat.isActive) {
+                              // Allow admin to click on stopped classes, or allow clicking on active classes
+                              if (isAdmin || stat.isActive) {
                                 navigate(`/classes/${stat.class.id}`);
                               }
                             }}
                             style={{
-                              cursor: stat.isActive ? 'pointer' : 'not-allowed',
+                              cursor: (isAdmin || stat.isActive) ? 'pointer' : 'not-allowed',
                               transition: 'all 0.2s ease',
                               opacity: stat.isActive ? 1 : 0.7,
-                              pointerEvents: stat.isActive ? 'auto' : 'none',
+                              pointerEvents: (isAdmin || stat.isActive) ? 'auto' : 'none',
                             }}
                           >
                             <td style={{ padding: 'var(--spacing-3)' }}>

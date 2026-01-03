@@ -29,7 +29,7 @@ export interface ClassFilters {
 }
 
 // Normalize class data
-function normalizeClass(cls: any): Class {
+function normalizeClass(cls: any): Class & { teachers?: Array<{ id: string; fullName: string; email?: string; phone?: string; roles?: string[] }> } {
   if (!cls) {
     throw new Error('Cannot normalize null or undefined class data');
   }
@@ -44,7 +44,7 @@ function normalizeClass(cls: any): Class {
     teacherIds = [cls.teacher_id];
   }
   
-  return {
+  const normalized: Class & { teachers?: Array<{ id: string; fullName: string; email?: string; phone?: string; roles?: string[] }> } = {
     id: cls.id,
     name: cls.name,
     type: cls.type,
@@ -60,6 +60,13 @@ function normalizeClass(cls: any): Class {
     scaleAmount: cls.scale_amount || cls.scaleAmount,
     customTeacherAllowances: cls.custom_teacher_allowances || cls.customTeacherAllowances || {},
   };
+  
+  // Preserve teachers array if it exists (from includeTeachers option)
+  if (cls.teachers && Array.isArray(cls.teachers)) {
+    normalized.teachers = cls.teachers;
+  }
+  
+  return normalized;
 }
 
 export async function fetchClasses(filters?: ClassFilters): Promise<Class[]> {
@@ -71,9 +78,10 @@ export async function fetchClasses(filters?: ClassFilters): Promise<Class[]> {
   return data.map(normalizeClass);
 }
 
-export async function fetchClassById(id: string) {
+export async function fetchClassById(id: string, options: { includeTeachers?: boolean } = {}) {
   try {
-    const response = await api.get<any>(`/classes/${id}`);
+    const params = options.includeTeachers ? { include: 'teachers' } : {};
+    const response = await api.get<any>(`/classes/${id}`, { params });
     if (!response.data) {
       throw new Error('Class not found');
     }

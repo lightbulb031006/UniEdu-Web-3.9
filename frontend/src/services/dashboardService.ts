@@ -61,10 +61,17 @@ export interface DashboardData {
       totalAllowance: number;
       detail: string;
     }>;
-    classesWithoutTeacher: Array<{
-      id: string;
-      name: string;
-    }>;
+    classesWithoutSurvey: {
+      maxTestNumber: number;
+      classes: Array<{
+        id: string;
+        name: string;
+        teachers: Array<{
+          id: string;
+          fullName: string;
+        }>;
+      }>;
+    };
     financeRequests: {
       loans: Array<{
         name: string;

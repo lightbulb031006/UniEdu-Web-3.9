@@ -195,6 +195,7 @@ export async function getDashboardData(params: DashboardParams) {
     classTeachersResult,
     bonusesResult,
     lessonOutputsResult,
+    surveysResult,
   ] = await Promise.all([
     supabase.from('classes').select('*'),
     supabase.from('students').select('*'),
@@ -207,6 +208,7 @@ export async function getDashboardData(params: DashboardParams) {
     supabase.from('class_teachers').select('*'),
     supabase.from('bonuses').select('*'),
     supabase.from('lesson_outputs').select('*'),
+    supabase.from('class_surveys').select('*'),
   ]);
 
   const classes = classesResult.data || [];
@@ -220,6 +222,7 @@ export async function getDashboardData(params: DashboardParams) {
   const classTeachers = classTeachersResult.data || [];
   const bonuses = bonusesResult.data || [];
   const lessonOutputs = lessonOutputsResult.data || [];
+  const surveys = surveysResult.data || [];
 
   // Calculate summary
   // Doanh thu: Tổng số tiền học sinh nạp vào tài khoản trong tháng (không tính tiền ứng)
@@ -479,24 +482,52 @@ export async function getDashboardData(params: DashboardParams) {
     }))
     .sort((a, b) => b.totalAllowance - a.totalAllowance);
 
-  // 3. Classes without teacher
-  const classTeacherMap = new Map<string, string[]>();
-  classTeachers.forEach((ct: any) => {
-    if (!classTeacherMap.has(ct.class_id)) {
-      classTeacherMap.set(ct.class_id, []);
+  // 3. Classes without survey (replacing classes without teacher)
+  // Calculate max test_number from all surveys
+  let maxTestNumber = 0;
+  if (surveys.length > 0) {
+    maxTestNumber = Math.max(...surveys.map((s: any) => Number(s.test_number) || 0));
+  }
+
+  // Group surveys by class_id and find max test_number per class
+  const classSurveyMap = new Map<string, number>();
+  surveys.forEach((s: any) => {
+    const classId = s.class_id;
+    const testNumber = Number(s.test_number) || 0;
+    const currentMax = classSurveyMap.get(classId) || 0;
+    if (testNumber > currentMax) {
+      classSurveyMap.set(classId, testNumber);
     }
-    classTeacherMap.get(ct.class_id)!.push(ct.teacher_id);
   });
 
-  const classesWithoutTeacher = classes
+  // Find classes that don't have survey with max test_number
+  // Only include classes with status = 'running' (active classes)
+  const classesWithoutSurvey = classes
     .filter((cls: any) => {
-      const teacherIds = classTeacherMap.get(cls.id) || [];
-      return teacherIds.length === 0;
+      // Only check active classes
+      if (cls.status !== 'running') return false;
+      const classMaxTestNumber = classSurveyMap.get(cls.id) || 0;
+      return classMaxTestNumber < maxTestNumber;
     })
-    .map((cls: any) => ({
-      id: cls.id,
-      name: cls.name || cls.id,
-    }));
+    .map((cls: any) => {
+      // Get teachers for this class
+      const teacherIds = (classTeachers || [])
+        .filter((ct: any) => ct.class_id === cls.id)
+        .map((ct: any) => ct.teacher_id);
+      
+      const classTeachersList = teachers
+        .filter((t: any) => teacherIds.includes(t.id))
+        .map((t: any) => ({
+          id: t.id,
+          fullName: t.full_name || t.fullName || '',
+        }));
+
+      return {
+        id: cls.id,
+        name: cls.name || cls.id,
+        teachers: classTeachersList,
+      };
+    });
 
   // 4. Finance requests (loans and refunds)
   const loanRequests = students
@@ -596,7 +627,10 @@ export async function getDashboardData(params: DashboardParams) {
     alerts: {
       studentsNeedRenewal,
       pendingStaffPayouts,
-      classesWithoutTeacher,
+      classesWithoutSurvey: {
+        maxTestNumber,
+        classes: classesWithoutSurvey,
+      },
       financeRequests: {
         loans: loanRequests,
         refunds: refundRequests,

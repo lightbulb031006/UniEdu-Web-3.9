@@ -1259,23 +1259,135 @@ export async function getStaffDetailData(staffId: string, month: string) {
   const lastDayOfMonth = new Date(year, monthNum, 0).getDate();
   const monthEndStr = `${year}-${String(monthNum).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`;
 
-  // Parallel fetch: Get classes and check cache at the same time
-  // This reduces total query time
-  const [classTeachersResult, cachedStatsCheck] = await Promise.all([
+  // TỐI GIẢN: Chỉ fetch classes liên quan đến teacher này (dùng denormalized columns)
+  // 1. Fetch teacher với denormalized class IDs
+  // 2. Chỉ fetch classes có trong active_class_ids + taught_class_ids
+  // 3. Không cần fetch tất cả classes rồi filter
+  
+  // Step 1: Fetch teacher với denormalized columns (NHANH NHẤT)
+  const { data: teacherData, error: teacherError } = await supabase
+    .from('teachers')
+    .select('id, active_class_ids, taught_class_ids')
+    .eq('id', staffId)
+    .single();
+
+  if (teacherError) {
+    console.error('Failed to fetch teacher:', teacherError);
+  }
+
+  // Step 2: Parse class IDs từ denormalized columns (NHANH - không cần query)
+  const activeClassIds: string[] = [];
+  const taughtClassIds: string[] = [];
+  
+  if (teacherData) {
+    // Parse active_class_ids
+    if (teacherData.active_class_ids) {
+      if (Array.isArray(teacherData.active_class_ids)) {
+        activeClassIds.push(...teacherData.active_class_ids.filter(Boolean));
+      } else if (typeof teacherData.active_class_ids === 'string') {
+        try {
+          const parsed = JSON.parse(teacherData.active_class_ids);
+          if (Array.isArray(parsed)) {
+            activeClassIds.push(...parsed.filter(Boolean));
+          }
+        } catch {
+          // Ignore parse errors
+        }
+      }
+    }
+    
+    // Parse taught_class_ids
+    if (teacherData.taught_class_ids) {
+      if (Array.isArray(teacherData.taught_class_ids)) {
+        taughtClassIds.push(...teacherData.taught_class_ids.filter(Boolean));
+      } else if (typeof teacherData.taught_class_ids === 'string') {
+        try {
+          const parsed = JSON.parse(teacherData.taught_class_ids);
+          if (Array.isArray(parsed)) {
+            taughtClassIds.push(...parsed.filter(Boolean));
+          }
+        } catch {
+          // Ignore parse errors
+        }
+      }
+    }
+  }
+
+  // Step 3: Combine tất cả class IDs cần fetch (chỉ những lớp liên quan)
+  const allRelevantClassIds = new Set<string>();
+  activeClassIds.forEach(id => allRelevantClassIds.add(id));
+  taughtClassIds.forEach(id => allRelevantClassIds.add(id));
+  
+  // Step 4: Fetch CHỈ các classes liên quan (NHANH - không fetch tất cả)
+  // Parallel fetch: classes + sessions + cache
+  const [classesResult, sessionsResult, cachedStatsCheck] = await Promise.all([
+    // Chỉ fetch classes có trong danh sách (NHANH HƠN NHIỀU)
+    allRelevantClassIds.size > 0
+      ? supabase
+          .from('classes')
+          .select('id, name, tuition_per_session, custom_teacher_allowances, status, teacher_ids')
+          .in('id', Array.from(allRelevantClassIds))
+      : Promise.resolve({ data: [], error: null }),
+    // Fetch sessions (chỉ để tính toán thống kê, không dùng để filter classes)
     supabase
-      .from('class_teachers')
-      .select('class_id')
-      .eq('teacher_id', staffId),
-    // Re-check cache in parallel (in case it was updated)
+      .from('sessions')
+      .select('class_id, date, payment_status, teacher_id, coefficient, allowance_amount, student_paid_count')
+      .eq('teacher_id', staffId)
+      .order('date', { ascending: false }),
+    // Re-check cache in parallel
     getStaffMonthlyStats(staffId, month)
   ]);
 
-  const { data: classTeachersData, error: classTeachersError } = classTeachersResult;
-  if (classTeachersError) {
-    console.error('Failed to fetch class_teachers:', classTeachersError);
+  const { data: classesData, error: classesError } = classesResult;
+  if (classesError) {
+    console.error('Failed to fetch classes:', classesError);
   }
 
-  const classIds = (classTeachersData || []).map((ct: any) => ct.class_id);
+  const { data: sessionsData, error: sessionsError } = sessionsResult;
+  if (sessionsError) {
+    console.error('Failed to fetch sessions:', sessionsError);
+  }
+
+  // Step 5: Parse và map classes (đơn giản hơn nhiều)
+  const classesList = ((classesData || []) as any[]).map((cls: any) => {
+    // Parse teacher_ids từ denormalized column
+    let teacherIds: string[] = [];
+    if (cls.teacher_ids) {
+      if (Array.isArray(cls.teacher_ids)) {
+        teacherIds = cls.teacher_ids.filter(Boolean);
+      } else if (typeof cls.teacher_ids === 'string') {
+        try {
+          const parsed = JSON.parse(cls.teacher_ids);
+          teacherIds = Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+        } catch {
+          teacherIds = [];
+        }
+      }
+    }
+    return {
+      ...cls,
+      teacher_ids: teacherIds,
+      teacherIds: teacherIds, // camelCase for compatibility
+    };
+  });
+
+  // Step 6: Đánh dấu status (ĐƠN GIẢN - chỉ check active_class_ids)
+  const teacherClasses = classesList.map((cls: any) => {
+    const isActive = activeClassIds.includes(cls.id);
+    return { ...cls, isActive };
+  });
+
+  // Step 7: Sort - active classes trước
+  teacherClasses.sort((a: any, b: any) => {
+    if (a.isActive && !b.isActive) return -1;
+    if (!a.isActive && b.isActive) return 1;
+    return 0;
+  });
+
+  // Sessions cho tính toán thống kê
+  const sessions = (sessionsData || []).filter((s: any) => s.teacher_id === staffId);
+  
+  const classIds = teacherClasses.map((c: any) => c.id);
   
   // Use the cached stats from parallel fetch if available
   const finalCachedStats = cachedStatsCheck || cachedStats;
@@ -1400,84 +1512,45 @@ export async function getStaffDetailData(staffId: string, month: string) {
     };
   }
 
-  // Parallel fetch: Get classes and sessions at the same time
-  // This reduces total query time significantly (from sequential to parallel)
-  const [classesResult, sessionsResult] = await Promise.all([
-    classIds.length > 0 
-      ? supabase
-          .from('classes')
-          .select('id, name, tuition_per_session, custom_teacher_allowances, status')
-          .in('id', classIds)
-      : Promise.resolve({ data: [] as any[], error: null }),
-    supabase
-      .from('sessions')
-      .select('*')
-      .eq('teacher_id', staffId)
-      .gte('date', previousMonthStartStr)
-      .lte('date', monthEndStr)
-      .order('date', { ascending: false })
-  ]);
-
-  const { data: classes, error: classesError } = classesResult;
-  if (classesError) {
-    console.error('Failed to fetch classes:', classesError);
-  }
-
-  const { data: allSessions, error: sessionsError } = sessionsResult;
-
-  if (sessionsError) {
-    console.error('Failed to fetch sessions:', sessionsError);
-  }
-
-  // Create class map for quick lookup
-  const classMap = new Map<string, any>();
-  (classes || []).forEach((cls: any) => {
-    classMap.set(cls.id, cls);
-  });
-
-  // Calculate teacher class stats
-  const teacherClassStats = (classes || []).map((cls: any) => {
-    const classSessions = (allSessions || []).filter((s: any) => s.class_id === cls.id);
+  // Use classes and sessions already fetched above (giống backup: tính toán từ data đã có)
+  // Giống backup: teacherClassStats = teacherClasses.map(cls => { ... })
+  const teacherClassStats = teacherClasses.map((cls: any) => {
+    // Get sessions for this class (giống backup: const classSessions = sessions.filter(s => s.classId === cls.id))
+    const classSessions = sessions.filter((s: any) => s.class_id === cls.id);
     
-    // Filter sessions in selected month
-    const monthSessionsForClass = classSessions.filter((s: any) => {
-      if (!s.date) return false;
-      const sessionDate = new Date(s.date);
-      return sessionDate >= monthStart && sessionDate <= monthEnd;
+    // Filter sessions in selected month (giống backup: const monthSessions = classSessions.filter(session => (session.date || '').slice(0, 7) === month))
+    const monthSessions = classSessions.filter((session: any) => {
+      if (!session.date) return false;
+      return session.date.slice(0, 7) === month;
     });
 
-    const classTuition = Number(cls.tuition_per_session) || 0;
-    const customAllowances = (cls.custom_teacher_allowances as Record<string, number>) || {};
-    const teacherAllowance = customAllowances[staffId] ?? classTuition;
+    // Get allowance (giống backup: const allowances = cls.customTeacherAllowances || {}; const baseAllowance = allowances[staffId] ?? (cls.tuitionPerSession || 0))
+    const allowances = cls.custom_teacher_allowances || {};
+    const baseAllowance = allowances[staffId] ?? (Number(cls.tuition_per_session) || 0);
 
-    // Calculate totals for month
-    const totalMonth = monthSessionsForClass.reduce((sum: number, s: any) => {
-      return sum + getSessionAllowance(s, teacherAllowance);
+    // Calculate totals for month (giống backup: const totalMonth = monthSessions.reduce((sum, session) => { const allowanceAmount = session.allowanceAmount ?? window.UniData.computeSessionAllowance?.(session) ?? 0; return sum + allowanceAmount; }, 0))
+    const totalMonth = monthSessions.reduce((sum: number, session: any) => {
+      const allowanceAmount = session.allowance_amount ?? getSessionAllowance(session, baseAllowance) ?? 0;
+      return sum + allowanceAmount;
     }, 0);
 
-    const totalPaid = monthSessionsForClass
-      .filter((s: any) => s.payment_status === 'paid')
-      .reduce((sum: number, s: any) => {
-        return sum + getSessionAllowance(s, teacherAllowance);
+    // Calculate total paid (giống backup: const totalPaid = monthSessions.filter(s => (s.paymentStatus || 'unpaid') === 'paid').reduce(...))
+    const totalPaid = monthSessions
+      .filter((s: any) => (s.payment_status || 'unpaid') === 'paid')
+      .reduce((sum: number, session: any) => {
+        const allowanceAmount = session.allowance_amount ?? getSessionAllowance(session, baseAllowance) ?? 0;
+        return sum + allowanceAmount;
       }, 0);
 
-    // Total unpaid: Sessions with payment_status='unpaid' in PREVIOUS MONTH and CURRENT MONTH only
-    // Filter sessions in previous month and current month
-    const unpaidSessionsInTwoMonths = classSessions.filter((s: any) => {
-      if (!s.date || s.payment_status !== 'unpaid') return false;
-      const sessionDate = new Date(s.date);
-      // Include sessions in previous month OR current month
-      return (sessionDate >= previousMonthStart && sessionDate <= previousMonthEnd) ||
-             (sessionDate >= monthStart && sessionDate <= monthEnd);
-    });
-    
-    const totalUnpaid = unpaidSessionsInTwoMonths.reduce((sum: number, s: any) => {
-      return sum + getSessionAllowance(s, teacherAllowance);
-    }, 0);
+    // Calculate total unpaid (giống backup: const totalUnpaid = classSessions.filter(s => (s.paymentStatus || 'unpaid') === 'unpaid').reduce(...))
+    const totalUnpaid = classSessions
+      .filter((s: any) => (s.payment_status || 'unpaid') === 'unpaid')
+      .reduce((sum: number, session: any) => {
+        const allowanceAmount = session.allowance_amount ?? getSessionAllowance(session, baseAllowance) ?? 0;
+        return sum + allowanceAmount;
+      }, 0);
 
-    // Check if teacher is active for this class
-    const isActive = classIds.includes(cls.id);
-
+    // isActive đã được set ở trên khi map classesWithStatus
     return {
       class: {
         id: cls.id,
@@ -1487,8 +1560,8 @@ export async function getStaffDetailData(staffId: string, month: string) {
       totalMonth,
       totalPaid,
       totalUnpaid,
-      monthSessionsCount: monthSessionsForClass.length,
-      isActive,
+      monthSessionsCount: monthSessions.length,
+      isActive: cls.isActive, // Đã được set ở trên
     };
   });
 
@@ -1529,14 +1602,14 @@ export async function getStaffDetailData(staffId: string, month: string) {
     const yearEnd = new Date(currentYear, 11, 31, 23, 59, 59); // December 31st of current year
     
     // Total paid from sessions in current year
-    const totalPaidSessionsInYear = (allSessions || [])
+    const totalPaidSessionsInYear = sessions
       .filter((s: any) => {
         if (!s.date || s.payment_status !== 'paid') return false;
         const sessionDate = new Date(s.date);
         return sessionDate >= yearStart && sessionDate <= yearEnd;
       })
       .reduce((sum: number, s: any) => {
-        const cls = classMap.get(s.class_id);
+        const cls = teacherClasses.find((c: any) => c.id === s.class_id);
         const classTuition = cls ? (Number(cls.tuition_per_session) || 0) : 0;
         const customAllowances = cls ? ((cls.custom_teacher_allowances as Record<string, number>) || {}) : {};
         const teacherAllowance = customAllowances[staffId] ?? classTuition;
@@ -1592,30 +1665,35 @@ export async function getStaffDetailData(staffId: string, month: string) {
   }
 
   // Total deposit all time from sessions
-  const totalDepositAllTime = (allSessions || [])
+  const totalDepositAllTime = sessions
     .filter((s: any) => s.payment_status === 'deposit')
     .reduce((sum: number, s: any) => {
-      const cls = classMap.get(s.class_id);
+      const cls = teacherClasses.find((c: any) => c.id === s.class_id);
       const classTuition = cls ? (Number(cls.tuition_per_session) || 0) : 0;
       const customAllowances = cls ? ((cls.custom_teacher_allowances as Record<string, number>) || {}) : {};
       const teacherAllowance = customAllowances[staffId] ?? classTuition;
       return sum + getSessionAllowance(s, teacherAllowance);
     }, 0);
 
-  // Calculate session statistics
-  const sessions = allSessions || [];
-  const totalAllowance = sessions.reduce((sum: number, s: any) => {
-    const cls = classMap.get(s.class_id);
+  // Calculate session statistics (giống backup: tính từ sessions đã có)
+  // Filter sessions in selected month for statistics
+  const monthSessionsForStats = sessions.filter((s: any) => {
+    if (!s.date) return false;
+    return s.date.slice(0, 7) === month;
+  });
+  
+  const totalAllowance = monthSessionsForStats.reduce((sum: number, s: any) => {
+    const cls = teacherClasses.find((c: any) => c.id === s.class_id);
     const classTuition = cls ? (Number(cls.tuition_per_session) || 0) : 0;
     const customAllowances = cls ? ((cls.custom_teacher_allowances as Record<string, number>) || {}) : {};
     const teacherAllowance = customAllowances[staffId] ?? classTuition;
     return sum + getSessionAllowance(s, teacherAllowance);
   }, 0);
 
-  const paidAllowance = sessions
+  const paidAllowance = monthSessionsForStats
     .filter((s: any) => s.payment_status === 'paid')
     .reduce((sum: number, s: any) => {
-      const cls = classMap.get(s.class_id);
+      const cls = teacherClasses.find((c: any) => c.id === s.class_id);
       const classTuition = cls ? (Number(cls.tuition_per_session) || 0) : 0;
       const customAllowances = cls ? ((cls.custom_teacher_allowances as Record<string, number>) || {}) : {};
       const teacherAllowance = customAllowances[staffId] ?? classTuition;
@@ -1632,9 +1710,9 @@ export async function getStaffDetailData(staffId: string, month: string) {
       totalDepositAllTime,
     },
     sessionStats: {
-      total: sessions.length,
-      paid: sessions.filter((s: any) => s.payment_status === 'paid').length,
-      unpaid: sessions.filter((s: any) => s.payment_status === 'unpaid').length,
+      total: monthSessionsForStats.length,
+      paid: monthSessionsForStats.filter((s: any) => s.payment_status === 'paid').length,
+      unpaid: monthSessionsForStats.filter((s: any) => s.payment_status === 'unpaid').length,
       totalAllowance,
       paidAllowance,
     },

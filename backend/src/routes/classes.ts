@@ -36,7 +36,9 @@ router.get('/', authenticate, async (req, res, next) => {
 
 router.get('/:id', authenticate, async (req, res, next) => {
   try {
-    const cls = await getClassById(req.params.id);
+    // Check if includeTeachers query param is present
+    const includeTeachers = req.query.include === 'teachers' || req.query.includeTeachers === 'true';
+    const cls = await getClassById(req.params.id, { includeTeachers });
     if (!cls) {
       return res.status(404).json({ error: 'Class not found' });
     }

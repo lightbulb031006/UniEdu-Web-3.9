@@ -104,10 +104,10 @@ function Classes() {
   const filteredAvailableTeachers = useMemo(() => {
     if (!teacherSearchQuery.trim()) return availableTeachersForSelection.slice(0, 6);
     const normalized = teacherSearchQuery.trim().toLowerCase();
-    return availableTeachersForSelection.filter((t) => 
-      t.fullName?.toLowerCase().includes(normalized) || 
-      t.name?.toLowerCase().includes(normalized)
-    );
+    return availableTeachersForSelection.filter((t) => {
+      const name = (t.fullName || t.full_name || t.name || '').toLowerCase();
+      return name.includes(normalized);
+    });
   }, [availableTeachersForSelection, teacherSearchQuery]);
 
   // Get currently selected teachers
@@ -115,20 +115,31 @@ function Classes() {
     return teachers.filter((t: any) => formData.teacherIds.includes(t.id));
   }, [teachers, formData.teacherIds]);
 
-  // Get teacher names for a class
-  const getClassTeacherNames = (cls: Class): string => {
-    const teacherIds = cls.teacherIds || (cls.teacherId ? [cls.teacherId] : []);
-    const ids = Array.isArray(teacherIds) ? teacherIds : [teacherIds].filter(Boolean);
-    
-    const teacherNames = ids
-      .map((id) => {
-        const teacher = teachers.find((t) => t.id === id);
-        return teacher ? teacher.fullName : null;
-      })
-      .filter(Boolean);
+  // Create teachers Map for O(1) lookup instead of O(n) find - optimize performance
+  const teachersMap = useMemo(() => {
+    const map = new Map<string, any>();
+    teachers.forEach((t: any) => {
+      map.set(t.id, t);
+    });
+    return map;
+  }, [teachers]);
 
-    return teacherNames.length > 0 ? teacherNames.join(', ') : '-';
-  };
+  // Get teacher names for a class - optimized with Map lookup
+  const getClassTeacherNames = useMemo(() => {
+    return (cls: Class): string => {
+      const teacherIds = cls.teacherIds || (cls.teacherId ? [cls.teacherId] : []);
+      const ids = Array.isArray(teacherIds) ? teacherIds : [teacherIds].filter(Boolean);
+      
+      const teacherNames = ids
+        .map((id) => {
+          const teacher = teachersMap.get(id);
+          return teacher ? teacher.fullName : null;
+        })
+        .filter(Boolean);
+
+      return teacherNames.length > 0 ? teacherNames.join(', ') : '-';
+    };
+  }, [teachersMap]);
 
   const handleSearchChange = (value: string) => {
     setFilters((prev) => ({ ...prev, search: value }));
@@ -600,7 +611,7 @@ function Classes() {
                         borderRadius: 'var(--radius)',
                       }}
                     >
-                      <span>{teacher.fullName || teacher.name || teacher.id}</span>
+                      <span>{teacher.fullName || teacher.full_name || teacher.name || teacher.id}</span>
                       <button
                         type="button"
                         className="btn btn-sm btn-danger"
@@ -673,7 +684,7 @@ function Classes() {
                           e.currentTarget.style.background = 'none';
                         }}
                       >
-                        {teacher.fullName || teacher.name || teacher.id}
+                        {teacher.fullName || teacher.full_name || teacher.name || teacher.id}
                       </button>
                     ))}
                   </div>
