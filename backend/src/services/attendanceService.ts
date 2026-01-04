@@ -1,8 +1,3 @@
-/**
- * Attendance Service
- * Business logic for attendance CRUD operations
- */
-
 import supabase from '../config/database';
 
 export type AttendanceStatus = 'present' | 'excused' | 'absent';
@@ -11,11 +6,9 @@ export interface Attendance {
   id: string;
   session_id: string;
   student_id: string;
-  present?: boolean; // Deprecated: Use status instead
   status: AttendanceStatus;
+  present: boolean;
   remark?: string;
-  created_at?: string;
-  updated_at?: string;
 }
 
 /**
@@ -31,7 +24,7 @@ export async function getAttendanceBySession(sessionId: string): Promise<Attenda
     throw new Error(`Failed to fetch attendance: ${error.message}`);
   }
 
-  // Normalize data: ensure status field exists, fallback to present boolean if needed
+  // Normalize response to ensure status is always present
   const normalized = (data || []).map((att: any) => ({
     ...att,
     status: att.status || (att.present ? 'present' : 'absent'),
@@ -41,12 +34,158 @@ export async function getAttendanceBySession(sessionId: string): Promise<Attenda
 }
 
 /**
+ * Rollback financial changes from previous attendance
+ * This is called before processing new attendance to avoid double deduction
+ */
+async function rollbackAttendanceFinancials(
+  sessionId: string,
+  oldAttendanceData: Array<{ student_id: string; status: AttendanceStatus }>
+): Promise<void> {
+  // Get session to retrieve class_id
+  const { data: session, error: sessionError } = await supabase
+    .from('sessions')
+    .select('id, class_id')
+    .eq('id', sessionId)
+    .single();
+
+  if (sessionError || !session) {
+    console.warn(`[rollbackAttendanceFinancials] Session not found: ${sessionId}`);
+    return;
+  }
+
+  const classId = session.class_id;
+
+  // Rollback each student's attendance
+  for (const att of oldAttendanceData) {
+    const { student_id, status } = att;
+
+    // Get student_class record
+    const { data: studentClass, error: scError } = await supabase
+      .from('student_classes')
+      .select('id, student_id, remaining_sessions, total_attended_sessions')
+      .eq('student_id', student_id)
+      .eq('class_id', classId)
+      .eq('status', 'active')
+      .single();
+
+    if (scError || !studentClass) {
+      continue;
+    }
+
+    const updates: any = {};
+
+    // Rollback: Add back remaining_sessions if it was deducted
+    // We need to check wallet transactions to see if we deducted from wallet/loan
+    // Look for transactions with session_id in the note
+    const { data: transactions } = await supabase
+      .from('wallet_transactions')
+      .select('*')
+      .eq('student_id', student_id)
+      .like('note', `%${sessionId}%`)
+      .order('created_at', { ascending: false });
+
+    // Find transactions related to this specific session
+    const sessionTransactions = transactions || [];
+    
+    // Rollback wallet/loan transactions for this session
+    if (sessionTransactions.length > 0) {
+      // Get current student balance
+      const { data: student } = await supabase
+        .from('students')
+        .select('wallet_balance, loan_balance')
+        .eq('id', student_id)
+        .single();
+
+      if (student) {
+        let totalWalletRefund = 0;
+        let totalLoanRefund = 0;
+
+        // Process each transaction
+        for (const transaction of sessionTransactions) {
+          if (transaction.amount < 0) {
+            const amount = Math.abs(transaction.amount);
+            if (transaction.type === 'loan') {
+              totalLoanRefund += amount;
+            } else {
+              totalWalletRefund += amount;
+            }
+          }
+
+          // Delete the transaction
+          await supabase
+            .from('wallet_transactions')
+            .delete()
+            .eq('id', transaction.id);
+        }
+
+        // Update balances
+        const currentWallet = Number(student.wallet_balance || 0);
+        const currentLoan = Number(student.loan_balance || 0);
+        const updates: any = {};
+
+        if (totalWalletRefund > 0) {
+          updates.wallet_balance = currentWallet + totalWalletRefund;
+        }
+        if (totalLoanRefund > 0) {
+          updates.loan_balance = Math.max(0, currentLoan - totalLoanRefund);
+        }
+
+        if (Object.keys(updates).length > 0) {
+          await supabase
+            .from('students')
+            .update(updates)
+            .eq('id', student_id);
+        }
+      }
+    } else {
+      // No wallet transactions found - we must have deducted from remaining_sessions
+      // Add it back
+      const currentRemaining = studentClass.remaining_sessions || 0;
+      updates.remaining_sessions = currentRemaining + 1;
+    }
+
+    // Rollback total_attended_sessions for present/excused
+    if (status === 'present' || status === 'excused') {
+      const currentAttended = studentClass.total_attended_sessions || 0;
+      if (currentAttended > 0) {
+        updates.total_attended_sessions = currentAttended - 1;
+      }
+    }
+
+    // Update student_class
+    if (Object.keys(updates).length > 0) {
+      await supabase
+        .from('student_classes')
+        .update(updates)
+        .eq('id', studentClass.id);
+    }
+  }
+}
+
+/**
  * Create or update attendance records for a session
  */
 export async function saveAttendanceForSession(
   sessionId: string,
   attendanceData: Array<{ student_id: string; present?: boolean; status?: AttendanceStatus; remark?: string }>
 ): Promise<Attendance[]> {
+  // Get existing attendance BEFORE deleting to rollback financials
+  const existingAttendance = await getAttendanceBySession(sessionId);
+  
+  // Rollback financial changes from old attendance if it exists
+  if (existingAttendance.length > 0) {
+    try {
+      const oldAttendanceData = existingAttendance.map(att => ({
+        student_id: att.student_id,
+        status: att.status,
+      }));
+      await rollbackAttendanceFinancials(sessionId, oldAttendanceData);
+    } catch (rollbackError) {
+      console.error('[saveAttendanceForSession] Error rolling back financials:', rollbackError);
+      // Continue anyway - better to have new attendance saved even if rollback fails
+    }
+  }
+
   // First, delete existing attendance records for this session
   await supabase.from('attendance').delete().eq('session_id', sessionId);
 
@@ -99,6 +238,32 @@ export async function saveAttendanceForSession(
     status: att.status || (att.present ? 'present' : 'absent'),
   })) as Attendance[];
 
+  // Process financial calculations based on NEW attendance status
+  try {
+    // Filter and normalize attendance data to ensure status is always defined
+    const normalizedAttendanceData = attendanceData
+      .map(att => {
+        // Determine status: use status if provided, otherwise convert present boolean
+        let status: AttendanceStatus = 'present';
+        if (att.status && ['present', 'excused', 'absent'].includes(att.status)) {
+          status = att.status;
+        } else if (att.present !== undefined) {
+          status = att.present ? 'present' : 'absent';
+        }
+        return {
+          student_id: att.student_id,
+          status,
+        };
+      })
+      .filter(att => att.status !== undefined); // Ensure status is defined
+    
+    await processAttendanceFinancials(sessionId, normalizedAttendanceData);
+  } catch (financialError) {
+    console.error('[saveAttendanceForSession] Error processing financials:', financialError);
+    // Don't fail the attendance save if financial processing fails
+    // Log error and continue
+  }
+
   return normalized;
 }
 
@@ -106,10 +271,257 @@ export async function saveAttendanceForSession(
  * Delete attendance records for a session
  */
 export async function deleteAttendanceBySession(sessionId: string): Promise<void> {
-  const { error } = await supabase.from('attendance').delete().eq('session_id', sessionId);
+  // Rollback financials before deleting attendance
+  const existingAttendance = await getAttendanceBySession(sessionId);
+  if (existingAttendance.length > 0) {
+    try {
+      const oldAttendanceData = existingAttendance.map(att => ({
+        student_id: att.student_id,
+        status: att.status,
+      }));
+      await rollbackAttendanceFinancials(sessionId, oldAttendanceData);
+    } catch (rollbackError) {
+      console.error('[deleteAttendanceBySession] Error rolling back financials:', rollbackError);
+      // Continue anyway
+    }
+  }
 
+  const { error } = await supabase.from('attendance').delete().eq('session_id', sessionId);
   if (error) {
     throw new Error(`Failed to delete attendance: ${error.message}`);
   }
 }
 
+/**
+ * Process attendance and calculate tuition fees and debts
+ * This function handles the complex logic for calculating fees based on attendance status
+ * 
+ * Logic:
+ * - Present (Học): 
+ *   - If remaining_sessions > 0 → deduct 1 session
+ *   - If not → deduct from wallet_balance (tuition_fee)
+ *   - If wallet_balance < tuition_fee → add to loan_balance
+ *   - Increment total_attended_sessions
+ *   - Counts as 1 student for teacher allowance
+ * - Excused (Phép):
+ *   - Same financial logic as present
+ *   - Cannot select if walletBalance === 0 and remainingSessions === 0
+ *   - Increment total_attended_sessions
+ *   - Counts as 1 student for teacher allowance
+ * - Absent (Vắng):
+ *   - If remaining_sessions > 0 → deduct 1 session
+ *   - If not → deduct from wallet_balance (if available)
+ *   - If wallet_balance = 0 → do nothing (don't add to loan)
+ *   - Does NOT increment total_attended_sessions
+ *   - Does NOT count for teacher allowance
+ */
+export async function processAttendanceFinancials(
+  sessionId: string,
+  attendanceData: Array<{ student_id: string; status: AttendanceStatus }>
+): Promise<void> {
+  // Get session to retrieve tuition_fee
+  const { data: session, error: sessionError } = await supabase
+    .from('sessions')
+    .select('id, class_id, tuition_fee')
+    .eq('id', sessionId)
+    .single();
+
+  if (sessionError || !session) {
+    throw new Error(`Failed to fetch session: ${sessionError?.message || 'Session not found'}`);
+  }
+
+  const tuitionFee = session.tuition_fee || 0;
+  const classId = session.class_id;
+
+  // Process each student's attendance
+  for (const att of attendanceData) {
+    const { student_id, status } = att;
+
+    // Get student_class record with tuition information
+    const { data: studentClass, error: scError } = await supabase
+      .from('student_classes')
+      .select('id, student_id, remaining_sessions, class_id, student_tuition_per_session, student_fee_total, student_fee_sessions')
+      .eq('student_id', student_id)
+      .eq('class_id', classId)
+      .eq('status', 'active')
+      .single();
+
+    if (scError || !studentClass) {
+      console.warn(`[processAttendanceFinancials] Student class not found for student ${student_id} in class ${classId}`);
+      continue;
+    }
+
+    const remainingSessions = studentClass.remaining_sessions || 0;
+    const updates: any = {};
+
+    // Calculate student's tuition per session
+    // Priority: student_tuition_per_session > calculated from student_fee > class default (from session tuition_fee / number of students)
+    let studentTuitionPerSession = Number(studentClass.student_tuition_per_session || 0);
+    if (studentTuitionPerSession === 0) {
+      const studentFeeTotal = Number(studentClass.student_fee_total || 0);
+      const studentFeeSessions = Number(studentClass.student_fee_sessions || 0);
+      if (studentFeeTotal > 0 && studentFeeSessions > 0) {
+        studentTuitionPerSession = studentFeeTotal / studentFeeSessions;
+      } else {
+        // Fallback: use session tuition_fee divided by number of eligible students
+        // This is a rough estimate, but better than 0
+        const eligibleCount = attendanceData.filter(a => a.status === 'present' || a.status === 'excused').length;
+        studentTuitionPerSession = eligibleCount > 0 ? (tuitionFee / eligibleCount) : 0;
+      }
+    }
+
+    // Get student to check wallet balance
+    const { data: student, error: studentError } = await supabase
+      .from('students')
+      .select('id, wallet_balance, loan_balance')
+      .eq('id', student_id)
+      .single();
+
+    if (studentError || !student) {
+      console.warn(`[processAttendanceFinancials] Student not found: ${student_id}`);
+      continue;
+    }
+
+    const walletBalance = Number(student.wallet_balance || 0);
+    const loanBalance = Number(student.loan_balance || 0);
+
+    // Validation: Cannot select "excused" if walletBalance === 0 and remainingSessions === 0
+    if (status === 'excused' && remainingSessions === 0 && walletBalance === 0) {
+      throw new Error(`Không thể chọn trạng thái "Phép" cho học sinh khi số dư = 0 và số buổi còn lại = 0`);
+    }
+
+    // Process financial deductions based on attendance status
+    if (status === 'absent') {
+      // Absent (Vắng): Only deduct if there are remaining sessions or wallet balance
+      // If wallet balance is 0 and no remaining sessions, do nothing (don't add to loan)
+      if (remainingSessions > 0) {
+        // Deduct from remaining sessions
+        updates.remaining_sessions = remainingSessions - 1;
+      } else if (walletBalance > 0 && studentTuitionPerSession > 0) {
+        // No remaining sessions, but has wallet balance - deduct from wallet
+        if (walletBalance >= studentTuitionPerSession) {
+          // Deduct full amount from wallet
+          const newWalletBalance = walletBalance - studentTuitionPerSession;
+          await supabase
+            .from('students')
+            .update({ wallet_balance: newWalletBalance })
+            .eq('id', student_id);
+
+          // Create wallet transaction
+          await supabase.from('wallet_transactions').insert({
+            id: `WTX${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+            student_id: student_id,
+            type: 'extend',
+            amount: -studentTuitionPerSession,
+            date: new Date().toISOString().split('T')[0],
+            note: `Học phí buổi học ${sessionId} (Vắng)`,
+          });
+        } else {
+          // Deduct partial amount (use all remaining wallet balance)
+          const newWalletBalance = 0;
+          await supabase
+            .from('students')
+            .update({ wallet_balance: newWalletBalance })
+            .eq('id', student_id);
+
+          // Create wallet transaction
+          await supabase.from('wallet_transactions').insert({
+            id: `WTX${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+            student_id: student_id,
+            type: 'extend',
+            amount: -walletBalance,
+            date: new Date().toISOString().split('T')[0],
+            note: `Học phí buổi học ${sessionId} (Vắng - dùng hết số dư)`,
+          });
+        }
+        // Note: For absent, if wallet balance is insufficient, we don't add to loan
+      }
+      // If remainingSessions === 0 and walletBalance === 0, do nothing (no updates)
+    } else {
+      // Present (Học) or Excused (Phép): Full financial logic
+      if (remainingSessions > 0) {
+        // Deduct from remaining sessions
+        updates.remaining_sessions = remainingSessions - 1;
+      } else {
+        // No remaining sessions, deduct from wallet or add to loan
+        // Use student's individual tuition per session
+        if (studentTuitionPerSession > 0) {
+          if (walletBalance >= studentTuitionPerSession) {
+            // Deduct from wallet
+            const newWalletBalance = walletBalance - studentTuitionPerSession;
+            await supabase
+              .from('students')
+              .update({ wallet_balance: newWalletBalance })
+              .eq('id', student_id);
+
+            // Create wallet transaction with session_id reference in note for easier rollback
+            const statusLabel = status === 'present' ? 'Học' : 'Phép';
+            await supabase.from('wallet_transactions').insert({
+              id: `WTX${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+              student_id: student_id,
+              type: 'extend',
+              amount: -studentTuitionPerSession,
+              date: new Date().toISOString().split('T')[0],
+              note: `Học phí buổi học ${sessionId} (${statusLabel})`,
+            });
+          } else {
+            // Add to loan
+            const debtAmount = studentTuitionPerSession - walletBalance;
+            const newWalletBalance = 0;
+            const newLoanBalance = loanBalance + debtAmount;
+
+            await supabase
+              .from('students')
+              .update({
+                wallet_balance: newWalletBalance,
+                loan_balance: newLoanBalance,
+              })
+              .eq('id', student_id);
+
+            // Create wallet transaction for loan
+            if (walletBalance > 0) {
+              await supabase.from('wallet_transactions').insert({
+                id: `WTX${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+                student_id: student_id,
+                type: 'extend',
+                amount: -walletBalance,
+                date: new Date().toISOString().split('T')[0],
+                note: `Học phí buổi học ${sessionId} (dùng hết số dư)`,
+              });
+            }
+
+            const statusLabel = status === 'present' ? 'Học' : 'Phép';
+            await supabase.from('wallet_transactions').insert({
+              id: `WTX${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+              student_id: student_id,
+              type: 'loan',
+              amount: debtAmount,
+              date: new Date().toISOString().split('T')[0],
+              note: `Học phí buổi học ${sessionId} (${statusLabel} - nợ)`,
+            });
+          }
+        }
+      }
+    }
+
+    // Only increment total_attended_sessions for present and excused (not absent)
+    if (status === 'present' || status === 'excused') {
+      const { data: currentRecord } = await supabase
+        .from('student_classes')
+        .select('total_attended_sessions')
+        .eq('id', studentClass.id)
+        .single();
+
+      const currentAttended = (currentRecord as any)?.total_attended_sessions || 0;
+      updates.total_attended_sessions = currentAttended + 1;
+    }
+
+    // Update student_class
+    if (Object.keys(updates).length > 0) {
+      await supabase
+        .from('student_classes')
+        .update(updates)
+        .eq('id', studentClass.id);
+    }
+  }
+}

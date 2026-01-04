@@ -21,6 +21,7 @@ export interface Session {
   subsidy_original?: number;
   subsidy_modified_by?: string;
   subsidy_modified_at?: string;
+  tuition_fee?: number; // Học phí của buổi học (số tiền học sinh đóng cho buổi đó)
   created_at?: string;
   updated_at?: string;
 }
@@ -72,14 +73,16 @@ export async function getSessions(filters: SessionFilters = {}) {
     const sessionIds = sessions.map(s => s.id);
     const { data: attendanceData } = await supabase
       .from('attendance')
-      .select('session_id, present')
+      .select('session_id, status, present')
       .in('session_id', sessionIds);
 
     if (attendanceData) {
-      // Count present students per session
+      // Count present and excused students per session (both count as 1 student)
       const paidCountMap = new Map<string, number>();
       attendanceData.forEach((att: any) => {
-        if (att.present) {
+        // Count both 'present' and 'excused' as 1 student each
+        const status = att.status || (att.present ? 'present' : 'absent');
+        if (status === 'present' || status === 'excused') {
           const current = paidCountMap.get(att.session_id) || 0;
           paidCountMap.set(att.session_id, current + 1);
         }
@@ -130,11 +133,15 @@ export async function getSessionById(id: string): Promise<Session | null> {
   // Calculate studentPaidCount from attendance records
   const { data: attendanceData } = await supabase
     .from('attendance')
-    .select('present')
+    .select('status, present')
     .eq('session_id', id);
 
   if (attendanceData) {
-    session.studentPaidCount = attendanceData.filter((att: any) => att.present).length;
+    // Count both 'present' and 'excused' as 1 student each
+    session.studentPaidCount = attendanceData.filter((att: any) => {
+      const status = att.status || (att.present ? 'present' : 'absent');
+      return status === 'present' || status === 'excused';
+    }).length;
   } else {
     session.studentPaidCount = 0;
   }
@@ -243,13 +250,12 @@ export async function createSession(sessionData: Omit<Session, 'id' | 'created_a
     throw new Error(`Failed to create session: ${error.message}`);
   }
 
-  // Apply session to students - deduct remaining sessions
-  try {
-    await applySessionToStudents(sessionData.class_id);
-  } catch (applyError) {
-    console.error('Failed to apply session to students:', applyError);
-    // Don't fail the session creation if this fails - log and continue
-  }
+  // NOTE: Do NOT call applySessionToStudents here anymore
+  // Financial calculations (deducting sessions/wallet/loan) are now handled by
+  // processAttendanceFinancials() in attendanceService.ts, which is called when
+  // attendance records are saved via saveAttendanceForSession().
+  // This ensures that deductions are based on actual attendance status (present/excused/absent)
+  // rather than applying to all students uniformly.
 
   return data as Session;
 }
@@ -300,6 +306,15 @@ export async function deleteSession(id: string): Promise<void> {
   const existing = await getSessionById(id);
   if (!existing) {
     throw new Error('Session not found');
+  }
+  
+  // Rollback financials by deleting attendance (which will rollback)
+  const { deleteAttendanceBySession } = await import('./attendanceService');
+  try {
+    await deleteAttendanceBySession(id);
+  } catch (attendanceError) {
+    console.error('[deleteSession] Error deleting attendance:', attendanceError);
+    // Continue with session deletion even if attendance deletion fails
   }
   
   // Invalidate cache for affected months
