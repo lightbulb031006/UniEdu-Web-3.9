@@ -18,22 +18,24 @@ router.use(authenticate);
 router.get('/', async (req, res, next) => {
   try {
     const filters: any = {};
-    if (req.query.entityType) {
+    
+    // Only add filter if value is not empty (like backup)
+    if (req.query.entityType && req.query.entityType !== '') {
       filters.entityType = req.query.entityType as string;
     }
-    if (req.query.entityId) {
+    if (req.query.entityId && req.query.entityId !== '') {
       filters.entityId = req.query.entityId as string;
     }
-    if (req.query.userId) {
+    if (req.query.userId && req.query.userId !== '') {
       filters.userId = req.query.userId as string;
     }
-    if (req.query.actionType) {
+    if (req.query.actionType && req.query.actionType !== '') {
       filters.actionType = req.query.actionType as string;
     }
-    if (req.query.startDate) {
+    if (req.query.startDate && req.query.startDate !== '') {
       filters.startDate = req.query.startDate as string;
     }
-    if (req.query.endDate) {
+    if (req.query.endDate && req.query.endDate !== '') {
       filters.endDate = req.query.endDate as string;
     }
     if (req.query.limit) {
@@ -56,7 +58,17 @@ router.get('/', async (req, res, next) => {
  */
 router.post('/', async (req, res, next) => {
   try {
-    const action = await recordAction(req.body);
+    const user = (req as any).user; // Set by authenticate middleware
+    
+    // Automatically add user info from authenticated request
+    const params = {
+      ...req.body,
+      userId: req.body.userId || user?.userId,
+      userEmail: req.body.userEmail || user?.email,
+      userRole: req.body.userRole || user?.role,
+    };
+    
+    const action = await recordAction(params);
     res.status(201).json(action);
   } catch (error) {
     next(error);

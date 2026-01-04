@@ -2,6 +2,8 @@ import React, { useState, useCallback } from 'react';
 import { useDataLoading } from '../hooks/useDataLoading';
 import { useAuthStore } from '../store/authStore';
 import { fetchActionHistory, undoAction, ActionHistory as ActionHistoryItem, ActionHistoryFilters } from '../services/actionHistoryService';
+import { fetchUsers } from '../services/authService';
+import { toast } from '../utils/toast';
 
 /**
  * Action History Page Component - Lịch sử chỉnh sửa
@@ -26,11 +28,17 @@ const ENTITY_TYPE_LABELS: Record<string, string> = {
   student: 'Học sinh',
   teacher: 'Nhân sự',
   class: 'Lớp học',
+  session: 'Buổi học',
+  attendance: 'Điểm danh',
+  student_class: 'Học sinh - Lớp học',
   payment: 'Thanh toán',
   cost: 'Chi phí',
   category: 'Phân loại',
   lesson_plan: 'Giáo án',
   lesson_output: 'Giáo án',
+  lesson_resource: 'Tài nguyên',
+  lesson_task: 'Task',
+  lesson_topic: 'Chuyên đề',
 };
 
 function ActionHistory() {
@@ -49,6 +57,18 @@ function ActionHistory() {
     endDate: new Date().toISOString().split('T')[0],
   });
 
+  // Fetch users for admin dropdown
+  const { data: usersData } = useDataLoading(
+    () => fetchUsers(),
+    [],
+    {
+      cacheKey: 'users-for-action-history',
+      staleTime: 5 * 60 * 1000,
+      enabled: isAdmin, // Only fetch if admin
+    }
+  );
+  const users = Array.isArray(usersData) ? usersData : [];
+
   const fetchHistoryFn = useCallback(() => fetchActionHistory(filters), [filters]);
 
   const { data: historyData, isLoading, error, refetch } = useDataLoading(fetchHistoryFn, [filters], {
@@ -64,11 +84,14 @@ function ActionHistory() {
     refetch();
   };
 
+  const [undoingActionId, setUndoingActionId] = useState<string | null>(null);
+
   const handleUndo = async (actionId: string) => {
     if (!window.confirm('Bạn có chắc muốn khôi phục hành động này? Dữ liệu hiện tại sẽ bị thay thế.')) {
       return;
     }
 
+    setUndoingActionId(actionId);
     try {
       const result = await undoAction(actionId);
       if (result.success) {
@@ -79,6 +102,8 @@ function ActionHistory() {
       }
     } catch (error: any) {
       toast.error('Lỗi khi khôi phục: ' + (error.message || 'Lỗi không xác định'));
+    } finally {
+      setUndoingActionId(null);
     }
   };
 
@@ -93,10 +118,14 @@ function ActionHistory() {
 
   const getEntityName = (action: ActionHistoryItem): string => {
     if (action.after_value) {
-      return action.after_value.fullName || action.after_value.name || action.after_value.lesson_name || action.entity_id || '-';
+      return action.after_value.fullName || action.after_value.name || action.after_value.lesson_name || action.after_value.student_name || action.after_value.class_name || action.entity_id || '-';
     }
     if (action.before_value) {
-      return action.before_value.fullName || action.before_value.name || action.before_value.lesson_name || action.entity_id || '-';
+      return action.before_value.fullName || action.before_value.name || action.before_value.lesson_name || action.before_value.student_name || action.before_value.class_name || action.entity_id || '-';
+    }
+    // For session, try to get date from description or entity_id
+    if (action.entity_type === 'session') {
+      return action.description?.match(/ngày\s+([^của]+)/)?.[1]?.trim() || action.entity_id || '-';
     }
     return action.entity_id || '-';
   };
@@ -141,6 +170,9 @@ function ActionHistory() {
               <option value="student">Học sinh</option>
               <option value="teacher">Nhân sự</option>
               <option value="class">Lớp học</option>
+              <option value="session">Buổi học</option>
+              <option value="attendance">Điểm danh</option>
+              <option value="student_class">Học sinh - Lớp học</option>
               <option value="payment">Thanh toán</option>
               <option value="cost">Chi phí</option>
               <option value="category">Phân loại</option>
@@ -170,13 +202,18 @@ function ActionHistory() {
               <label className="form-label" style={{ fontSize: 'var(--font-size-sm)', fontWeight: '500', marginBottom: 'var(--spacing-1)' }}>
                 Người thực hiện
               </label>
-              <input
-                type="text"
+              <select
                 className="form-control"
-                placeholder="User ID"
                 value={filters.userId || ''}
                 onChange={(e) => setFilters({ ...filters, userId: e.target.value || undefined })}
-              />
+              >
+                <option value="">Tất cả</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name || u.email || u.id}
+                  </option>
+                ))}
+              </select>
             </div>
           )}
 
@@ -352,14 +389,21 @@ function ActionHistory() {
                         <button
                           className="btn btn-sm btn-outline"
                           onClick={() => handleUndo(action.id)}
+                          disabled={undoingActionId === action.id}
                           style={{ fontSize: 'var(--font-size-xs)', padding: '6px 12px', whiteSpace: 'nowrap' }}
                           title="Khôi phục về trạng thái trước đó"
                         >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px', verticalAlign: 'middle' }}>
-                            <path d="M3 7v6h6" />
-                            <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
-                          </svg>
-                          Undo
+                          {undoingActionId === action.id ? (
+                            <span>Đang khôi phục...</span>
+                          ) : (
+                            <>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px', verticalAlign: 'middle' }}>
+                                <path d="M3 7v6h6" />
+                                <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
+                              </svg>
+                              Undo
+                            </>
+                          )}
                         </button>
                       )}
                     </div>

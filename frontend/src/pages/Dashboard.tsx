@@ -115,16 +115,22 @@ function Dashboard() {
   const [state, setState] = useState(loadStoredDashboardState());
   const hasRedirectedRef = useRef(false);
   
+  // Reset redirect flag when user changes
+  useEffect(() => {
+    hasRedirectedRef.current = false;
+  }, [user?.id]);
+  
   // Redirect logic cho teacher/staff: tự động redirect đến staff-detail NGAY LẬP TỨC
   // Ưu tiên: Nếu có linkId, redirect ngay mà không cần fetch teachers
   useEffect(() => {
     // Check if already on staff-detail page to avoid redirect loop
     const currentPath = location.pathname;
     if (currentPath.startsWith('/staff/')) {
+      hasRedirectedRef.current = true; // Mark as redirected if already on staff page
       return; // Already on staff detail page, don't redirect
     }
     
-    if (!user || hasRedirectedRef.current) {
+    if (!user) {
       return;
     }
     
@@ -136,10 +142,12 @@ function Dashboard() {
     
     // Nếu có linkId, redirect ngay lập tức mà không cần fetch teachers
     if (user.linkId) {
+      if (!hasRedirectedRef.current) {
       hasRedirectedRef.current = true;
       const targetPath = `/staff/${user.linkId}`;
       if (currentPath !== targetPath) {
         navigate(targetPath, { replace: true });
+        }
       }
       return;
     }
@@ -164,26 +172,32 @@ function Dashboard() {
     // Check if already on staff-detail page to avoid redirect loop
     const currentPath = location.pathname;
     if (currentPath.startsWith('/staff/')) {
+      hasRedirectedRef.current = true; // Mark as redirected if already on staff page
       return; // Already on staff detail page, don't redirect
     }
     
-    if (!user || hasRedirectedRef.current || !needsTeacherLookup) {
+    if (!user || !needsTeacherLookup) {
       return;
     }
     
     // Chỉ redirect khi teachers data đã load xong
-    if (isLoadingTeachers || teachers.length === 0) {
+    if (isLoadingTeachers) {
       return; // Wait for teachers data
+    }
+    
+    // Nếu đã redirect rồi thì không redirect nữa
+    if (hasRedirectedRef.current) {
+      return;
     }
     
     // Tìm teacher record theo userId hoặc email
     let teacherRecord = null;
     
-    if (user.id) {
+    if (user.id && teachers.length > 0) {
       teacherRecord = teachers.find((t) => (t as any).userId === user.id);
     }
     
-    if (!teacherRecord && user.email) {
+    if (!teacherRecord && user.email && teachers.length > 0) {
       teacherRecord = teachers.find((t) => 
         t.email?.toLowerCase() === user.email?.toLowerCase()
       );
@@ -198,8 +212,8 @@ function Dashboard() {
         navigate(targetPath, { replace: true });
       }
       return;
-    } else {
-      // Nếu không tìm thấy teacher record, log để debug
+    } else if (teachers.length > 0) {
+      // Nếu không tìm thấy teacher record sau khi đã load teachers, log để debug
       console.warn('[Dashboard] Teacher record not found for user:', {
         userId: user.id,
         linkId: user.linkId,
@@ -1214,7 +1228,7 @@ function Dashboard() {
                 items={alerts.classesWithoutSurvey.classes || []}
                 emptyMessage="Tất cả các lớp đã có báo cáo"
               />
-            )}
+                  )}
 
             {/* Finance Requests */}
             <div

@@ -200,27 +200,47 @@ function Layout({ children }: LayoutProps) {
                 <div className="user-account-card" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <button
                     className="user-account-btn"
-                    onClick={() => {
+                    onClick={async () => {
                       if (isAdmin) {
                         setIsAdminProfileModalOpen(true);
                       } else if (user?.role === 'teacher') {
                         // Teacher: redirect đến staff detail
                         if (user.linkId) {
                           navigate(`/staff/${user.linkId}`, { replace: false });
-                        } else if (teachers.length > 0) {
-                          // Tìm teacher record
-                          let teacherRecord = null;
-                          if (user.id) {
-                            teacherRecord = teachers.find((t) => (t as any).userId === user.id);
+                          return;
+                        }
+                        
+                        // Nếu không có linkId, cần fetch teachers nếu chưa có
+                        let teachersToUse = teachers;
+                        if (teachersToUse.length === 0) {
+                          try {
+                            const { fetchTeachers } = await import('../services/teachersService');
+                            teachersToUse = await fetchTeachers();
+                          } catch (err) {
+                            console.error('[Layout] Error fetching teachers:', err);
+                            return;
                           }
-                          if (!teacherRecord && user.email) {
-                            teacherRecord = teachers.find((t) => 
-                              t.email?.toLowerCase() === user.email?.toLowerCase()
-                            );
-                          }
-                          if (teacherRecord) {
-                            navigate(`/staff/${teacherRecord.id}`, { replace: false });
-                          }
+                        }
+                        
+                        // Tìm teacher record
+                        let teacherRecord = null;
+                        if (user.id) {
+                          teacherRecord = teachersToUse.find((t) => (t as any).userId === user.id);
+                        }
+                        if (!teacherRecord && user.email) {
+                          teacherRecord = teachersToUse.find((t) => 
+                            t.email?.toLowerCase() === user.email?.toLowerCase()
+                          );
+                        }
+                        
+                        if (teacherRecord) {
+                          navigate(`/staff/${teacherRecord.id}`, { replace: false });
+                        } else {
+                          console.warn('[Layout] Teacher record not found for user:', {
+                            userId: user.id,
+                            email: user.email,
+                            teachersCount: teachersToUse.length,
+                          });
                         }
                       }
                     }}

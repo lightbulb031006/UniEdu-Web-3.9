@@ -35,14 +35,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   setAuth: (user, token, rememberMe: boolean = false) => {
     try {
-      // Lưu token (giống code cũ)
-      localStorage.setItem(TOKEN_KEY, token);
+      // If rememberMe is true, use localStorage (persists for 30 days)
+      // If rememberMe is false, use sessionStorage (cleared when browser closes)
+      const storage = rememberMe ? localStorage : sessionStorage;
+      
+      // Lưu token
+      storage.setItem(TOKEN_KEY, token);
       
       // Lưu user với session expiration
-      // If rememberMe is true, session lasts 30 days, otherwise 24 hours
+      // If rememberMe is true, session lasts 30 days, otherwise sessionStorage will be cleared on browser close
       const SESSION_DURATION_MS = rememberMe 
         ? 30 * 24 * 60 * 60 * 1000 // 30 days
-        : 24 * 60 * 60 * 1000; // 24 hours
+        : 24 * 60 * 60 * 1000; // 24 hours (fallback, but sessionStorage clears on close anyway)
       const now = Date.now();
       const sessionPayload = {
         ...user,
@@ -50,7 +54,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         sessionExpiresAt: now + SESSION_DURATION_MS,
         rememberMe,
       };
-      localStorage.setItem(CURRENT_KEY, JSON.stringify(sessionPayload));
+      storage.setItem(CURRENT_KEY, JSON.stringify(sessionPayload));
+      
+      // refreshToken is already saved in the correct storage by authService before setAuth is called
       
       set({ user, token, isAuthenticated: true });
     } catch (e) {
@@ -60,9 +66,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: () => {
     try {
+      // Clear both localStorage and sessionStorage
       localStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem('refreshToken');
       localStorage.removeItem(CURRENT_KEY);
+      sessionStorage.removeItem(TOKEN_KEY);
+      sessionStorage.removeItem('refreshToken');
+      sessionStorage.removeItem(CURRENT_KEY);
     } catch (e) {
       // Ignore
     }
@@ -81,32 +91,45 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   initFromStorage: () => {
     try {
-      // Load user từ localStorage (giống code cũ)
-      const raw = localStorage.getItem(CURRENT_KEY);
+      // Try localStorage first (rememberMe = true)
+      let raw = localStorage.getItem(CURRENT_KEY);
+      let storage = localStorage;
+      
+      // If not found in localStorage, try sessionStorage (rememberMe = false)
+      if (!raw) {
+        raw = sessionStorage.getItem(CURRENT_KEY);
+        storage = sessionStorage;
+      }
+      
       if (!raw) return;
 
       const parsed = JSON.parse(raw);
       const expiresAt = parsed.sessionExpiresAt;
 
-      // Check if expired (giống code cũ)
+      // Check if expired
       if (!expiresAt || expiresAt <= Date.now()) {
         // Session expired -> force logout
-        localStorage.removeItem(CURRENT_KEY);
-        localStorage.removeItem(TOKEN_KEY);
+        storage.removeItem(CURRENT_KEY);
+        storage.removeItem(TOKEN_KEY);
+        storage.removeItem('refreshToken');
         return;
       }
 
-      const token = localStorage.getItem(TOKEN_KEY);
+      const token = storage.getItem(TOKEN_KEY);
       if (token && parsed.id) {
         // Remove session metadata
-        const { sessionStartedAt, sessionExpiresAt, ...user } = parsed;
+        const { sessionStartedAt, sessionExpiresAt, rememberMe, ...user } = parsed;
         set({ user, token, isAuthenticated: true });
       }
     } catch (e) {
-      // Clear invalid data
+      // Clear invalid data from both storages
       try {
         localStorage.removeItem(CURRENT_KEY);
         localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem('refreshToken');
+        sessionStorage.removeItem(CURRENT_KEY);
+        sessionStorage.removeItem(TOKEN_KEY);
+        sessionStorage.removeItem('refreshToken');
       } catch (e2) {
         // Ignore
       }

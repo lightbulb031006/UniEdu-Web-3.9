@@ -153,7 +153,9 @@ export async function login(credentials: LoginCredentials): Promise<AuthResult> 
   }
 
   if (!user) {
-    logger.warn('Login attempt failed: user not found', { loginInput });
+    logger.warn('[LOGIN] Login failed: user not found', { 
+      loginInput: loginInput.substring(0, 3) + '***',
+    });
     throw new AuthenticationError('Invalid email or password');
   }
 
@@ -162,7 +164,9 @@ export async function login(credentials: LoginCredentials): Promise<AuthResult> 
   let passwordValid = false;
 
   if (!user.password) {
-    logger.warn('Login attempt failed: user has no password', { userId: user.id });
+    logger.warn('[LOGIN] Login failed: user has no password', { 
+      userId: user.id,
+    });
     throw new AuthenticationError('Invalid email or password');
   }
 
@@ -179,7 +183,9 @@ export async function login(credentials: LoginCredentials): Promise<AuthResult> 
   }
 
   if (!passwordValid) {
-    logger.warn('Login attempt failed: invalid password', { loginInput, userId: user.id });
+    logger.warn('[LOGIN] Login failed: invalid password', { 
+      userId: user.id,
+    });
     throw new AuthenticationError('Invalid email or password');
   }
 
@@ -194,7 +200,10 @@ export async function login(credentials: LoginCredentials): Promise<AuthResult> 
     userId: user.id,
   });
 
-  logger.info('User logged in successfully', { userId: user.id, email: user.email, role: user.role });
+  logger.info('[LOGIN] Login successful', { 
+    userId: user.id, 
+    role: user.role,
+  });
 
   return {
     token,
@@ -379,5 +388,30 @@ export async function updateProfile(userId: string, data: UpdateProfileData) {
   logger.info('User profile updated successfully', { userId, email: updatedUser.email });
 
   return updatedUser;
+}
+
+/**
+ * Get all users (admin only)
+ * Filter out visitors
+ */
+export async function getUsers() {
+  const { data: users, error } = await supabase
+    .from('users')
+    .select('id, email, name, role, status')
+    .neq('role', 'visitor')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    logger.error('Failed to fetch users', { error });
+    throw new Error('Failed to fetch users');
+  }
+
+  return (users || []).map((user: any) => ({
+    id: user.id,
+    email: user.email,
+    name: user.name || user.email || user.id,
+    role: user.role,
+    status: user.status,
+  }));
 }
 

@@ -41,6 +41,7 @@ function StaffDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
+  
 
   // Month state for income statistics
   const currentMonth = useMemo(() => {
@@ -53,6 +54,7 @@ function StaffDetail() {
 
   const fetchTeacherFn = useCallback(async () => {
     if (!id) throw new Error('Staff ID is required');
+    
     // Sử dụng cache từ sessionStorage nếu có
     const cacheKey = 'teachers-for-staff-detail';
     try {
@@ -72,6 +74,7 @@ function StaffDetail() {
     
     // Nếu không có cache, fetch teachers
     const teachers = await fetchTeachers();
+    
     // Lưu vào cache
     try {
       sessionStorage.setItem(cacheKey, JSON.stringify({
@@ -83,7 +86,9 @@ function StaffDetail() {
     }
     
     const teacher = teachers.find((t) => t.id === id);
-    if (!teacher) throw new Error('Staff not found');
+    if (!teacher) {
+      throw new Error(`Không tìm thấy nhân sự với ID: ${id}`);
+    }
     return teacher;
   }, [id]);
 
@@ -91,6 +96,13 @@ function StaffDetail() {
     cacheKey: `staff-${id}`,
     staleTime: 5 * 60 * 1000, // Tăng cache time lên 5 phút
   });
+  
+  // Log errors only
+  useEffect(() => {
+    if (error) {
+      console.error('[StaffDetail] Error loading staff:', error);
+    }
+  }, [error]);
 
   // Fetch classes to get classes taught by this staff
   // Chỉ fetch khi staff đã load xong
@@ -687,16 +699,57 @@ function StaffDetail() {
   }
   
   // If staff is loaded but other data is loading, show page with skeleton loaders
-  if (!staff) {
-    return null; // Should not happen, but safety check
+  // Also handle case where staff is null after loading (shouldn't happen but safety check)
+  if (!staff && !isLoading) {
+    return (
+      <div className="page-container" style={{ padding: 'var(--spacing-6)' }}>
+        <div className="card" style={{ textAlign: 'center', padding: 'var(--spacing-8)' }}>
+          <h2 style={{ color: 'var(--danger)' }}>Không tìm thấy nhân sự</h2>
+          <p style={{ color: 'var(--muted)', marginBottom: 'var(--spacing-4)' }}>
+            Không thể tải thông tin nhân sự với ID: {id}
+          </p>
+          <div style={{ display: 'flex', gap: 'var(--spacing-2)', justifyContent: 'center' }}>
+            <button className="btn btn-secondary" onClick={() => navigate('/staff')}>
+              Quay lại
+            </button>
+            <button className="btn btn-primary" onClick={() => refetch()}>
+              Thử lại
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
+  // Show loading if still loading or staff not available yet
   if (isLoading || !staff) {
     return (
       <div className="page-container" style={{ padding: 'var(--spacing-6)' }}>
         <div className="card" style={{ padding: 'var(--spacing-8)', textAlign: 'center' }}>
           <div className="spinner" />
           <p className="text-muted" style={{ marginTop: 'var(--spacing-3)' }}>Đang tải thông tin nhân sự...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Safety check: ensure staff exists before rendering
+  if (!staff) {
+    return (
+      <div className="page-container" style={{ padding: 'var(--spacing-6)' }}>
+        <div className="card" style={{ textAlign: 'center', padding: 'var(--spacing-8)' }}>
+          <h2 style={{ color: 'var(--danger)' }}>Không tìm thấy nhân sự</h2>
+          <p style={{ color: 'var(--muted)', marginBottom: 'var(--spacing-4)' }}>
+            Không thể tải thông tin nhân sự với ID: {id}
+          </p>
+          <div style={{ display: 'flex', gap: 'var(--spacing-2)', justifyContent: 'center' }}>
+            <button className="btn btn-secondary" onClick={() => navigate('/staff')}>
+              Quay lại
+            </button>
+            <button className="btn btn-primary" onClick={() => refetch()}>
+              Thử lại
+            </button>
+          </div>
         </div>
       </div>
     );

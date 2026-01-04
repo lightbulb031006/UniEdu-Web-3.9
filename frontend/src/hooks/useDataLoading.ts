@@ -145,7 +145,8 @@ export function useDataLoading<T>(
 
       try {
         // Check if user is authenticated before making request
-        const token = localStorage.getItem('unicorns.token');
+        // Check both localStorage and sessionStorage (for "remember me" functionality)
+        const token = localStorage.getItem('unicorns.token') || sessionStorage.getItem('unicorns.token');
         if (!token) {
           // No token, don't retry
           setIsLoading(false);
@@ -216,7 +217,8 @@ export function useDataLoading<T>(
     if (!enabled) return;
 
     // Check if user is authenticated
-    const token = localStorage.getItem('unicorns.token');
+    // Check both localStorage and sessionStorage (for "remember me" functionality)
+    const token = localStorage.getItem('unicorns.token') || sessionStorage.getItem('unicorns.token');
     if (!token) {
       // No token, don't fetch
       setIsLoading(false);
@@ -239,12 +241,13 @@ export function useDataLoading<T>(
     if (!refetchInterval || !enabled) return;
     
     // Check token before setting interval
-    const token = localStorage.getItem('unicorns.token');
+    // Check both localStorage and sessionStorage (for "remember me" functionality)
+    const token = localStorage.getItem('unicorns.token') || sessionStorage.getItem('unicorns.token');
     if (!token) return;
     
     const interval = setInterval(() => {
       // Check token again before each refetch
-      const currentToken = localStorage.getItem('unicorns.token');
+      const currentToken = localStorage.getItem('unicorns.token') || sessionStorage.getItem('unicorns.token');
       if (!currentToken) {
         clearInterval(interval);
         return;

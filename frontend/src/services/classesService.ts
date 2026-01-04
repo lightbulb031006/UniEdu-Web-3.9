@@ -19,6 +19,7 @@ export interface Class {
   tuitionPackageSessions?: number;
   schedule?: Array<{ day: string; time: string }>;
   scaleAmount?: number;
+  maxAllowancePerSession?: number;
   customTeacherAllowances?: Record<string, number>;
 }
 
@@ -58,6 +59,7 @@ function normalizeClass(cls: any): Class & { teachers?: Array<{ id: string; full
     tuitionPackageSessions: cls.tuition_package_sessions || cls.tuitionPackageSessions,
     schedule: Array.isArray(cls.schedule) ? cls.schedule : (cls.schedule ? JSON.parse(cls.schedule) : []),
     scaleAmount: cls.scale_amount || cls.scaleAmount,
+    maxAllowancePerSession: cls.max_allowance_per_session || cls.maxAllowancePerSession,
     customTeacherAllowances: cls.custom_teacher_allowances || cls.customTeacherAllowances || {},
   };
   

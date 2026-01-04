@@ -44,6 +44,7 @@ import Modal from '../components/Modal';
 import { CurrencyInput } from '../components/CurrencyInput';
 import { toast } from '../utils/toast';
 import { numberToVietnameseText } from '../utils/numberToVietnameseText';
+import { recordAction } from '../services/actionHistoryService';
 
 /**
  * Lesson Plans Page Component - Giáo Án
@@ -437,6 +438,32 @@ function LessonPlans() {
   const hasAccountantRole = userHasStaffRole('accountant', user, teachers);
   const isAssistant = user?.role === 'assistant';
   const assistantId = isAssistant ? user?.linkId : null;
+  
+  // Get current user's staff ID for lesson_plan role users
+  const currentUserStaffId = useMemo(() => {
+    if (!hasLessonPlanRole || !user) return null;
+    
+    // First try linkId
+    if (user.linkId) {
+      return user.linkId;
+    }
+    
+    // Fallback: find in teachers list by userId or email
+    if (teachers.length > 0) {
+      let staffRecord = null;
+      if (user.id) {
+        staffRecord = teachers.find((t) => (t as any).userId === user.id);
+      }
+      if (!staffRecord && user.email) {
+        staffRecord = teachers.find((t) => 
+          t.email?.toLowerCase() === user.email?.toLowerCase()
+        );
+      }
+      return staffRecord?.id || null;
+    }
+    
+    return null;
+  }, [hasLessonPlanRole, user, teachers]);
 
   // Filter tasks and outputs by month and assistant (for Overview tab)
   const filterByMonth = useCallback((item: LessonTask | LessonOutput, month: string) => {
@@ -544,7 +571,28 @@ function LessonPlans() {
     if (!window.confirm('Xóa giáo án này?')) return;
 
     try {
+      // Get plan data before deleting for action history
+      const planToDelete = lessonPlans.find(p => p.id === planId);
+      
       await deleteLessonPlan(planId);
+      
+      // Record action history
+      if (planToDelete) {
+        try {
+          await recordAction({
+            entityType: 'lesson_output',
+            entityId: planId,
+            actionType: 'delete',
+            beforeValue: planToDelete,
+            afterValue: null,
+            changedFields: null,
+            description: `Xóa bài đã làm: ${planToDelete.lesson_name || planToDelete.original_title || planId}`,
+          });
+        } catch (err) {
+          // Silently fail - action history is not critical
+        }
+      }
+      
       toast.success('Đã xóa giáo án');
       refetch();
     } catch (error: any) {
@@ -752,7 +800,26 @@ function LessonPlans() {
               onDeleteResource={async (id: string) => {
                 if (window.confirm('Bạn có chắc chắn muốn xóa tài nguyên này?')) {
                   try {
+                    const resourceToDelete = lessonResources.find(r => r.id === id);
                     await deleteLessonResource(id);
+                    
+                    // Record action history
+                    if (resourceToDelete) {
+                      try {
+                        await recordAction({
+                          entityType: 'lesson_resource',
+                          entityId: id,
+                          actionType: 'delete',
+                          beforeValue: resourceToDelete,
+                          afterValue: null,
+                          changedFields: null,
+                          description: `Xóa tài nguyên: ${resourceToDelete.title || id}`,
+                        });
+                      } catch (err) {
+                        // Silently fail - action history is not critical
+                      }
+                    }
+                    
                     await refetchResources();
                     toast.success('Đã xóa tài nguyên');
                   } catch (error: any) {
@@ -772,7 +839,26 @@ function LessonPlans() {
               onDeleteTask={async (id: string) => {
                 if (window.confirm('Bạn có chắc chắn muốn xóa task này?')) {
                   try {
+                    const taskToDelete = lessonTasks.find(t => t.id === id);
                     await deleteLessonTask(id);
+                    
+                    // Record action history
+                    if (taskToDelete) {
+                      try {
+                        await recordAction({
+                          entityType: 'lesson_task',
+                          entityId: id,
+                          actionType: 'delete',
+                          beforeValue: taskToDelete,
+                          afterValue: null,
+                          changedFields: null,
+                          description: `Xóa task: ${taskToDelete.title || id}`,
+                        });
+                      } catch (err) {
+                        // Silently fail - action history is not critical
+                      }
+                    }
+                    
                     await refetchTasks();
                     toast.success('Đã xóa task');
                   } catch (error: any) {
@@ -805,6 +891,7 @@ function LessonPlans() {
               hasAccountantRole={hasAccountantRole}
               hasLessonPlanRole={hasLessonPlanRole}
               lessonPlanStaff={lessonPlanStaff}
+              currentUserStaffId={currentUserStaffId}
               onRefetch={refetchTasksOutputs}
             />
           )}
@@ -864,6 +951,7 @@ function LessonPlans() {
         <TaskModal
           task={editingTask}
           lessonPlanStaff={lessonPlanStaff}
+          currentUserStaffId={hasLessonPlanRole ? currentUserStaffId : null}
           onClose={() => {
             setTaskModalOpen(false);
             setEditingTask(null);
@@ -1629,6 +1717,7 @@ function TasksTab({
   hasAccountantRole,
   hasLessonPlanRole,
   lessonPlanStaff,
+  currentUserStaffId,
   onRefetch,
 }: {
   outputs: LessonOutput[];
@@ -1652,6 +1741,7 @@ function TasksTab({
   hasAccountantRole: boolean;
   hasLessonPlanRole: boolean;
   lessonPlanStaff: any[];
+  currentUserStaffId: string | null;
   onRefetch: () => Promise<void>;
 }) {
   const [isAddFormOpen, setIsAddFormOpen] = useState(false);
@@ -1666,7 +1756,7 @@ function TasksTab({
     status: 'pending',
     contest_uploaded: '',
     link: '',
-    assistant_id: undefined,
+    assistant_id: currentUserStaffId || undefined,
   });
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagSearchInput, setTagSearchInput] = useState('');
@@ -1734,7 +1824,26 @@ function TasksTab({
   const handleDeleteOutput = async (id: string) => {
     if (!window.confirm('Bạn có chắc chắn muốn xóa bài đã làm này?')) return;
     try {
+      const outputToDelete = outputs.find(o => o.id === id);
       await deleteLessonOutput(id);
+      
+      // Record action history
+      if (outputToDelete) {
+        try {
+          await recordAction({
+            entityType: 'lesson_output',
+            entityId: id,
+            actionType: 'delete',
+            beforeValue: outputToDelete,
+            afterValue: null,
+            changedFields: null,
+            description: `Xóa bài đã làm: ${outputToDelete.lesson_name || outputToDelete.original_title || id}`,
+          });
+        } catch (err) {
+          // Silently fail - action history is not critical
+        }
+      }
+      
       toast.success('Đã xóa bài đã làm');
       await onRefetch();
     } catch (error: any) {
@@ -1768,10 +1877,54 @@ function TasksTab({
         tag: selectedTags.join(','),
       };
       if (editingOutput) {
-        await updateLessonOutput(editingOutput.id, submitData);
+        const oldOutput = { ...editingOutput };
+        const updatedOutput = await updateLessonOutput(editingOutput.id, submitData);
+        
+        // Record action history
+        try {
+          const changedFields: Record<string, { old: any; new: any }> = {};
+          if (oldOutput.lesson_name !== updatedOutput.lesson_name) changedFields.lesson_name = { old: oldOutput.lesson_name, new: updatedOutput.lesson_name };
+          if (oldOutput.original_title !== updatedOutput.original_title) changedFields.original_title = { old: oldOutput.original_title, new: updatedOutput.original_title };
+          if (oldOutput.tag !== updatedOutput.tag) changedFields.tag = { old: oldOutput.tag, new: updatedOutput.tag };
+          if (oldOutput.level !== updatedOutput.level) changedFields.level = { old: oldOutput.level, new: updatedOutput.level };
+          if (oldOutput.cost !== updatedOutput.cost) changedFields.cost = { old: oldOutput.cost, new: updatedOutput.cost };
+          if (oldOutput.date !== updatedOutput.date) changedFields.date = { old: oldOutput.date, new: updatedOutput.date };
+          if (oldOutput.status !== updatedOutput.status) changedFields.status = { old: oldOutput.status, new: updatedOutput.status };
+          if (oldOutput.completed_by !== updatedOutput.completed_by) changedFields.completed_by = { old: oldOutput.completed_by, new: updatedOutput.completed_by };
+          if (oldOutput.link !== updatedOutput.link) changedFields.link = { old: oldOutput.link, new: updatedOutput.link };
+          
+          await recordAction({
+            entityType: 'lesson_output',
+            entityId: updatedOutput.id,
+            actionType: 'update',
+            beforeValue: oldOutput,
+            afterValue: updatedOutput,
+            changedFields: Object.keys(changedFields).length > 0 ? changedFields : undefined,
+            description: `Cập nhật bài đã làm: ${updatedOutput.lesson_name || updatedOutput.original_title || updatedOutput.id}`,
+          });
+        } catch (err) {
+          // Silently fail - action history is not critical
+        }
+        
         toast.success('Đã cập nhật bài');
       } else {
-        await createLessonOutput(submitData);
+        const newOutput = await createLessonOutput(submitData);
+        
+        // Record action history
+        try {
+          await recordAction({
+            entityType: 'lesson_output',
+            entityId: newOutput.id,
+            actionType: 'create',
+            beforeValue: null,
+            afterValue: newOutput,
+            changedFields: null,
+            description: `Tạo bài đã làm mới: ${newOutput.lesson_name || newOutput.original_title || newOutput.id}`,
+          });
+        } catch (err) {
+          // Silently fail - action history is not critical
+        }
+        
         toast.success('Đã thêm bài');
       }
       setIsAddFormOpen(false);
@@ -1788,7 +1941,7 @@ function TasksTab({
         status: 'pending',
         contest_uploaded: '',
         link: '',
-        assistant_id: undefined,
+        assistant_id: currentUserStaffId || undefined,
       });
       setCostPreview({ formatted: '0 đ', words: 'Không đồng' });
       setDuplicateTitleMatches([]);
@@ -1817,8 +1970,11 @@ function TasksTab({
         setSelectedTags(editingOutput.tag.split(',').map((t) => t.trim()).filter(Boolean));
       }
       setIsAddFormOpen(true);
+    } else if (isAddFormOpen && !editingOutput && currentUserStaffId && !addFormData.assistant_id) {
+      // When opening form for new output (not editing), auto-set assistant_id if not already set
+      setAddFormData(prev => ({ ...prev, assistant_id: currentUserStaffId }));
     }
-  }, [editingOutput]);
+  }, [editingOutput, isAddFormOpen, currentUserStaffId, addFormData.assistant_id]);
 
   // Update cost preview when cost changes
   useEffect(() => {
@@ -4635,7 +4791,23 @@ function ExercisesTab({
   const handleAddTopic = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await createLessonTopic(topicFormData);
+      const newTopic = await createLessonTopic(topicFormData);
+      
+      // Record action history
+      try {
+        await recordAction({
+          entityType: 'lesson_topic',
+          entityId: newTopic.id,
+          actionType: 'create',
+          beforeValue: null,
+          afterValue: newTopic,
+          changedFields: null,
+          description: `Tạo chuyên đề mới: ${newTopic.name || newTopic.id}`,
+        });
+      } catch (err) {
+        // Silently fail - action history is not critical
+      }
+      
       toast.success('Đã thêm chuyên đề');
       setIsAddTopicModalOpen(false);
       setTopicFormData({ name: '' });
@@ -4649,7 +4821,28 @@ function ExercisesTab({
     e.preventDefault();
     if (!editingTopic) return;
     try {
-      await updateLessonTopic(editingTopic.id, topicFormData);
+      const oldTopic = { ...editingTopic };
+      const updatedTopic = await updateLessonTopic(editingTopic.id, topicFormData);
+      
+      // Record action history
+      try {
+        const changedFields: Record<string, { old: any; new: any }> = {};
+        if (oldTopic.name !== updatedTopic.name) changedFields.name = { old: oldTopic.name, new: updatedTopic.name };
+        if (oldTopic.level !== updatedTopic.level) changedFields.level = { old: oldTopic.level, new: updatedTopic.level };
+        
+        await recordAction({
+          entityType: 'lesson_topic',
+          entityId: updatedTopic.id,
+          actionType: 'update',
+          beforeValue: oldTopic,
+          afterValue: updatedTopic,
+          changedFields: Object.keys(changedFields).length > 0 ? changedFields : undefined,
+          description: `Cập nhật chuyên đề: ${updatedTopic.name || updatedTopic.id}`,
+        });
+      } catch (err) {
+        // Silently fail - action history is not critical
+      }
+      
       toast.success('Đã cập nhật chuyên đề');
       setEditingTopic(null);
       setTopicFormData({ name: '' });
@@ -4660,9 +4853,28 @@ function ExercisesTab({
   };
 
   const handleDeleteTopic = async (id: string) => {
+    const topicToDelete = topics.find(t => t.id === id);
     if (!window.confirm('Xóa chuyên đề này?')) return;
     try {
       await deleteLessonTopic(id);
+      
+      // Record action history
+      if (topicToDelete) {
+        try {
+          await recordAction({
+            entityType: 'lesson_topic',
+            entityId: id,
+            actionType: 'delete',
+            beforeValue: topicToDelete,
+            afterValue: null,
+            changedFields: null,
+            description: `Xóa chuyên đề: ${topicToDelete.name || id}`,
+          });
+        } catch (err) {
+          // Silently fail - action history is not critical
+        }
+      }
+      
       toast.success('Đã xóa chuyên đề');
       await onRefetchTopics();
       if (selectedTopicId === id) {
@@ -5985,10 +6197,49 @@ function ResourceModal({
       const submitData = { ...formData, tags };
       
       if (resource) {
-        await updateLessonResource(resource.id, submitData);
+        const oldResource = { ...resource };
+        const updatedResource = await updateLessonResource(resource.id, submitData);
+        
+        // Record action history
+        try {
+          const changedFields: Record<string, { old: any; new: any }> = {};
+          if (oldResource.title !== updatedResource.title) changedFields.title = { old: oldResource.title, new: updatedResource.title };
+          if (oldResource.resource_link !== updatedResource.resource_link) changedFields.resource_link = { old: oldResource.resource_link, new: updatedResource.resource_link };
+          if (oldResource.description !== updatedResource.description) changedFields.description = { old: oldResource.description, new: updatedResource.description };
+          if (JSON.stringify(oldResource.tags) !== JSON.stringify(updatedResource.tags)) changedFields.tags = { old: oldResource.tags, new: updatedResource.tags };
+          
+          await recordAction({
+            entityType: 'lesson_resource',
+            entityId: updatedResource.id,
+            actionType: 'update',
+            beforeValue: oldResource,
+            afterValue: updatedResource,
+            changedFields: Object.keys(changedFields).length > 0 ? changedFields : undefined,
+            description: `Cập nhật tài nguyên: ${updatedResource.title || updatedResource.id}`,
+          });
+        } catch (err) {
+          // Silently fail - action history is not critical
+        }
+        
         toast.success('Đã cập nhật tài nguyên');
       } else {
-        await createLessonResource(submitData);
+        const newResource = await createLessonResource(submitData);
+        
+        // Record action history
+        try {
+          await recordAction({
+            entityType: 'lesson_resource',
+            entityId: newResource.id,
+            actionType: 'create',
+            beforeValue: null,
+            afterValue: newResource,
+            changedFields: null,
+            description: `Tạo tài nguyên mới: ${newResource.title || newResource.id}`,
+          });
+        } catch (err) {
+          // Silently fail - action history is not critical
+        }
+        
         toast.success('Đã thêm tài nguyên mới');
       }
       await onSuccess();
@@ -6066,23 +6317,32 @@ function ResourceModal({
 function TaskModal({
   task,
   lessonPlanStaff,
+  currentUserStaffId,
   onClose,
   onSuccess,
 }: {
   task: LessonTask | null;
   lessonPlanStaff: any[];
+  currentUserStaffId: string | null;
   onClose: () => void;
   onSuccess: () => Promise<void>;
 }) {
   const [formData, setFormData] = useState<LessonTaskFormData>({
     title: task?.title || '',
     description: task?.description || '',
-    assistant_id: task?.assistant_id || '',
+    assistant_id: task?.assistant_id || (currentUserStaffId || ''),
     due_date: task?.due_date || '',
     status: task?.status || 'pending',
     priority: task?.priority || 'medium',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Auto-set assistant_id when creating new task (task is null) and currentUserStaffId is available
+  useEffect(() => {
+    if (!task && currentUserStaffId && !formData.assistant_id) {
+      setFormData(prev => ({ ...prev, assistant_id: currentUserStaffId }));
+    }
+  }, [task, currentUserStaffId, formData.assistant_id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -6094,10 +6354,51 @@ function TaskModal({
     setIsSubmitting(true);
     try {
       if (task) {
-        await updateLessonTask(task.id, formData);
+        const oldTask = { ...task };
+        const updatedTask = await updateLessonTask(task.id, formData);
+        
+        // Record action history
+        try {
+          const changedFields: Record<string, { old: any; new: any }> = {};
+          if (oldTask.title !== updatedTask.title) changedFields.title = { old: oldTask.title, new: updatedTask.title };
+          if (oldTask.description !== updatedTask.description) changedFields.description = { old: oldTask.description, new: updatedTask.description };
+          if (oldTask.assistant_id !== updatedTask.assistant_id) changedFields.assistant_id = { old: oldTask.assistant_id, new: updatedTask.assistant_id };
+          if (oldTask.due_date !== updatedTask.due_date) changedFields.due_date = { old: oldTask.due_date, new: updatedTask.due_date };
+          if (oldTask.status !== updatedTask.status) changedFields.status = { old: oldTask.status, new: updatedTask.status };
+          if (oldTask.priority !== updatedTask.priority) changedFields.priority = { old: oldTask.priority, new: updatedTask.priority };
+          
+          await recordAction({
+            entityType: 'lesson_task',
+            entityId: updatedTask.id,
+            actionType: 'update',
+            beforeValue: oldTask,
+            afterValue: updatedTask,
+            changedFields: Object.keys(changedFields).length > 0 ? changedFields : undefined,
+            description: `Cập nhật task: ${updatedTask.title || updatedTask.id}`,
+          });
+        } catch (err) {
+          // Silently fail - action history is not critical
+        }
+        
         toast.success('Đã cập nhật task');
       } else {
-        await createLessonTask(formData);
+        const newTask = await createLessonTask(formData);
+        
+        // Record action history
+        try {
+          await recordAction({
+            entityType: 'lesson_task',
+            entityId: newTask.id,
+            actionType: 'create',
+            beforeValue: null,
+            afterValue: newTask,
+            changedFields: null,
+            description: `Tạo task mới: ${newTask.title || newTask.id}`,
+          });
+        } catch (err) {
+          // Silently fail - action history is not critical
+        }
+        
         toast.success('Đã thêm task mới');
       }
       await onSuccess();

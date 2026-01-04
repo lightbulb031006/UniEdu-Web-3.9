@@ -8,8 +8,7 @@ import { useAuthStore } from '../store/authStore';
 import { hasRole, userHasStaffRole } from '../utils/permissions';
 import { formatNumber } from '../utils/formatters';
 import { toast } from '../utils/toast';
-import Modal from '../components/Modal';
-import { CurrencyInput } from '../components/CurrencyInput';
+import { EditClassModal } from './ClassDetail';
 
 /**
  * Classes Page Component
@@ -27,18 +26,6 @@ function Classes() {
   });
   const [showModal, setShowModal] = useState(false);
   const [editingClass, setEditingClass] = useState<Class | null>(null);
-  const [formData, setFormData] = useState({
-    name: '',
-    type: '',
-    status: 'running' as 'running' | 'stopped',
-    teacherIds: [] as string[],
-    maxStudents: 15,
-    tuitionPerSession: 0,
-    studentTuitionPerSession: 0,
-    tuitionPackageTotal: 0,
-    tuitionPackageSessions: '' as number | '',
-  });
-  const [teacherSearchQuery, setTeacherSearchQuery] = useState('');
 
   const { data, isLoading, error, refetch } = useDataLoading(
     () => fetchClasses(filters),
@@ -95,25 +82,6 @@ function Classes() {
   }, [teachers]);
 
   // Get teachers available for selection (not already selected)
-  const availableTeachersForSelection = useMemo(() => {
-    const selectedIds = new Set(formData.teacherIds);
-    return availableTeachers.filter((t: any) => !selectedIds.has(t.id));
-  }, [availableTeachers, formData.teacherIds]);
-
-  // Filter teachers based on search query
-  const filteredAvailableTeachers = useMemo(() => {
-    if (!teacherSearchQuery.trim()) return availableTeachersForSelection.slice(0, 6);
-    const normalized = teacherSearchQuery.trim().toLowerCase();
-    return availableTeachersForSelection.filter((t) => {
-      const name = (t.fullName || t.full_name || t.name || '').toLowerCase();
-      return name.includes(normalized);
-    });
-  }, [availableTeachersForSelection, teacherSearchQuery]);
-
-  // Get currently selected teachers
-  const selectedTeachers = useMemo(() => {
-    return teachers.filter((t: any) => formData.teacherIds.includes(t.id));
-  }, [teachers, formData.teacherIds]);
 
   // Create teachers Map for O(1) lookup instead of O(n) find - optimize performance
   const teachersMap = useMemo(() => {
@@ -155,98 +123,12 @@ function Classes() {
 
   const handleCreate = () => {
     setEditingClass(null);
-    const defaultType = categories.length > 0 ? categories[0].name : '';
-    setFormData({
-      name: '',
-      type: defaultType,
-      status: 'running',
-      teacherIds: [],
-      maxStudents: 15,
-      tuitionPerSession: 0,
-      studentTuitionPerSession: 0,
-      tuitionPackageTotal: 0,
-      tuitionPackageSessions: '',
-    });
-    setTeacherSearchQuery('');
     setShowModal(true);
   };
 
   const handleEdit = (cls: Class) => {
     setEditingClass(cls);
-    const teacherIds = cls.teacherIds || (cls.teacherId ? [cls.teacherId] : []);
-    setFormData({
-      name: cls.name || '',
-      type: cls.type || '',
-      status: cls.status || 'running',
-      teacherIds: Array.isArray(teacherIds) ? teacherIds : [teacherIds].filter(Boolean),
-      maxStudents: cls.maxStudents || 15,
-      tuitionPerSession: cls.tuitionPerSession || 0,
-      studentTuitionPerSession: cls.studentTuitionPerSession || 0,
-      tuitionPackageTotal: cls.tuitionPackageTotal || 0,
-      tuitionPackageSessions: cls.tuitionPackageSessions || '',
-    });
-    setTeacherSearchQuery('');
     setShowModal(true);
-  };
-
-  const handleAddTeacher = (teacherId: string) => {
-    if (!formData.teacherIds.includes(teacherId)) {
-      setFormData({ ...formData, teacherIds: [...formData.teacherIds, teacherId] });
-      setTeacherSearchQuery('');
-    }
-  };
-
-  const handleRemoveTeacher = (teacherId: string) => {
-    setFormData({ ...formData, teacherIds: formData.teacherIds.filter(id => id !== teacherId) });
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (formData.teacherIds.length === 0) {
-      toast.error('Vui lòng chọn ít nhất một gia sư');
-      return;
-    }
-
-    try {
-      const classData: any = {
-        name: formData.name.trim(),
-        type: formData.type.trim(),
-        status: formData.status,
-        teacherIds: formData.teacherIds,
-        maxStudents: formData.maxStudents,
-      };
-
-      if (formData.tuitionPerSession > 0) {
-        classData.tuitionPerSession = formData.tuitionPerSession;
-      }
-
-      if (formData.studentTuitionPerSession > 0) {
-        classData.studentTuitionPerSession = formData.studentTuitionPerSession;
-      }
-
-      if (formData.tuitionPackageTotal > 0) {
-        classData.tuitionPackageTotal = formData.tuitionPackageTotal;
-      }
-
-      if (formData.tuitionPackageSessions !== '' && formData.tuitionPackageSessions > 0) {
-        classData.tuitionPackageSessions = typeof formData.tuitionPackageSessions === 'number' 
-          ? formData.tuitionPackageSessions 
-          : Number(formData.tuitionPackageSessions);
-      }
-
-      if (editingClass) {
-        await updateClass(editingClass.id, classData);
-      } else {
-        await createClass(classData);
-      }
-
-      setShowModal(false);
-      toast.success(editingClass ? 'Đã cập nhật lớp học' : 'Đã thêm lớp học mới');
-      refetch();
-    } catch (err: any) {
-      toast.error('Lỗi khi lưu lớp học: ' + (err.message || 'Lỗi không xác định'));
-    }
   };
 
   const handleDelete = async (id: string) => {
@@ -527,301 +409,21 @@ function Classes() {
       </div>
 
       {/* Class Modal */}
-      <Modal
-        title={editingClass ? 'Chỉnh sửa lớp học' : 'Thêm lớp học mới'}
+      <EditClassModal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
-        size="lg"
-      >
-        <form onSubmit={handleSubmit}>
-          <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
-            <label htmlFor="className" className="form-label">
-              Tên lớp *
-            </label>
-            <input
-              type="text"
-              id="className"
-              className="form-control"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              required
-              placeholder="Nhập tên lớp"
-            />
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--spacing-3)', marginBottom: 'var(--spacing-3)' }}>
-            <div className="form-group">
-              <label htmlFor="classType" className="form-label">
-                Phân loại *
-              </label>
-              <select
-                id="classType"
-                className="form-control"
-                value={formData.type}
-                onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                required
-              >
-                <option value="">Chọn phân loại</option>
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.name}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="classStatus" className="form-label">
-                Trạng thái *
-              </label>
-              <select
-                id="classStatus"
-                className="form-control"
-                value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value as 'running' | 'stopped' })}
-                required
-              >
-                <option value="running">Đang hoạt động</option>
-                <option value="stopped">Đã dừng</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
-            <label className="form-label" style={{ marginBottom: 'var(--spacing-2)' }}>
-              Gia sư * (có thể chọn nhiều)
-            </label>
-            
-            {/* Current Teachers List */}
-            <div style={{ marginBottom: 'var(--spacing-3)' }}>
-              <h4 style={{ marginBottom: 'var(--spacing-2)', fontSize: '0.875rem', fontWeight: '600' }}>
-                Gia sư đã chọn
-              </h4>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-2)' }}>
-                {selectedTeachers.length > 0 ? (
-                  selectedTeachers.map((teacher) => (
-                    <div
-                      key={teacher.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: 'var(--spacing-2)',
-                        background: 'var(--bg-secondary)',
-                        borderRadius: 'var(--radius)',
-                      }}
-                    >
-                      <span>{teacher.fullName || teacher.full_name || teacher.name || teacher.id}</span>
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-danger"
-                        onClick={() => handleRemoveTeacher(teacher.id)}
-                        title="Gỡ khỏi danh sách"
-                      >
-                        Xóa
-                      </button>
-                    </div>
-                  ))
-                ) : (
-                  <p style={{ fontSize: '0.875rem', color: 'var(--muted)' }}>Chưa chọn gia sư nào.</p>
-                )}
-              </div>
-            </div>
-
-            {/* Add Teacher Search */}
-            <div>
-              <h4 style={{ marginBottom: 'var(--spacing-2)', fontSize: '0.875rem', fontWeight: '600' }}>
-                Thêm gia sư mới
-              </h4>
-              <div style={{ position: 'relative' }}>
-                <input
-                  type="search"
-                  value={teacherSearchQuery}
-                  onChange={(e) => setTeacherSearchQuery(e.target.value)}
-                  placeholder="Nhập tên gia sư để tìm kiếm..."
-                  style={{
-                    width: '100%',
-                    padding: 'var(--spacing-2)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 'var(--radius)',
-                  }}
-                />
-                {teacherSearchQuery && filteredAvailableTeachers.length > 0 && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: '100%',
-                      left: 0,
-                      right: 0,
-                      marginTop: 'var(--spacing-1)',
-                      background: 'var(--surface)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius)',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                      zIndex: 10,
-                      maxHeight: '200px',
-                      overflowY: 'auto',
-                    }}
-                  >
-                    {filteredAvailableTeachers.map((teacher) => (
-                      <button
-                        key={teacher.id}
-                        type="button"
-                        onClick={() => handleAddTeacher(teacher.id)}
-                        style={{
-                          width: '100%',
-                          padding: 'var(--spacing-2)',
-                          textAlign: 'left',
-                          background: 'none',
-                          border: 'none',
-                          cursor: 'pointer',
-                          color: 'var(--text)',
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = 'var(--bg-secondary)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = 'none';
-                        }}
-                      >
-                        {teacher.fullName || teacher.full_name || teacher.name || teacher.id}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {teacherSearchQuery && filteredAvailableTeachers.length === 0 && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: '100%',
-                      left: 0,
-                      right: 0,
-                      marginTop: 'var(--spacing-1)',
-                      padding: 'var(--spacing-2)',
-                      background: 'var(--surface)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius)',
-                      fontSize: '0.875rem',
-                      color: 'var(--muted)',
-                    }}
-                  >
-                    Không tìm thấy gia sư phù hợp.
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
-            <label htmlFor="classMaxStudents" className="form-label">
-              Số học sinh tối đa
-            </label>
-            <input
-              type="number"
-              id="classMaxStudents"
-              className="form-control"
-              value={formData.maxStudents}
-              onChange={(e) => setFormData({ ...formData, maxStudents: parseInt(e.target.value, 10) || 15 })}
-              min="1"
-              placeholder="15"
-            />
-          </div>
-
-          {/* Tuition Section */}
-          <div style={{ marginTop: 'var(--spacing-4)', padding: 'var(--spacing-4)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius)', marginBottom: 'var(--spacing-3)' }}>
-            <h4 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', marginBottom: 'var(--spacing-3)' }}>Trợ cấp giáo viên</h4>
-            <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
-              <label htmlFor="classTuitionPerSession" className="form-label">
-                Trợ cấp / Hệ số (VND)
-              </label>
-              <CurrencyInput
-                id="classTuitionPerSession"
-                className="form-control"
-                value={formData.tuitionPerSession}
-                onChange={(value) => {
-                  setFormData({ ...formData, tuitionPerSession: value });
-                }}
-                placeholder="Ví dụ: 150000"
-              />
-            </div>
-          </div>
-
-          <div style={{ marginTop: 'var(--spacing-4)', padding: 'var(--spacing-4)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius)', marginBottom: 'var(--spacing-3)' }}>
-            <h4 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', marginBottom: 'var(--spacing-3)' }}>Học phí học sinh</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--spacing-3)' }}>
-              <div className="form-group">
-                <label htmlFor="classTuitionPackageTotal" className="form-label">
-                  Tổng tiền học phí (VND)
-                </label>
-                <CurrencyInput
-                  id="classTuitionPackageTotal"
-                  className="form-control"
-                  value={formData.tuitionPackageTotal}
-                  onChange={(value) => {
-                    setFormData({ ...formData, tuitionPackageTotal: value });
-                  }}
-                  placeholder="Ví dụ: 2000000"
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="classTuitionPackageSessions" className="form-label">
-                  Số buổi
-                </label>
-                <input
-                  type="number"
-                  id="classTuitionPackageSessions"
-                  className="form-control"
-                  value={formData.tuitionPackageSessions}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (value === '') {
-                      setFormData({ ...formData, tuitionPackageSessions: '' });
-                    } else {
-                      const sessions = parseInt(value, 10);
-                      if (!isNaN(sessions) && sessions >= 0) {
-                        setFormData({ ...formData, tuitionPackageSessions: sessions });
-                        // Auto-calculate student tuition per session
-                        if (sessions > 0 && formData.tuitionPackageTotal > 0) {
-                          setFormData((prev) => ({
-                            ...prev,
-                            studentTuitionPerSession: Math.round(prev.tuitionPackageTotal / sessions),
-                          }));
-                        }
-                      }
-                    }
-                  }}
-                  min="0"
-                  step="1"
-                  placeholder="Ví dụ: 10"
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="classStudentTuitionPerSession" className="form-label">
-                  Học phí mỗi buổi (VND)
-                </label>
-                <CurrencyInput
-                  id="classStudentTuitionPerSession"
-                  className="form-control"
-                  value={formData.studentTuitionPerSession}
-                  onChange={(value) => {
-                    setFormData({ ...formData, studentTuitionPerSession: value });
-                  }}
-                  placeholder="Tự động từ tổng tiền / số buổi"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="form-actions" style={{ display: 'flex', gap: 'var(--spacing-2)', justifyContent: 'flex-end', marginTop: 'var(--spacing-6)' }}>
-            <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
-              Hủy
-            </button>
-            <button type="submit" className="btn btn-primary">
-              {editingClass ? 'Cập nhật' : 'Tạo mới'}
-            </button>
-          </div>
-        </form>
-      </Modal>
+        classData={editingClass}
+        teachers={teachers}
+        categories={categories}
+        mode={editingClass ? 'edit' : 'create'}
+        onCreateClass={async (data) => {
+          await createClass(data);
+        }}
+        onSave={async () => {
+          setShowModal(false);
+          refetch();
+        }}
+      />
     </div>
   );
 }

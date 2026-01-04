@@ -77,12 +77,14 @@ export const authService = {
         rememberMe: credentials.rememberMe || false,
       });
 
-      // Set auth (sẽ lưu vào localStorage với key 'unicorns.token' và 'unicorns.currentUser')
-      useAuthStore.getState().setAuth(data.user, data.token, credentials.rememberMe || false);
-      
+      // Store refreshToken in the appropriate storage before setAuth
       if (data.refreshToken) {
-        localStorage.setItem('refreshToken', data.refreshToken);
+        const storage = credentials.rememberMe ? localStorage : sessionStorage;
+        storage.setItem('refreshToken', data.refreshToken);
       }
+
+      // Set auth (sẽ lưu vào localStorage hoặc sessionStorage tùy theo rememberMe)
+      useAuthStore.getState().setAuth(data.user, data.token, credentials.rememberMe || false);
 
       // Debug logging
       if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
@@ -168,4 +170,20 @@ export const authService = {
     useAuthStore.getState().logout();
   },
 };
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  status?: string;
+}
+
+/**
+ * Get all users (admin only)
+ */
+export async function fetchUsers(): Promise<User[]> {
+  const response = await api.get<User[]>('/auth/users');
+  return response.data || [];
+}
 

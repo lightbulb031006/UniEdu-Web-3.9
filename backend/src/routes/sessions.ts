@@ -4,7 +4,7 @@
 
 import { Router } from 'express';
 import { getSessions, getSessionsForDateRange, getSessionById, createSession, updateSession, deleteSession } from '../services/sessionsService';
-import { authenticate } from '../middleware/auth';
+import { authenticate, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
@@ -12,10 +12,23 @@ const router = Router();
 router.use(authenticate);
 
 /**
+ * Helper function to filter tuition_fee based on user role
+ * Only admin can see tuition_fee
+ */
+function filterTuitionFeeForRole(session: any, userRole: string): any {
+  if (userRole !== 'admin') {
+    const { tuition_fee, ...sessionWithoutTuitionFee } = session;
+    return sessionWithoutTuitionFee;
+  }
+  return session;
+}
+
+/**
  * GET /api/sessions
  * Get all sessions with optional filters
+ * Only admin can see tuition_fee field
  */
-router.get('/', async (req, res, next) => {
+router.get('/', async (req: AuthRequest, res, next) => {
   try {
     const filters: any = {};
     if (req.query.classId) {
@@ -34,17 +47,23 @@ router.get('/', async (req, res, next) => {
       filters.endDate = req.query.endDate as string;
     }
 
+    const userRole = req.user?.role || '';
+
     // If both startDate and endDate are provided, use date range query
     if (filters.startDate && filters.endDate) {
       const sessions = await getSessionsForDateRange(filters.startDate, filters.endDate, {
         classId: filters.classId,
         teacherId: filters.teacherId,
       });
-      return res.json(sessions);
+      // Filter tuition_fee based on role
+      const filteredSessions = sessions.map(s => filterTuitionFeeForRole(s, userRole));
+      return res.json(filteredSessions);
     }
 
     const sessions = await getSessions(filters);
-    res.json(sessions);
+    // Filter tuition_fee based on role
+    const filteredSessions = sessions.map(s => filterTuitionFeeForRole(s, userRole));
+    res.json(filteredSessions);
   } catch (error) {
     next(error);
   }
@@ -53,14 +72,17 @@ router.get('/', async (req, res, next) => {
 /**
  * GET /api/sessions/:id
  * Get a single session by ID
+ * Only admin can see tuition_fee field
  */
-router.get('/:id', async (req, res, next) => {
+router.get('/:id', async (req: AuthRequest, res, next) => {
   try {
     const session = await getSessionById(req.params.id);
     if (!session) {
       return res.status(404).json({ error: 'Session not found' });
     }
-    res.json(session);
+    const userRole = req.user?.role || '';
+    const filteredSession = filterTuitionFeeForRole(session, userRole);
+    res.json(filteredSession);
   } catch (error) {
     next(error);
   }

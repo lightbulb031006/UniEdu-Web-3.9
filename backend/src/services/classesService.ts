@@ -27,7 +27,7 @@ export interface Class {
 export async function getClasses(filters: ClassFilters = {}) {
   try {
     // Select columns including denormalized teacher_ids for fast access
-    let query = supabase.from('classes').select('id, name, type, status, max_students, tuition_per_session, schedule, custom_teacher_allowances, teacher_ids, created_at, updated_at');
+    let query = supabase.from('classes').select('id, name, type, status, max_students, tuition_per_session, scale_amount, max_allowance_per_session, student_tuition_per_session, tuition_package_total, tuition_package_sessions, schedule, custom_teacher_allowances, teacher_ids, created_at, updated_at');
 
     if (filters.status && filters.status !== 'all') {
       query = query.eq('status', filters.status);
@@ -86,7 +86,7 @@ export async function getClasses(filters: ClassFilters = {}) {
 export async function getClassById(id: string, options: { includeTeachers?: boolean } = {}) {
   try {
     // Select columns including denormalized teacher_ids for fast access
-    const { data, error } = await supabase.from('classes').select('id, name, type, status, max_students, tuition_per_session, schedule, custom_teacher_allowances, teacher_ids, created_at, updated_at').eq('id', id).single();
+    const { data, error } = await supabase.from('classes').select('id, name, type, status, max_students, tuition_per_session, scale_amount, max_allowance_per_session, student_tuition_per_session, tuition_package_total, tuition_package_sessions, schedule, custom_teacher_allowances, teacher_ids, created_at, updated_at').eq('id', id).single();
 
     if (error) {
       console.error(`[getClassById] Error fetching class ${id}:`, error);
@@ -479,11 +479,35 @@ export async function getClassStudentsWithRemainingSessions(classId: string) {
     });
   }
 
+  // Get class info to calculate default tuition
+  const { data: classData } = await supabase
+    .from('classes')
+    .select('student_tuition_per_session, tuition_package_total, tuition_package_sessions')
+    .eq('id', classId)
+    .single();
+
+  const classDefaultTuition = classData?.student_tuition_per_session || 0;
+  const classPackageTotal = classData?.tuition_package_total || 0;
+  const classPackageSessions = classData?.tuition_package_sessions || 0;
+  const classCalculatedTuition = classDefaultTuition > 0 
+    ? classDefaultTuition 
+    : (classPackageTotal > 0 && classPackageSessions > 0 ? classPackageTotal / classPackageSessions : 0);
+
   // Process each student_class record
   return studentClasses.map((sc: any) => {
     const student = sc.students || {};
     const remaining = Math.max(0, Number(sc.remaining_sessions || 0));
     const attended = Math.max(0, Number(sc.total_attended_sessions || 0) || attendedCountMap.get(sc.student_id) || 0);
+
+    // Calculate student tuition per session
+    // Priority: student_tuition_per_session > calculated from student_fee > class default
+    const studentTuitionPerSession = sc.student_tuition_per_session || 0;
+    const studentFeeTotal = sc.student_fee_total || 0;
+    const studentFeeSessions = sc.student_fee_sessions || 0;
+    const calculatedFromFee = studentFeeTotal > 0 && studentFeeSessions > 0 ? studentFeeTotal / studentFeeSessions : 0;
+    const tuitionPerSession = studentTuitionPerSession > 0 
+      ? studentTuitionPerSession 
+      : (calculatedFromFee > 0 ? calculatedFromFee : classCalculatedTuition);
 
     return {
       student: {
@@ -501,9 +525,13 @@ export async function getClassStudentsWithRemainingSessions(classId: string) {
         status: sc.status,
         remaining_sessions: remaining,
         total_attended_sessions: attended,
+        student_tuition_per_session: sc.student_tuition_per_session,
+        student_fee_total: sc.student_fee_total,
+        student_fee_sessions: sc.student_fee_sessions,
       },
       remainingSessions: remaining,
       totalAttended: attended,
+      tuitionPerSession: tuitionPerSession, // Add tuition per session for this student
     };
   });
 }

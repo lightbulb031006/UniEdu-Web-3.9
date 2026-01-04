@@ -14,8 +14,10 @@ import Modal from '../components/Modal';
 import { CurrencyInput } from '../components/CurrencyInput';
 import AttendanceIcon from '../components/AttendanceIcon';
 import { useAttendance } from '../hooks/useAttendance';
+import { useSessionFinancials } from '../hooks/useSessionFinancials';
 import { toast } from '../utils/toast';
 import SurveyTab from '../components/SurveyTab';
+import { recordAction } from '../services/actionHistoryService';
 
 /**
  * Class Detail Page Component
@@ -59,6 +61,25 @@ function ClassDetail() {
   const [editingTeacherForAllowance, setEditingTeacherForAllowance] = useState<any | null>(null);
   const [selectedSessions, setSelectedSessions] = useState<Set<string>>(new Set());
   const [bulkSessionStatusModalOpen, setBulkSessionStatusModalOpen] = useState(false);
+  const [headerTuitionFee, setHeaderTuitionFee] = useState<number>(0);
+  const [isEditingHeaderTuitionFee, setIsEditingHeaderTuitionFee] = useState<boolean>(false);
+  const [editingHeaderTuitionFeeValue, setEditingHeaderTuitionFeeValue] = useState<number>(0);
+  const [isHeaderTuitionFeeManuallyEdited, setIsHeaderTuitionFeeManuallyEdited] = useState<boolean>(false);
+  
+  // State for Edit Session Modal header tuition fee
+  const [editHeaderTuitionFee, setEditHeaderTuitionFee] = useState<number>(0);
+  const [isEditingEditHeaderTuitionFee, setIsEditingEditHeaderTuitionFee] = useState<boolean>(false);
+  const [editingEditHeaderTuitionFeeValue, setEditingEditHeaderTuitionFeeValue] = useState<number>(0);
+  const [isEditHeaderTuitionFeeManuallyEdited, setIsEditHeaderTuitionFeeManuallyEdited] = useState<boolean>(false);
+  
+  // Callback to handle estimated tuition fee changes from EditSessionModal
+  const handleEditEstimatedTuitionFeeChange = useCallback((fee: number) => {
+    // Only update if not manually edited AND if we don't have a value from DB yet
+    // This prevents estimatedTuitionFee from overriding the DB value when modal first opens
+    if (!isEditHeaderTuitionFeeManuallyEdited && editHeaderTuitionFee === 0) {
+      setEditHeaderTuitionFee(fee);
+    }
+  }, [isEditHeaderTuitionFeeManuallyEdited, editHeaderTuitionFee]);
 
   const fetchClassFn = useCallback(() => {
     if (!id) throw new Error('Class ID is required');
@@ -88,10 +109,29 @@ function ClassDetail() {
     staleTime: 1 * 60 * 1000,
   });
 
+  // Optimistic updates state for sessions
+  const [optimisticSessions, setOptimisticSessions] = useState<any[]>([]);
+  const [optimisticOperations, setOptimisticOperations] = useState<Map<string, 'create' | 'update' | 'delete'>>(new Map());
+
+  // Sync optimistic sessions with server data
+  useEffect(() => {
+    if (sessionsData && Array.isArray(sessionsData)) {
+      // If no pending operations, sync with server data
+      if (optimisticOperations.size === 0) {
+        setOptimisticSessions(sessionsData);
+      }
+    }
+  }, [sessionsData]);
+
+  // Use optimistic sessions if available, otherwise use server data
+  const sessions = optimisticSessions.length > 0 ? optimisticSessions : (Array.isArray(sessionsData) ? sessionsData : []);
+
   const refetch = useCallback(() => {
     refetchClass();
     refetchStudents();
     refetchSessions();
+    // Clear optimistic operations after refetch
+    setOptimisticOperations(new Map());
   }, [refetchClass, refetchStudents, refetchSessions]);
 
   // Fetch all teachers only when needed (for EditTeacherModal) - lazy loading
@@ -111,6 +151,13 @@ function ClassDetail() {
     }
   }, [allTeachers.length]);
 
+  // Load all teachers when EditClassModal opens (needed for teacher search and display)
+  useEffect(() => {
+    if (editClassModalOpen && allTeachers.length === 0) {
+      loadAllTeachers();
+    }
+  }, [editClassModalOpen, allTeachers.length, loadAllTeachers]);
+
   // Fetch categories for type dropdown
   const { data: categoriesData } = useDataLoading(
     () => fetchCategories(),
@@ -128,23 +175,19 @@ function ClassDetail() {
   });
 
   const students = Array.isArray(studentsData) ? studentsData : [];
-  const sessions = Array.isArray(sessionsData) ? sessionsData : [];
   const categories = Array.isArray(categoriesData) ? categoriesData : [];
 
   // Get class teachers from classData (included in API response via includeTeachers option)
   // This avoids fetching all teachers just to filter
   const classTeachers = useMemo(() => {
     if (!classData) {
-      console.log('[ClassDetail] No classData, returning empty teachers array');
       return [];
     }
     // Use teachers from classData if available (from includeTeachers option)
     if ((classData as any).teachers && Array.isArray((classData as any).teachers)) {
-      console.log('[ClassDetail] Found teachers in classData:', (classData as any).teachers.length);
       return (classData as any).teachers;
     }
     // Fallback: if teachers not included, return empty array
-    console.warn('[ClassDetail] No teachers found in classData. classData keys:', Object.keys(classData));
     return [];
   }, [classData]);
 
@@ -183,6 +226,12 @@ function ClassDetail() {
   const canEditSession = isAdmin || isTutor || hasRole('accountant') || hasCskhPrivileges;
   // Chỉ admin và accountant mới có thể chỉnh sửa allowance thủ công
   const canEditAllowanceManually = isAdmin || hasRole('accountant');
+  // Teacher (gia sư) có thể chỉnh sửa lịch học
+  const canEditSchedule = isAdmin || isTutor || hasRole('accountant') || hasCskhPrivileges;
+  // Teacher (gia sư) có thể quản lý khảo sát
+  const canManageSurveys = isAdmin || isTutor || hasRole('accountant') || hasCskhPrivileges;
+  // Chỉ admin mới có thể xóa khảo sát
+  const canDeleteSurveys = isAdmin;
 
   // Month navigation handlers
   const handleMonthChange = (delta: number) => {
@@ -237,6 +286,28 @@ function ClassDetail() {
     });
   }, [sessions, selectedMonth]);
 
+  // Callback to add session optimistically
+  const handleSessionCreated = useCallback((newSession: any) => {
+    setOptimisticSessions((prev) => {
+      const updated = [...prev, newSession];
+      return updated.sort((a, b) => {
+        const dateA = a.date || '';
+        const dateB = b.date || '';
+        if (dateA !== dateB) return dateA.localeCompare(dateB);
+        const timeA = a.start_time || a.startTime || '';
+        const timeB = b.start_time || b.startTime || '';
+        return timeA.localeCompare(timeB);
+      });
+    });
+  }, []);
+
+  // Callback to update session optimistically
+  const handleSessionUpdated = useCallback((updatedSession: any) => {
+    setOptimisticSessions((prev) => {
+      return prev.map((s) => (s.id === updatedSession.id ? updatedSession : s));
+    });
+  }, []);
+
   // Get teacher names
   // classTeachers is now computed from classData.teachers (included in API response)
 
@@ -257,6 +328,7 @@ function ClassDetail() {
           status: studentData.status || 'active',
           remainingSessions: item.remainingSessions || item.studentClass?.remaining_sessions || 0,
           totalAttended: item.totalAttended || item.studentClass?.total_attended_sessions || 0,
+          tuitionPerSession: item.tuitionPerSession || 0, // Add tuition per session
         };
       });
     }
@@ -271,6 +343,63 @@ function ClassDetail() {
       totalAttended: 0,
     }));
   }, [students, classData, studentsWithRemainingData]);
+
+  // Calculate initial estimated tuition fee for header display
+  // Must be after isAdmin and enrolledStudents are declared
+  useEffect(() => {
+    if (addSessionModalOpen && isAdmin && enrolledStudents.length > 0) {
+      let initialFee = 0;
+      enrolledStudents.forEach((student) => {
+        const hasRemaining = (student.remainingSessions || 0) > 0;
+        // Default: students with remaining sessions are "present"
+        if (hasRemaining) {
+          const studentTuition = (student as any).tuitionPerSession || 0;
+          initialFee += studentTuition;
+        }
+      });
+      // Only set initial fee if not manually edited
+      if (!isHeaderTuitionFeeManuallyEdited) {
+        setHeaderTuitionFee(initialFee);
+      }
+    } else if (!addSessionModalOpen) {
+      setHeaderTuitionFee(0);
+      setIsHeaderTuitionFeeManuallyEdited(false);
+    }
+  }, [isAdmin, enrolledStudents, addSessionModalOpen, isHeaderTuitionFeeManuallyEdited]);
+
+  // Load tuition fee from session when opening Edit Session Modal or when editingSession changes
+  useEffect(() => {
+    if (editSessionModalOpen && isAdmin && editingSession) {
+      // Get tuition fee from session (check both camelCase and snake_case)
+      const sessionTuitionFee = (editingSession as any).tuitionFee !== undefined && (editingSession as any).tuitionFee !== null
+        ? Number((editingSession as any).tuitionFee)
+        : (editingSession as any).tuition_fee !== undefined && (editingSession as any).tuition_fee !== null
+          ? Number((editingSession as any).tuition_fee)
+          : 0;
+      
+      const newTuitionFee = sessionTuitionFee > 0 ? sessionTuitionFee : 0;
+      
+      // Always sync with editingSession to ensure UI matches DB
+      // When loading from DB, set the flag to prevent estimatedTuitionFee from overriding
+      // This ensures the DB value takes precedence over calculated estimate
+      setEditHeaderTuitionFee((prev) => {
+        // Only update if value actually changed to avoid unnecessary re-renders
+        if (prev !== newTuitionFee) {
+          // Set flag to prevent estimatedTuitionFee from overriding DB value
+          // But only if we have a valid value from DB (newTuitionFee > 0)
+          if (newTuitionFee > 0) {
+            setIsEditHeaderTuitionFeeManuallyEdited(true);
+          }
+          return newTuitionFee;
+        }
+        return prev;
+      });
+    } else if (!editSessionModalOpen) {
+      setEditHeaderTuitionFee(0);
+      setIsEditingEditHeaderTuitionFee(false);
+      setIsEditHeaderTuitionFeeManuallyEdited(false);
+    }
+  }, [isAdmin, editingSession, editSessionModalOpen]);
 
   // Check if current user is a teacher viewer
   const isTeacherViewer = currentUser?.role === 'teacher';
@@ -741,7 +870,7 @@ function ClassDetail() {
               </svg>
               Lịch học
             </h3>
-            {canManage && (
+            {canEditSchedule && (
               <button
                 className="btn btn-sm schedule-edit-btn"
                 id="editScheduleBtn"
@@ -904,7 +1033,9 @@ function ClassDetail() {
                       <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '180px' }}>Tên</th>
                       <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '100px' }}>Năm sinh</th>
                       <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '120px' }}>Tỉnh</th>
+                      {isAdmin && (
                       <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '120px' }}>Còn lại</th>
+                      )}
                       <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '120px' }}>Trạng thái</th>
                       {canManageStudents && (
                         <th style={{ padding: 'var(--spacing-3)', textAlign: 'center', width: '120px', fontWeight: '600', fontSize: '0.875rem' }}>Thao tác</th>
@@ -959,6 +1090,7 @@ function ClassDetail() {
                           <td style={{ padding: 'var(--spacing-3)' }}>
                             <span style={{ color: 'var(--muted)' }}>{student.province || '-'}</span>
                           </td>
+                          {isAdmin && (
                           <td style={{ padding: 'var(--spacing-3)' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-1)' }}>
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--primary)', flexShrink: 0 }}>
@@ -968,6 +1100,7 @@ function ClassDetail() {
                               <span style={{ fontWeight: '500', color: 'var(--text)' }}>{remainingSummary}</span>
                             </div>
                           </td>
+                          )}
                           <td style={{ padding: 'var(--spacing-3)' }}>
                             <span
                               className={`badge ${student.status === 'active' ? 'badge-success' : 'badge-muted'}`}
@@ -1047,6 +1180,20 @@ function ClassDetail() {
                                     if (window.confirm(`Xóa học sinh này khỏi lớp? (Học sinh sẽ không bị xóa hoàn toàn, chỉ được gỡ khỏi lớp này)`)) {
                                       try {
                                         await removeStudentFromClass(id!, student.id, true);
+                                        
+                                        // Record action history
+                                        try {
+                                          await recordAction({
+                                            entityType: 'student_class',
+                                            entityId: `${student.id}_${id}`,
+                                            actionType: 'delete',
+                                            beforeValue: { student_id: student.id, class_id: id, student_name: student.name },
+                                            description: `Xóa học sinh "${student.name}" khỏi lớp "${classData?.name || id}"`,
+                                          });
+                                        } catch (err) {
+                                          // Silently fail - action history is not critical
+                                        }
+                                        
                                         toast.success('Đã xóa học sinh khỏi lớp');
                                         refetch();
                                       } catch (error: any) {
@@ -1709,9 +1856,26 @@ function ClassDetail() {
                                     const newStatus = statusOrder[nextIndex];
                                     
                                     try {
+                                      const oldStatus = session.payment_status;
                                       await updateSession(session.id, {
                                         payment_status: newStatus as 'paid' | 'unpaid' | 'deposit',
                                       });
+                                      
+                                      // Record action history
+                                      try {
+                                        await recordAction({
+                                          entityType: 'session',
+                                          entityId: session.id,
+                                          actionType: 'update',
+                                          beforeValue: { ...session, payment_status: oldStatus },
+                                          afterValue: { ...session, payment_status: newStatus },
+                                          changedFields: { payment_status: { old: oldStatus, new: newStatus } },
+                                          description: `Cập nhật trạng thái thanh toán buổi học ngày ${formatDate(session.date)} từ "${paymentStatusLabels[oldStatus || 'unpaid']}" sang "${paymentStatusLabels[newStatus]}"`,
+                                        });
+                                      } catch (err) {
+                                        // Silently fail - action history is not critical
+                                      }
+                                      
                                       toast.success(`Đã chuyển sang: ${paymentStatusLabels[newStatus]}`);
                                       refetch();
                                     } catch (error: any) {
@@ -1781,7 +1945,22 @@ function ClassDetail() {
                                 onClick={async () => {
                                   if (!window.confirm('Bạn có chắc chắn muốn xóa buổi học này?')) return;
                                   try {
+                                    const sessionToDelete = { ...session };
                                     await deleteSession(session.id);
+                                    
+                                    // Record action history
+                                    try {
+                                      await recordAction({
+                                        entityType: 'session',
+                                        entityId: session.id,
+                                        actionType: 'delete',
+                                        beforeValue: sessionToDelete,
+                                        description: `Xóa buổi học ngày ${formatDate(session.date)} của lớp ${classes.find(c => c.id === session.class_id)?.name || session.class_id}`,
+                                      });
+                                    } catch (err) {
+                                      // Silently fail - action history is not critical
+                                    }
+                                    
                                     toast.success('Đã xóa buổi học');
                                     refetch();
                                   } catch (error: any) {
@@ -1880,7 +2059,7 @@ function ClassDetail() {
               </div>
             ) : (
               <div>
-                {id && <SurveyTab classId={id} canManage={canManage} />}
+                {id && <SurveyTab classId={id} canManage={canManageSurveys} canDelete={canDeleteSurveys} />}
               </div>
             )}
           </div>
@@ -1912,8 +2091,85 @@ function ClassDetail() {
       <Modal
         title="Thêm buổi học"
         isOpen={addSessionModalOpen}
-        onClose={() => setAddSessionModalOpen(false)}
+        onClose={() => {
+          setAddSessionModalOpen(false);
+          setHeaderTuitionFee(0);
+          setIsEditingHeaderTuitionFee(false);
+          setIsHeaderTuitionFeeManuallyEdited(false);
+        }}
         size="md"
+        headerExtra={
+          isAdmin ? (
+            isEditingHeaderTuitionFee ? (
+              <CurrencyInput
+                value={editingHeaderTuitionFeeValue}
+                onChange={(value) => setEditingHeaderTuitionFeeValue(value > 0 ? value : 0)}
+                placeholder="Nhập học phí"
+                showHint={false}
+                style={{
+                  width: '120px',
+                  fontSize: '0.875rem',
+                  marginLeft: 'var(--spacing-2)',
+                  minWidth: '120px',
+                  maxWidth: '150px',
+                }}
+                autoFocus
+                onBlur={(e) => {
+                  // Nếu có giá trị nhập vào thì lấy giá trị đó, còn không thì giữ nguyên giá trị cũ
+                  const newValue = editingHeaderTuitionFeeValue > 0 ? editingHeaderTuitionFeeValue : headerTuitionFee;
+                  setHeaderTuitionFee(newValue);
+                  setIsEditingHeaderTuitionFee(false);
+                  if (editingHeaderTuitionFeeValue > 0 && editingHeaderTuitionFeeValue !== headerTuitionFee) {
+                    setIsHeaderTuitionFeeManuallyEdited(true);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const newValue = editingHeaderTuitionFeeValue > 0 ? editingHeaderTuitionFeeValue : headerTuitionFee;
+                    setHeaderTuitionFee(newValue);
+                    setIsEditingHeaderTuitionFee(false);
+                    if (editingHeaderTuitionFeeValue > 0 && editingHeaderTuitionFeeValue !== headerTuitionFee) {
+                      setIsHeaderTuitionFeeManuallyEdited(true);
+                    }
+                    (e.currentTarget as HTMLElement).blur();
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setEditingHeaderTuitionFeeValue(headerTuitionFee);
+                    setIsEditingHeaderTuitionFee(false);
+                    (e.currentTarget as HTMLElement).blur();
+                  }
+                }}
+              />
+            ) : (
+              <span 
+                style={{ 
+                  fontSize: '0.875rem', 
+                  fontWeight: '600', 
+                  color: '#10b981',
+                  marginLeft: 'var(--spacing-2)',
+                  cursor: 'pointer',
+                  padding: 'var(--spacing-1) var(--spacing-2)',
+                  borderRadius: 'var(--radius)',
+                  transition: 'background-color 0.2s',
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditingHeaderTuitionFeeValue(headerTuitionFee);
+                  setIsEditingHeaderTuitionFee(true);
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(16, 185, 129, 0.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+              >
+                {headerTuitionFee > 0 ? formatCurrencyVND(headerTuitionFee) : 'Click để nhập học phí'}
+              </span>
+            )
+          ) : null
+        }
       >
         {id && classData && (
           <AddSessionModal
@@ -1921,32 +2177,55 @@ function ClassDetail() {
             classData={classData}
             teachers={classTeachers}
             students={enrolledStudents}
+                headerTuitionFee={headerTuitionFee}
+                onEstimatedTuitionFeeChange={(fee) => {
+                  // Only update if not manually edited
+                  if (!isHeaderTuitionFeeManuallyEdited) {
+                    setHeaderTuitionFee(fee);
+                  }
+                }}
+                onSessionCreated={handleSessionCreated}
             onSuccess={() => {
               setAddSessionModalOpen(false);
+                  setHeaderTuitionFee(0);
+                  setIsEditingHeaderTuitionFee(false);
+                  setIsHeaderTuitionFeeManuallyEdited(false);
               refetch();
             }}
-            onClose={() => setAddSessionModalOpen(false)}
+                onClose={() => {
+                  setAddSessionModalOpen(false);
+                  setHeaderTuitionFee(0);
+                  setIsEditingHeaderTuitionFee(false);
+                  setIsHeaderTuitionFeeManuallyEdited(false);
+                }}
           />
         )}
       </Modal>
 
       {/* Edit Class Modal */}
       {editClassModalOpen && classData && (
-        <EditClassModal
-          isOpen={editClassModalOpen}
-          onClose={() => setEditClassModalOpen(false)}
-          classData={classData}
-          teachers={allTeachers}
-          classTeachers={classTeachers}
-          categories={categories}
-          onSave={async () => {
-            await refetchClass();
-            setEditClassModalOpen(false);
-          }}
-          onOpenTeacherModal={() => {
-            setEditTeacherModalOpen(true);
-          }}
-        />
+          <EditClassModal
+            isOpen={editClassModalOpen}
+            onClose={() => {
+              setEditClassModalOpen(false);
+            }}
+            classData={classData}
+            teachers={allTeachers.length > 0 ? allTeachers : (classData?.teachers || [])}
+            classTeachers={classTeachers}
+            categories={categories}
+            mode="edit"
+            onSave={async () => {
+              await refetchClass();
+              setEditClassModalOpen(false);
+            }}
+            onOpenTeacherModal={() => {
+              // Load all teachers if not already loaded
+              if (allTeachers.length === 0) {
+                loadAllTeachers();
+              }
+              setEditTeacherModalOpen(true);
+            }}
+          />
       )}
 
       {/* Edit Teacher Modal */}
@@ -2018,8 +2297,168 @@ function ClassDetail() {
         onClose={() => {
           setEditSessionModalOpen(false);
           setEditingSession(null);
+          setEditHeaderTuitionFee(0);
+          setIsEditingEditHeaderTuitionFee(false);
+          setIsEditHeaderTuitionFeeManuallyEdited(false);
         }}
         size="md"
+        headerExtra={
+          isAdmin ? (
+            isEditingEditHeaderTuitionFee ? (
+              <CurrencyInput
+                value={editingEditHeaderTuitionFeeValue}
+                onChange={(value) => setEditingEditHeaderTuitionFeeValue(value > 0 ? value : 0)}
+                placeholder="Nhập học phí"
+                showHint={false}
+                style={{
+                  width: '120px',
+                  fontSize: '0.875rem',
+                  marginLeft: 'var(--spacing-2)',
+                  minWidth: '120px',
+                  maxWidth: '150px',
+                }}
+                autoFocus
+                onBlur={async (e) => {
+                  // Lưu giá trị vào database ngay khi blur (giống logic trợ cấp)
+                  const newValue = editingEditHeaderTuitionFeeValue;
+                  
+                  if (newValue !== editHeaderTuitionFee) {
+                    try {
+                      // Lưu vào database ngay lập tức
+                      const tuitionFeeValue = newValue > 0 ? newValue : null;
+                      const updatedSession = await updateSession(editingSession.id, { tuition_fee: tuitionFeeValue });
+                      
+                      // Lấy giá trị từ response của server để đảm bảo đồng bộ
+                      const savedTuitionFee = (updatedSession as any).tuition_fee !== undefined && (updatedSession as any).tuition_fee !== null
+                        ? Number((updatedSession as any).tuition_fee)
+                        : (updatedSession as any).tuitionFee !== undefined && (updatedSession as any).tuitionFee !== null
+                          ? Number((updatedSession as any).tuitionFee)
+                          : 0;
+                      
+                      // Cập nhật state với giá trị từ server
+                      setEditHeaderTuitionFee(savedTuitionFee);
+                      
+                      // Cập nhật editingSession với giá trị từ server để đồng bộ UI
+                      // Đảm bảo cả tuition_fee và tuitionFee đều được set
+                      const sessionWithTuitionFee = {
+                        ...updatedSession,
+                        tuition_fee: savedTuitionFee > 0 ? savedTuitionFee : null,
+                        tuitionFee: savedTuitionFee > 0 ? savedTuitionFee : null,
+                      };
+                      
+                      setEditingSession(sessionWithTuitionFee);
+                      
+                      // Reset flag để cho phép sync lại từ editingSession nếu cần
+                      // Nhưng vẫn giữ flag để không bị auto-update từ estimatedTuitionFee
+                      setIsEditHeaderTuitionFeeManuallyEdited(true);
+                      
+                      if (handleSessionUpdated) {
+                        handleSessionUpdated(sessionWithTuitionFee);
+                      }
+                      
+                      toast.success('Đã cập nhật học phí');
+                    } catch (error: any) {
+                      toast.error('Không thể cập nhật học phí: ' + (error.response?.data?.error || error.message));
+                      // Khôi phục giá trị cũ nếu lỗi
+                      setEditingEditHeaderTuitionFeeValue(editHeaderTuitionFee);
+                    }
+                  }
+                  setIsEditingEditHeaderTuitionFee(false);
+                }}
+                onKeyDown={async (e) => {
+                  const target = e.currentTarget as HTMLElement;
+                  
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    // Lưu giá trị vào database ngay khi nhấn Enter (giống logic trợ cấp)
+                    const newValue = editingEditHeaderTuitionFeeValue;
+                    
+                    if (newValue !== editHeaderTuitionFee) {
+                      try {
+                        // Lưu vào database ngay lập tức
+                        const tuitionFeeValue = newValue > 0 ? newValue : null;
+                        const updatedSession = await updateSession(editingSession.id, { tuition_fee: tuitionFeeValue });
+                        
+                        // Lấy giá trị từ response của server để đảm bảo đồng bộ
+                        const savedTuitionFee = (updatedSession as any).tuition_fee !== undefined && (updatedSession as any).tuition_fee !== null
+                          ? Number((updatedSession as any).tuition_fee)
+                          : (updatedSession as any).tuitionFee !== undefined && (updatedSession as any).tuitionFee !== null
+                            ? Number((updatedSession as any).tuitionFee)
+                            : 0;
+                        
+                        // Cập nhật state với giá trị từ server
+                        setEditHeaderTuitionFee(savedTuitionFee);
+                        
+                        // Cập nhật editingSession với giá trị từ server để đồng bộ UI
+                        const sessionWithTuitionFee = {
+                          ...updatedSession,
+                          tuition_fee: savedTuitionFee > 0 ? savedTuitionFee : null,
+                          tuitionFee: savedTuitionFee > 0 ? savedTuitionFee : null,
+                        };
+                        
+                        setEditingSession(sessionWithTuitionFee);
+                        setIsEditHeaderTuitionFeeManuallyEdited(true);
+                        
+                        if (handleSessionUpdated) {
+                          handleSessionUpdated(sessionWithTuitionFee);
+                        }
+                        
+                        toast.success('Đã cập nhật học phí');
+                      } catch (error: any) {
+                        toast.error('Không thể cập nhật học phí: ' + (error.response?.data?.error || error.message));
+                        // Khôi phục giá trị cũ nếu lỗi
+                        setEditingEditHeaderTuitionFeeValue(editHeaderTuitionFee);
+                      }
+                    }
+                    setIsEditingEditHeaderTuitionFee(false);
+                    // Use setTimeout to ensure blur happens after state update
+                    setTimeout(() => {
+                      if (target && target.blur) {
+                        target.blur();
+                      }
+                    }, 0);
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setEditingEditHeaderTuitionFeeValue(editHeaderTuitionFee);
+                    setIsEditingEditHeaderTuitionFee(false);
+                    // Use setTimeout to ensure blur happens after state update
+                    setTimeout(() => {
+                      if (target && target.blur) {
+                        target.blur();
+                      }
+                    }, 0);
+                  }
+                }}
+              />
+            ) : (
+              <span 
+                style={{ 
+                  fontSize: '0.875rem', 
+                  fontWeight: '600', 
+                  color: '#10b981',
+                  marginLeft: 'var(--spacing-2)',
+                  cursor: 'pointer',
+                  padding: 'var(--spacing-1) var(--spacing-2)',
+                  borderRadius: 'var(--radius)',
+                  transition: 'background-color 0.2s',
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditingEditHeaderTuitionFeeValue(editHeaderTuitionFee);
+                  setIsEditingEditHeaderTuitionFee(true);
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(16, 185, 129, 0.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+              >
+                {editHeaderTuitionFee > 0 ? formatCurrencyVND(editHeaderTuitionFee) : 'Click để nhập học phí'}
+              </span>
+            )
+          ) : null
+        }
       >
         {id && classData && editingSession && (
           <EditSessionModal
@@ -2028,16 +2467,25 @@ function ClassDetail() {
             session={editingSession}
             teachers={classTeachers}
             students={enrolledStudents}
+            headerTuitionFee={editHeaderTuitionFee}
+            onEstimatedTuitionFeeChange={handleEditEstimatedTuitionFeeChange}
             canManagePaymentStatus={canManagePaymentStatus}
             canEditAllowanceManually={canEditAllowanceManually}
+            onSessionUpdated={handleSessionUpdated}
             onSuccess={() => {
               setEditSessionModalOpen(false);
               setEditingSession(null);
+              setEditHeaderTuitionFee(0);
+              setIsEditingEditHeaderTuitionFee(false);
+              setIsEditHeaderTuitionFeeManuallyEdited(false);
               refetch();
             }}
             onClose={() => {
               setEditSessionModalOpen(false);
               setEditingSession(null);
+              setEditHeaderTuitionFee(0);
+              setIsEditingEditHeaderTuitionFee(false);
+              setIsEditHeaderTuitionFeeManuallyEdited(false);
             }}
           />
         )}
@@ -2304,6 +2752,21 @@ function AddStudentToClassModal({
     setLoading(true);
     try {
       await addStudentToClass(classId, studentId);
+      
+      // Record action history
+      try {
+        const student = students.find(s => s.id === studentId);
+        await recordAction({
+          entityType: 'student_class',
+          entityId: `${studentId}_${classId}`,
+          actionType: 'create',
+          afterValue: { student_id: studentId, class_id: classId, student_name: student?.name },
+          description: `Thêm học sinh "${student?.name || studentId}" vào lớp "${classData?.name || classId}"`,
+        });
+      } catch (err) {
+        // Silently fail - action history is not critical
+      }
+      
       toast.success('Đã thêm học sinh vào lớp');
       setSearchQuery('');
       setShowResults(false);
@@ -2595,6 +3058,9 @@ function AddSessionModal({
   students,
   onSuccess,
   onClose,
+  headerTuitionFee,
+  onEstimatedTuitionFeeChange,
+  onSessionCreated,
 }: {
   classId: string;
   classData: any;
@@ -2602,6 +3068,9 @@ function AddSessionModal({
   students: any[];
   onSuccess: () => void;
   onClose: () => void;
+  headerTuitionFee: number;
+  onEstimatedTuitionFeeChange?: (fee: number) => void;
+  onSessionCreated?: (session: any) => void;
 }) {
   const currentUser = useAuthStore((state) => state.user);
   const isAdmin = hasRole('admin');
@@ -2623,7 +3092,7 @@ function AddSessionModal({
   const [paymentStatus, setPaymentStatus] = useState<'paid' | 'unpaid' | 'deposit'>('unpaid');
   const [loading, setLoading] = useState(false);
   
-  // Attendance state using hook
+  // Attendance state using hook - MUST be initialized before estimatedTuitionFee
   const initialAttendanceState = useMemo(() => {
     const state: Record<string, { status: AttendanceStatus; remark: string }> = {};
     students.forEach((student) => {
@@ -2638,47 +3107,65 @@ function AddSessionModal({
   
   const {
     attendance,
-    toggleAttendance,
+    toggleAttendance: baseToggleAttendance,
     updateAttendance,
     getAttendanceSummary,
     getEligibleCount,
   } = useAttendance(initialAttendanceState);
   
-  // Calculate initial paid count (students with remaining sessions > 0) - fixed value, not affected by attendance changes
-  const initialPaidCount = useMemo(() => {
-    return students.filter((student) => (student.remainingSessions || 0) > 0).length;
-  }, [students]);
+  // Use session financials hook to calculate tuition fee and allowance
+  const { estimatedTuitionFee, allowancePreview, allowanceFormula } = useSessionFinancials(
+    students,
+    attendance,
+    teacherId,
+    coefficient,
+    classData
+  );
+  
+  // Notify parent component when estimated tuition fee changes
+  useEffect(() => {
+    if (onEstimatedTuitionFeeChange) {
+      onEstimatedTuitionFeeChange(estimatedTuitionFee);
+    }
+  }, [estimatedTuitionFee, onEstimatedTuitionFeeChange]);
+  
+  // Use headerTuitionFee as the tuition fee value (synced from parent)
+  const tuitionFee = headerTuitionFee > 0 ? headerTuitionFee : undefined;
+  
+  // Custom toggle with validation for "excused" status
+  const toggleAttendance = useCallback((studentId: string) => {
+    const student = students.find(s => s.id === studentId);
+    if (!student) return;
+    
+    const currentStatus = attendance[studentId]?.status || 'absent';
+    const nextStatus = currentStatus === 'present' ? 'excused' : currentStatus === 'excused' ? 'absent' : 'present';
+    
+    // Check if trying to set to "excused" when student has no remaining sessions and no wallet balance
+    // According to requirements: "Nếu số dư = 0 và số buổi còn lại = 0 → không cho chọn trạng thái Phép"
+    if (nextStatus === 'excused') {
+      const remainingSessions = (student as any).remainingSessions || 0;
+      const walletBalance = (student as any).wallet_balance || (student as any).walletBalance || 0;
+    
+      if (remainingSessions === 0 && walletBalance === 0) {
+        // Cannot select "excused" - show error and skip to absent
+        toast.error('Không thể chọn "Phép" khi học sinh không còn số buổi và số dư = 0');
+        // Skip excused status - toggle twice to go from present → absent
+        if (currentStatus === 'present') {
+          baseToggleAttendance(studentId); // present → excused
+          baseToggleAttendance(studentId); // excused → absent
+        } else {
+          // If already absent, just go to present
+          baseToggleAttendance(studentId);
+    }
+        return;
+      }
+    }
+    
+    baseToggleAttendance(studentId);
+  }, [attendance, students, baseToggleAttendance]);
   
   // Get attendance summary for display
   const attendanceSummary = useMemo(() => getAttendanceSummary(), [attendance, getAttendanceSummary]);
-  
-  // Calculate eligible count (present + excused) for allowance calculation
-  const eligibleCount = useMemo(() => getEligibleCount(), [attendance, getEligibleCount]);
-  
-  // Calculate allowance preview - uses eligible count (present + excused) with remaining sessions > 0
-  const allowancePreview = useMemo(() => {
-    if (!teacherId || coefficient === 0) return 0;
-    
-    // Count students who are present or excused AND have remaining sessions > 0
-    const paidCount = students.filter((student) => {
-      const att = attendance[student.id];
-      const hasRemaining = (student.remainingSessions || 0) > 0;
-      const isEligible = att?.status === 'present' || att?.status === 'excused';
-      return isEligible && hasRemaining;
-    }).length;
-    
-    if (paidCount === 0) return 0;
-    
-    const customAllowances = (classData as any)?.customTeacherAllowances || {};
-    const baseAllowance = customAllowances[teacherId] ?? (classData?.tuitionPerSession || 0);
-    const scaleAmount = classData?.scaleAmount || 0;
-    const maxPerSession = (classData as any)?.maxAllowancePerSession || 0;
-    let allowance = baseAllowance * coefficient * paidCount + scaleAmount;
-    if (maxPerSession > 0 && allowance > maxPerSession) {
-      allowance = maxPerSession;
-    }
-    return Math.round(allowance > 0 ? allowance : 0);
-  }, [teacherId, coefficient, attendance, students, classData]);
   
   // Calculate duration
   const duration = useMemo(() => {
@@ -2708,29 +3195,30 @@ function AddSessionModal({
 
     setLoading(true);
     try {
-      // Calculate allowance amount based on actual attendance (students with status 'present' or 'excused' AND have remaining sessions > 0)
-      let calculatedAllowance: number | undefined = undefined;
-      if (teacherId && coefficient !== 0) {
-        // Count students who are present or excused AND have remaining sessions > 0
-        const paidCount = students.filter((student) => {
-          const att = attendance[student.id];
-          const hasRemaining = (student.remainingSessions || 0) > 0;
-          const isEligible = att?.status === 'present' || att?.status === 'excused';
-          return isEligible && hasRemaining;
-        }).length;
-        
-        if (paidCount > 0) {
-          const customAllowances = (classData as any)?.customTeacherAllowances || {};
-          const baseAllowance = customAllowances[teacherId] ?? (classData?.tuitionPerSession || 0);
-          const scaleAmount = classData?.scaleAmount || 0;
-          const maxPerSession = (classData as any)?.maxAllowancePerSession || 0;
-          let allowance = baseAllowance * coefficient * paidCount + scaleAmount;
-          if (maxPerSession > 0 && allowance > maxPerSession) {
-            allowance = maxPerSession;
-          }
-          calculatedAllowance = Math.round(allowance > 0 ? allowance : 0);
-        }
-      }
+      // Calculate allowance amount using hook (already calculated above as allowancePreview)
+      const calculatedAllowance = allowancePreview > 0 ? allowancePreview : undefined;
+      
+      // Create temporary session object for optimistic update
+      const tempSessionId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const tempSession: any = {
+        id: tempSessionId,
+        class_id: classId,
+        date,
+        start_time: startTime,
+        end_time: endTime,
+        teacher_id: teacherId || undefined,
+        coefficient: coefficient,
+        notes: notes.trim(),
+        payment_status: canManagePaymentStatus ? paymentStatus : 'unpaid',
+        allowance_amount: calculatedAllowance !== undefined && calculatedAllowance > 0 ? calculatedAllowance : undefined,
+        tuition_fee: tuitionFee && tuitionFee > 0 ? tuitionFee : undefined,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      
+      // Optimistic update: add session to UI immediately
+      // Note: We need to access parent's optimistic state, so we'll use onSuccess callback
+      // For now, we'll create the session first and let onSuccess handle the refetch
       
       // Create session first
       const newSession = await createSession({
@@ -2743,7 +3231,21 @@ function AddSessionModal({
         notes: notes.trim(),
         payment_status: canManagePaymentStatus ? paymentStatus : 'unpaid',
         allowance_amount: calculatedAllowance !== undefined && calculatedAllowance > 0 ? calculatedAllowance : undefined,
+        tuition_fee: tuitionFee && tuitionFee > 0 ? tuitionFee : undefined,
       });
+      
+      // Record action history
+      try {
+        await recordAction({
+          entityType: 'session',
+          entityId: newSession.id,
+          actionType: 'create',
+          afterValue: newSession,
+          description: `Tạo buổi học mới cho lớp ${classData?.name || classId} vào ngày ${date}`,
+        });
+      } catch (err) {
+        // Silently fail - action history is not critical
+      }
       
       // Then save attendance records
       if (students.length > 0) {
@@ -2757,6 +3259,11 @@ function AddSessionModal({
         });
         
         await saveAttendanceForSession(newSession.id, attendanceData);
+      }
+      
+      // Optimistic update: add session to UI immediately
+      if (onSessionCreated) {
+        onSessionCreated(newSession);
       }
       
       toast.success('Đã thêm buổi học mới');
@@ -2902,6 +3409,7 @@ function AddSessionModal({
           );
         })()}
       </div>
+      
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-3)', marginBottom: 'var(--spacing-4)' }}>
         {teachers.length > 0 && (
           <div>
@@ -2983,15 +3491,21 @@ function AddSessionModal({
             <span style={{ fontStyle: 'italic' }}>Tự động tính sau khi lưu buổi học</span>
           )}
         </div>
-        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--muted)', marginTop: 'var(--spacing-1)' }}>
-          {teacherId
-            ? `Ước tính dựa trên ${students.filter((s) => {
-                const att = attendance[s.id];
-                const hasRemaining = (s.remainingSessions || 0) > 0;
-                const isEligible = att?.status === 'present' || att?.status === 'excused';
-                return isEligible && hasRemaining;
-              }).length} học sinh (Học + Phép) • Hệ số ${coefficient}`
-            : 'Chọn gia sư để xem trợ cấp dự kiến'}
+        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--muted)', marginTop: 'var(--spacing-1)', lineHeight: '1.6' }}>
+          {teacherId && allowanceFormula ? (
+            <div>
+              <div style={{ marginBottom: 'var(--spacing-1)' }}>
+                <strong>Học sinh:</strong> {allowanceFormula.weightedFormula}
+              </div>
+              <div>
+                <strong>Trợ cấp:</strong> {allowanceFormula.allowanceFormula}
+              </div>
+            </div>
+          ) : teacherId ? (
+            'Chưa có học sinh đủ điều kiện tính trợ cấp'
+          ) : (
+            'Chọn gia sư để xem trợ cấp dự kiến'
+          )}
         </div>
       </div>
       
@@ -3021,6 +3535,7 @@ function AddSessionModal({
           </div>
         </div>
       )}
+      
       <div style={{ marginBottom: 'var(--spacing-4)' }}>
         <label style={{ display: 'block', marginBottom: 'var(--spacing-2)', fontWeight: '500' }}>
           Nhận xét *
@@ -3029,12 +3544,12 @@ function AddSessionModal({
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={5}
-          placeholder="Nhận xét về buổi học, tiến độ học sinh..."
           required
+          placeholder="Nhận xét về buổi học, tiến độ học sinh..."
           style={{
             width: '100%',
             padding: 'var(--spacing-3)',
-            border: '1px solid var(--border)',
+            border: notes.trim() ? '1px solid var(--border)' : '1px solid var(--danger)',
             borderRadius: 'var(--radius)',
             resize: 'vertical',
             fontSize: 'var(--font-size-sm)',
@@ -3045,6 +3560,11 @@ function AddSessionModal({
         <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--muted)', marginTop: 'var(--spacing-1)' }}>
           Vui lòng nhập nhận xét cho buổi học
         </div>
+        {!notes.trim() && (
+          <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--danger)', marginTop: 'var(--spacing-1)' }}>
+            Vui lòng nhập nhận xét cho buổi học
+          </div>
+        )}
       </div>
       
       {/* Attendance Table */}
@@ -3080,7 +3600,7 @@ function AddSessionModal({
                           <input
                             type="text"
                             className="form-control"
-                            value={att.remark}
+                            value={att.remark || ''}
                             onChange={(e) => {
                               updateAttendance(student.id, { remark: e.target.value });
                             }}
@@ -3141,6 +3661,9 @@ function EditSessionModal({
   students,
   onSuccess,
   onClose,
+  headerTuitionFee,
+  onEstimatedTuitionFeeChange,
+  onSessionUpdated,
   canManagePaymentStatus = false,
   canEditAllowanceManually = false,
 }: {
@@ -3151,37 +3674,40 @@ function EditSessionModal({
   students: any[];
   onSuccess: () => void;
   onClose: () => void;
+  headerTuitionFee: number;
+  onEstimatedTuitionFeeChange?: (fee: number) => void;
+  onSessionUpdated?: (session: any) => void;
   canManagePaymentStatus?: boolean;
   canEditAllowanceManually?: boolean;
 }) {
+  console.log('[EditSessionModal] Component called with:', {
+    sessionId: session?.id,
+    session: session,
+    classId,
+    hasClassData: !!classData,
+    teachersCount: teachers?.length,
+    studentsCount: students?.length,
+  });
+  
   const currentUser = useAuthStore((state) => state.user);
   const isAdmin = hasRole('admin');
   
-  const [date, setDate] = useState<string>(session.date || new Date().toISOString().slice(0, 10));
-  const [startTime, setStartTime] = useState<string>((session as any).startTime || session.start_time || '18:00');
-  const [endTime, setEndTime] = useState<string>((session as any).endTime || session.end_time || '20:00');
+  // Initialize state with empty/default values - will be populated by useEffect
+  const [date, setDate] = useState<string>('');
+  const [startTime, setStartTime] = useState<string>('18:00');
+  const [endTime, setEndTime] = useState<string>('20:00');
   
   // Refs for date and time inputs
   const dateInputRef = React.useRef<HTMLInputElement>(null);
   const startTimeInputRef = React.useRef<HTMLInputElement>(null);
   const endTimeInputRef = React.useRef<HTMLInputElement>(null);
-  const [teacherId, setTeacherId] = useState<string>((session as any).teacherId || session.teacher_id || (teachers.length > 0 ? teachers[0].id : ''));
-  const initialCoefficient = (session as any).coefficient !== undefined && (session as any).coefficient !== null
-    ? (session as any).coefficient
-    : session.coefficient !== undefined && session.coefficient !== null
-      ? session.coefficient
-      : 1;
-  const [coefficient, setCoefficient] = useState<number>(initialCoefficient);
-  const [coefficientInputValue, setCoefficientInputValue] = useState<string>(String(initialCoefficient));
-  const [notes, setNotes] = useState<string>(session.notes || '');
-  const [paymentStatus, setPaymentStatus] = useState<string>((session as any).paymentStatus || session.payment_status || 'unpaid');
-  const [allowanceAmount, setAllowanceAmount] = useState<number | null>(
-    (session as any).allowanceAmount !== undefined && (session as any).allowanceAmount !== null
-      ? (session as any).allowanceAmount
-      : session.allowance_amount !== undefined && session.allowance_amount !== null
-        ? session.allowance_amount
-        : null
-  );
+  const [teacherId, setTeacherId] = useState<string>('');
+  const [coefficient, setCoefficient] = useState<number>(1);
+  const [coefficientInputValue, setCoefficientInputValue] = useState<string>('1');
+  const [notes, setNotes] = useState<string>('');
+  const [paymentStatus, setPaymentStatus] = useState<string>('unpaid');
+  const [allowanceAmount, setAllowanceAmount] = useState<number | null>(null);
+  
   const [editingAllowance, setEditingAllowance] = useState(false);
   const [allowanceInputValue, setAllowanceInputValue] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -3191,74 +3717,110 @@ function EditSessionModal({
   const {
     attendance,
     setAttendance,
-    toggleAttendance,
+    toggleAttendance: baseToggleAttendance,
     updateAttendance,
     getAttendanceSummary,
     getEligibleCount,
   } = useAttendance({});
 
-  // Prefill all fields when session changes
+  // Custom toggle with validation for "excused" status
+  const toggleAttendance = useCallback((studentId: string) => {
+    const student = students.find(s => s.id === studentId);
+    if (!student) return;
+    
+    const currentStatus = attendance[studentId]?.status || 'absent';
+    const nextStatus = currentStatus === 'present' ? 'excused' : currentStatus === 'excused' ? 'absent' : 'present';
+    
+    // Check if trying to set to "excused" when student has no remaining sessions and no wallet balance
+    // According to requirements: "Nếu số dư = 0 và số buổi còn lại = 0 → không cho chọn trạng thái Phép"
+    if (nextStatus === 'excused') {
+      const remainingSessions = (student as any).remainingSessions || 0;
+      const walletBalance = (student as any).wallet_balance || (student as any).walletBalance || 0;
+      
+      if (remainingSessions === 0 && walletBalance === 0) {
+        // Cannot select "excused" - show error and skip to absent
+        toast.error('Không thể chọn "Phép" khi học sinh không còn số buổi và số dư = 0');
+        // Skip excused status - toggle twice to go from present → absent
+        if (currentStatus === 'present') {
+          baseToggleAttendance(studentId); // present → excused
+          baseToggleAttendance(studentId); // excused → absent
+        } else {
+          // If already absent, just go to present
+          baseToggleAttendance(studentId);
+        }
+        return;
+      }
+    }
+    
+    baseToggleAttendance(studentId);
+  }, [attendance, students, baseToggleAttendance]);
+
+  // Prefill all fields when session or classData changes
+  // Use session.id as key to ensure we re-run when a different session is selected
   useEffect(() => {
-    if (session) {
-      // Prefill date
-      if (session.date) {
-        setDate(session.date);
-      }
-      
-      // Prefill start time
-      const sessionStartTime = (session as any).startTime || session.start_time;
-      if (sessionStartTime) {
-        setStartTime(sessionStartTime);
-      }
-      
-      // Prefill end time
-      const sessionEndTime = (session as any).endTime || session.end_time;
-      if (sessionEndTime) {
-        setEndTime(sessionEndTime);
-      }
-      
-      // Prefill teacher ID
-      const sessionTeacherId = (session as any).teacherId || session.teacher_id;
-      if (sessionTeacherId) {
-        setTeacherId(sessionTeacherId);
+    if (!session || !session.id) {
+      return;
+    }
+    
+    // Prefill date (from session, no class default)
+    const sessionDate = session.date || new Date().toISOString().slice(0, 10);
+    setDate(sessionDate);
+    
+    // Prefill start time (from session, no class default)
+    const sessionStartTime = (session as any).startTime || session.start_time || '18:00';
+    setStartTime(sessionStartTime);
+    
+    // Prefill end time (from session, no class default)
+    const sessionEndTime = (session as any).endTime || session.end_time || '20:00';
+    setEndTime(sessionEndTime);
+    
+    // Prefill teacher ID (from session, fallback to class teacherIds)
+    const sessionTeacherId = (session as any).teacherId || session.teacher_id;
+    if (sessionTeacherId) {
+      setTeacherId(sessionTeacherId);
+    } else {
+      // Use first teacher from class if available
+      if (classData?.teacherIds && Array.isArray(classData.teacherIds) && classData.teacherIds.length > 0) {
+        setTeacherId(classData.teacherIds[0]);
       } else if (teachers.length > 0) {
         setTeacherId(teachers[0].id);
       }
-      
-      // Prefill coefficient
-      const sessionCoefficient = (session as any).coefficient !== undefined && (session as any).coefficient !== null
-        ? (session as any).coefficient
-        : session.coefficient !== undefined && session.coefficient !== null
-          ? session.coefficient
-          : 1;
-      setCoefficient(sessionCoefficient);
-      setCoefficientInputValue(String(sessionCoefficient));
-      
-      // Prefill notes
-      if (session.notes !== undefined && session.notes !== null) {
-        setNotes(session.notes);
-      }
-      
-      // Prefill payment status
-      const sessionPaymentStatus = (session as any).paymentStatus || session.payment_status;
-      if (sessionPaymentStatus) {
-        setPaymentStatus(sessionPaymentStatus);
-      }
-      
-      // Prefill allowance amount - check both camelCase and snake_case, including 0
-      let sessionAllowanceAmount: number | null = null;
-      if ((session as any).allowanceAmount !== undefined && (session as any).allowanceAmount !== null) {
-        sessionAllowanceAmount = Number((session as any).allowanceAmount);
-      } else if (session.allowance_amount !== undefined && session.allowance_amount !== null) {
-        sessionAllowanceAmount = Number(session.allowance_amount);
-      }
-      
-      // Set allowance amount (including 0 as valid value)
-      setAllowanceAmount(sessionAllowanceAmount);
-      setAllowanceInputValue(sessionAllowanceAmount !== null && !isNaN(sessionAllowanceAmount) ? sessionAllowanceAmount.toString() : '');
-      setEditingAllowance(false);
     }
-  }, [session, teachers]);
+    
+    // Prefill coefficient (from session, default to 1)
+    const sessionCoefficient = (session as any).coefficient !== undefined && (session as any).coefficient !== null
+      ? (session as any).coefficient
+      : session.coefficient !== undefined && session.coefficient !== null
+        ? session.coefficient
+        : null;
+    const finalCoefficient = sessionCoefficient !== null ? sessionCoefficient : 1;
+    setCoefficient(finalCoefficient);
+    setCoefficientInputValue(String(finalCoefficient));
+    
+    // Prefill notes (from session, default to empty)
+    const sessionNotes = session.notes !== undefined && session.notes !== null ? session.notes : '';
+    setNotes(sessionNotes);
+    
+    // Prefill payment status (from session, default to 'unpaid')
+    const sessionPaymentStatus = (session as any).paymentStatus || session.payment_status || 'unpaid';
+    setPaymentStatus(sessionPaymentStatus);
+    
+    // Prefill allowance amount (from session, no class default - calculated dynamically)
+    let sessionAllowanceAmount: number | null = null;
+    if ((session as any).allowanceAmount !== undefined && (session as any).allowanceAmount !== null) {
+      sessionAllowanceAmount = Number((session as any).allowanceAmount);
+    } else if (session.allowance_amount !== undefined && session.allowance_amount !== null) {
+      sessionAllowanceAmount = Number(session.allowance_amount);
+    }
+    
+    // Set allowance amount (including 0 as valid value)
+    setAllowanceAmount(sessionAllowanceAmount);
+    setAllowanceInputValue(sessionAllowanceAmount !== null && !isNaN(sessionAllowanceAmount) ? sessionAllowanceAmount.toString() : '');
+    setEditingAllowance(false);
+    
+    // Tuition fee is now managed by parent component via headerTuitionFee prop
+    // No need to set local state here
+  }, [session?.id, classData?.teacherIds, teachers]);
   
   // Fetch existing attendance
   useEffect(() => {
@@ -3315,41 +3877,36 @@ function EditSessionModal({
     loadAttendance();
   }, [session.id, students]);
   
-  // Calculate estimated paid count (students with remaining sessions > 0)
-  const estimatedPaidCount = useMemo(() => {
-    if (session && typeof (session as any).studentPaidCount === 'number') {
-      return (session as any).studentPaidCount;
+  // Use session financials hook to calculate allowance and tuition fee
+  const { estimatedTuitionFee, allowancePreview: calculatedAllowancePreview, allowanceFormula } = useSessionFinancials(
+    students,
+    attendance,
+    teacherId,
+    coefficient,
+    classData
+  );
+  
+  // Notify parent component when estimated tuition fee changes
+  // Use ref to track previous value and avoid infinite loops
+  const prevEstimatedTuitionFeeRef = React.useRef<number>(estimatedTuitionFee);
+  useEffect(() => {
+    if (onEstimatedTuitionFeeChange && estimatedTuitionFee !== prevEstimatedTuitionFeeRef.current) {
+      prevEstimatedTuitionFeeRef.current = estimatedTuitionFee;
+      onEstimatedTuitionFeeChange(estimatedTuitionFee);
     }
-    if (Array.isArray(students)) {
-      return students.filter((s) => (s.remainingSessions || 0) > 0).length;
-    }
-    return 0;
-  }, [session, students]);
+  }, [estimatedTuitionFee, onEstimatedTuitionFeeChange]);
+  
+  // Use headerTuitionFee as the tuition fee value (synced from parent)
+  // Always use headerTuitionFee value (even if 0) to preserve manual edits
+  const tuitionFee = headerTuitionFee;
 
-  // Calculate allowance preview
-  const computeAllowancePreview = useCallback((teacherIdValue: string, coefficientValue: number, paidCountValue: number) => {
-    if (!teacherIdValue || coefficientValue === 0) return 0;
-    const customAllowances = (classData as any)?.customTeacherAllowances || {};
-    const baseAllowance = customAllowances[teacherIdValue] ?? (classData?.tuitionPerSession || 0);
-    const scaleAmount = classData?.scaleAmount || 0;
-    const maxPerSession = (classData as any)?.maxAllowancePerSession || 0;
-    let allowance = baseAllowance * coefficientValue * paidCountValue + scaleAmount;
-    if (maxPerSession > 0 && allowance > maxPerSession) {
-      allowance = maxPerSession;
-    }
-    return Math.round(allowance > 0 ? allowance : 0);
-  }, [classData]);
-
-  // Calculate current allowance
+  // Calculate current allowance (use manual value if set, otherwise use calculated)
   const currentAllowance = useMemo(() => {
     if (allowanceAmount !== null && allowanceAmount !== undefined && allowanceAmount >= 0) {
       return allowanceAmount;
     }
-    if (teacherId && coefficient !== undefined) {
-      return computeAllowancePreview(teacherId, coefficient, estimatedPaidCount);
-    }
-    return 0;
-  }, [allowanceAmount, teacherId, coefficient, estimatedPaidCount, computeAllowancePreview]);
+    return calculatedAllowancePreview;
+  }, [allowanceAmount, calculatedAllowancePreview]);
 
   const lockedAllowance = allowanceAmount !== null && allowanceAmount !== undefined && allowanceAmount >= 0;
 
@@ -3396,6 +3953,9 @@ function EditSessionModal({
 
     setLoading(true);
     try {
+      // Calculate allowance amount using hook (already calculated above)
+      const calculatedAllowance = calculatedAllowancePreview > 0 ? calculatedAllowancePreview : undefined;
+      
       // Update session
       const updateData: any = {
         class_id: classId,
@@ -3408,12 +3968,57 @@ function EditSessionModal({
         payment_status: canManagePaymentStatus ? paymentStatus : undefined,
       };
       
-      // Include allowance_amount if it's set
-      if (allowanceAmount !== null && allowanceAmount !== undefined) {
+      // Include allowance_amount: use manual value if set, otherwise use calculated value
+      if (allowanceAmount !== null && allowanceAmount !== undefined && allowanceAmount >= 0) {
+        // Manual override
         updateData.allowance_amount = allowanceAmount;
+      } else if (calculatedAllowance !== undefined && calculatedAllowance > 0) {
+        // Auto-calculated based on attendance
+        updateData.allowance_amount = calculatedAllowance;
       }
       
-      await updateSession(session.id, updateData);
+      // Include tuition_fee if admin - always save headerTuitionFee value
+      // The headerTuitionFee is synced from parent and reflects any manual edits
+      if (isAdmin) {
+        // Always include tuition_fee: use headerTuitionFee value (even if 0, to allow clearing)
+        // If headerTuitionFee > 0, use it; if 0, set to null to clear in database
+        if (headerTuitionFee > 0) {
+          updateData.tuition_fee = headerTuitionFee;
+        } else {
+          // If 0, set to null to clear the value in database
+          updateData.tuition_fee = null;
+        }
+      }
+      
+      // Get old session data for action history
+      const oldSession = { ...session };
+      
+      // Update session
+      const updatedSession = await updateSession(session.id, updateData);
+      
+      // Record action history
+      try {
+        const changedFields: Record<string, { old: any; new: any }> = {};
+        if (oldSession.date !== updateData.date) changedFields.date = { old: oldSession.date, new: updateData.date };
+        if (oldSession.start_time !== updateData.start_time) changedFields.start_time = { old: oldSession.start_time, new: updateData.start_time };
+        if (oldSession.end_time !== updateData.end_time) changedFields.end_time = { old: oldSession.end_time, new: updateData.end_time };
+        if (oldSession.notes !== updateData.notes) changedFields.notes = { old: oldSession.notes, new: updateData.notes };
+        if (oldSession.payment_status !== updateData.payment_status) changedFields.payment_status = { old: oldSession.payment_status, new: updateData.payment_status };
+        if (oldSession.allowance_amount !== updateData.allowance_amount) changedFields.allowance_amount = { old: oldSession.allowance_amount, new: updateData.allowance_amount };
+        if (oldSession.tuition_fee !== updateData.tuition_fee) changedFields.tuition_fee = { old: oldSession.tuition_fee, new: updateData.tuition_fee };
+        
+        await recordAction({
+          entityType: 'session',
+          entityId: session.id,
+          actionType: 'update',
+          beforeValue: oldSession,
+          afterValue: updatedSession,
+          changedFields: Object.keys(changedFields).length > 0 ? changedFields : undefined,
+          description: `Cập nhật buổi học ngày ${formatDate(updateData.date)} của lớp ${classData?.name || session.class_id}`,
+        });
+      } catch (err) {
+        // Silently fail - action history is not critical
+      }
       
       // Update attendance records
       if (students.length > 0) {
@@ -3427,6 +4032,18 @@ function EditSessionModal({
         });
         
         await saveAttendanceForSession(session.id, attendanceData);
+      }
+      
+      // Optimistic update: update session in UI immediately
+      // Ensure the updated session includes the tuition_fee value
+      const sessionWithTuitionFee = {
+        ...updatedSession,
+        tuition_fee: updateData.tuition_fee,
+        tuitionFee: updateData.tuition_fee,
+      };
+      
+      if (onSessionUpdated && sessionWithTuitionFee) {
+        onSessionUpdated(sessionWithTuitionFee);
       }
       
       toast.success('Đã cập nhật buổi học');
@@ -3545,16 +4162,32 @@ function EditSessionModal({
             />
           </div>
         </div>
-        {duration && (
-          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--muted)', marginTop: 'var(--spacing-1)' }}>
-            Thời lượng: {duration.hours > 0 ? `${duration.hours} giờ` : ''} {duration.minutes > 0 ? `${duration.minutes} phút` : ''} {duration.hours === 0 && duration.minutes === 0 ? '< 1 phút' : ''}
-          </div>
-        )}
-        {duration === null && startTime && endTime && (
+        {(() => {
+          if (!startTime || !endTime) return null;
+          const [startH, startM] = startTime.split(':').map(Number);
+          const [endH, endM] = endTime.split(':').map(Number);
+          if (isNaN(startH) || isNaN(startM) || isNaN(endH) || isNaN(endM)) return null;
+          const startMinutes = startH * 60 + startM;
+          const endMinutes = endH * 60 + endM;
+          if (endMinutes <= startMinutes) {
+            return (
           <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--danger)', marginTop: 'var(--spacing-1)' }}>
             ⚠️ Giờ kết thúc phải lớn hơn giờ bắt đầu
           </div>
-        )}
+            );
+          }
+          const diff = endMinutes - startMinutes;
+          const hours = Math.floor(diff / 60);
+          const minutes = diff % 60;
+          const parts = [];
+          if (hours > 0) parts.push(`${hours} giờ`);
+          if (minutes > 0) parts.push(`${minutes} phút`);
+          return (
+            <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--muted)', marginTop: 'var(--spacing-1)' }}>
+              Thời lượng: {parts.length ? parts.join(' ') : '< 1 phút'}
+            </div>
+          );
+        })()}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-3)', marginBottom: 'var(--spacing-4)' }}>
         {teachers.length > 0 && (
@@ -3674,9 +4307,13 @@ function EditSessionModal({
               }
             }}
             style={{
-              padding: 'var(--spacing-2)',
+              padding: 'var(--spacing-3)',
               background: 'var(--bg-secondary)',
               borderRadius: 'var(--radius)',
+              border: '1px solid var(--border)',
+              fontSize: '1rem',
+              fontWeight: '500',
+              color: currentAllowance > 0 ? 'var(--text)' : 'var(--muted)',
               cursor: canEditAllowanceManually && lockedAllowance ? 'pointer' : 'default',
               transition: 'background-color 0.2s ease',
             }}
@@ -3691,25 +4328,34 @@ function EditSessionModal({
           >
             {lockedAllowance ? (
               // If allowance is locked (has been set), always show it (even if 0)
-              <span style={{ fontWeight: '500' }}>{formatCurrencyVND(currentAllowance)}</span>
+              formatCurrencyVND(currentAllowance)
             ) : currentAllowance > 0 ? (
               // If allowance is calculated and > 0, show it
-              <span style={{ fontWeight: '500' }}>{formatCurrencyVND(currentAllowance)}</span>
+              formatCurrencyVND(currentAllowance)
             ) : (
               // Otherwise, show placeholder
-              <span style={{ color: 'var(--muted)', fontStyle: 'italic' }}>Tự động tính sau khi lưu buổi học</span>
+              <span style={{ fontStyle: 'italic' }}>Tự động tính sau khi lưu buổi học</span>
             )}
             {canEditAllowanceManually && lockedAllowance && (
               <span style={{ marginLeft: 'var(--spacing-1)', fontSize: '0.9em', opacity: 0.7 }}>✏️</span>
             )}
           </div>
         )}
-        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--muted)', marginTop: 'var(--spacing-1)' }}>
-          {lockedAllowance
-            ? `Đã gia hạn: ${estimatedPaidCount} học sinh • Hệ số ${coefficient} • Trợ cấp cố định khi tạo buổi học`
-            : session && typeof (session as any).studentPaidCount === 'number'
-              ? `Đã gia hạn: ${estimatedPaidCount} học sinh đã gia hạn • Hệ số ${coefficient}`
-              : `Ước tính: ${estimatedPaidCount} học sinh đã gia hạn • Hệ số ${coefficient}`}
+        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--muted)', marginTop: 'var(--spacing-1)', lineHeight: '1.6' }}>
+          {teacherId && allowanceFormula ? (
+            <div>
+              <div style={{ marginBottom: 'var(--spacing-1)' }}>
+                <strong>Học sinh:</strong> {allowanceFormula.weightedFormula}
+              </div>
+              <div>
+                <strong>Trợ cấp:</strong> {allowanceFormula.allowanceFormula}
+              </div>
+            </div>
+          ) : teacherId ? (
+            'Chưa có học sinh đủ điều kiện tính trợ cấp'
+          ) : (
+            'Chọn gia sư để xem trợ cấp dự kiến'
+          )}
         </div>
       </div>
       {canManagePaymentStatus && (
@@ -3759,6 +4405,7 @@ function EditSessionModal({
           </div>
         </div>
       )}
+      
       <div style={{ marginBottom: 'var(--spacing-4)' }}>
         <label style={{ display: 'block', marginBottom: 'var(--spacing-2)', fontWeight: '500' }}>
           Nhận xét *
@@ -3968,7 +4615,24 @@ function EditTeacherModal({
     setLoading(true);
     try {
       const updateData = await syncTeachers(newIds);
+      const oldClassData = { ...classData };
       await updateClass(classId, updateData);
+      
+      // Record action history
+      try {
+        const removedTeacher = allTeachers.find(t => t.id === teacherId);
+        await recordAction({
+          entityType: 'class',
+          entityId: classId,
+          actionType: 'update',
+          beforeValue: oldClassData,
+          afterValue: { ...oldClassData, ...updateData },
+          description: `Gỡ gia sư "${removedTeacher?.fullName || removedTeacher?.full_name || teacherId}" khỏi lớp "${classData?.name || classId}"`,
+        });
+      } catch (err) {
+        // Silently fail - action history is not critical
+      }
+      
       toast.success('Đã gỡ gia sư khỏi lớp');
       
       // Invalidate class cache to ensure fresh data on refetch
@@ -4008,7 +4672,24 @@ function EditTeacherModal({
     setLoading(true);
     try {
       const updateData = await syncTeachers(newIds);
+      const oldClassData = { ...classData };
       await updateClass(classId, updateData);
+      
+      // Record action history
+      try {
+        const addedTeacher = allTeachers.find(t => t.id === teacherId);
+        await recordAction({
+          entityType: 'class',
+          entityId: classId,
+          actionType: 'update',
+          beforeValue: oldClassData,
+          afterValue: { ...oldClassData, ...updateData },
+          description: `Thêm gia sư "${addedTeacher?.fullName || addedTeacher?.full_name || teacherId}" vào lớp "${classData?.name || classId}"`,
+        });
+      } catch (err) {
+        // Silently fail - action history is not critical
+      }
+      
       setSearchQuery('');
       toast.success('Đã thêm gia sư vào lớp');
       
@@ -4219,7 +4900,24 @@ function EditScheduleModal({
           };
         });
       
+      const oldSchedule = classData?.schedule;
       await updateClass(classId, { schedule: formattedSchedule });
+      
+      // Record action history
+      try {
+        await recordAction({
+          entityType: 'class',
+          entityId: classId,
+          actionType: 'update',
+          beforeValue: { ...classData, schedule: oldSchedule },
+          afterValue: { ...classData, schedule: formattedSchedule },
+          changedFields: { schedule: { old: oldSchedule, new: formattedSchedule } },
+          description: `Cập nhật lịch học của lớp "${classData?.name || classId}"`,
+        });
+      } catch (err) {
+        // Silently fail - action history is not critical
+      }
+      
       toast.success('Đã cập nhật lịch học');
       onSuccess();
     } catch (error: any) {
@@ -4326,7 +5024,8 @@ function EditScheduleModal({
 }
 
 // Edit Class Modal Component
-function EditClassModal({
+// Unified EditClassModal component - used in both Classes.tsx and ClassDetail.tsx
+export function EditClassModal({
   isOpen,
   onClose,
   classData,
@@ -4335,72 +5034,173 @@ function EditClassModal({
   categories,
   onSave,
   onOpenTeacherModal,
+  mode = 'edit',
+  onCreateClass,
 }: {
   isOpen: boolean;
   onClose: () => void;
-  classData: any;
+  classData: any | null;
   teachers: any[];
-  classTeachers: any[];
+  classTeachers?: any[];
   categories: any[];
   onSave: () => void;
   onOpenTeacherModal?: () => void;
+  mode?: 'create' | 'edit';
+  onCreateClass?: (data: any) => Promise<void>;
 }) {
+  // Removed excessive logging to prevent re-render loops
+  
   const [formData, setFormData] = useState({
-    name: classData.name || '',
-    type: classData.type || '',
-    status: classData.status || 'running',
-    maxStudents: classData.maxStudents || 15,
-    tuitionPerSession: classData.tuitionPerSession || 0,
-    scaleAmount: classData.scaleAmount || 0,
-    maxAllowancePerSession: classData.maxAllowancePerSession || 0,
-    studentTuitionPerSession: classData.studentTuitionPerSession || 0,
-    tuitionPackageTotal: classData.tuitionPackageTotal || 0,
-    tuitionPackageSessions: classData.tuitionPackageSessions || '' as number | '',
+    name: '',
+    type: '',
+    status: 'running' as 'running' | 'stopped',
+    teacherIds: [] as string[],
+    maxStudents: 15,
+    tuitionPerSession: 0,
+    scaleAmount: 0,
+    maxAllowancePerSession: 0,
+    studentTuitionPerSession: 0,
+    tuitionPackageTotal: 0,
+    tuitionPackageSessions: '' as number | '',
   });
   const [loading, setLoading] = useState(false);
+  const [teacherSearchQuery, setTeacherSearchQuery] = useState('');
 
-  // Use classTeachers prop if available, otherwise calculate from classData and all teachers
-  const currentClassTeachers = useMemo(() => {
-    // Prefer the prop if it's provided (it's calculated from classData.teachers in parent component)
-    if (classTeachers && Array.isArray(classTeachers)) {
-      return classTeachers;
+  // Get available teachers for selection (excluding already selected)
+  const availableTeachersForSelection = useMemo(() => {
+    const selectedIds = new Set(formData.teacherIds);
+    return teachers.filter((t: any) => !selectedIds.has(t.id));
+  }, [teachers, formData.teacherIds]);
+
+  // Filter teachers based on search query
+  const filteredAvailableTeachers = useMemo(() => {
+    if (!teacherSearchQuery.trim()) return availableTeachersForSelection.slice(0, 6);
+    const normalized = teacherSearchQuery.trim().toLowerCase();
+    return availableTeachersForSelection.filter((t) => {
+      const name = (t.fullName || t.full_name || t.name || '').toLowerCase();
+      return name.includes(normalized);
+    });
+  }, [availableTeachersForSelection, teacherSearchQuery]);
+
+  // Get currently selected teachers
+  // Priority: classTeachers prop > teachers prop > classData.teachers
+  const selectedTeachers = useMemo(() => {
+    if (formData.teacherIds.length === 0) return [];
+    
+    // Priority 1: Use classTeachers prop if available
+    if (classTeachers && Array.isArray(classTeachers) && classTeachers.length > 0) {
+      const filtered = classTeachers.filter((t: any) => formData.teacherIds.includes(t.id));
+      if (filtered.length > 0) {
+        return filtered;
+      }
     }
-    // Fallback: use teachers from classData if available
+    
+    // Priority 2: Filter from teachers prop
+    if (teachers && Array.isArray(teachers) && teachers.length > 0) {
+      const filtered = teachers.filter((t: any) => formData.teacherIds.includes(t.id));
+      if (filtered.length > 0) {
+        return filtered;
+      }
+    }
+    
+    // Priority 3: Use classData.teachers if available
     if (classData && (classData as any).teachers && Array.isArray((classData as any).teachers)) {
-      return (classData as any).teachers;
+      const filtered = (classData as any).teachers.filter((t: any) => formData.teacherIds.includes(t.id));
+      if (filtered.length > 0) {
+        return filtered;
+      }
     }
-    // Last fallback: calculate from classData and teachers prop (if teachers prop is provided)
-    if (!classData || !teachers || !Array.isArray(teachers)) return [];
-    const teacherIds = classData.teacherIds || (classData.teacherId ? [classData.teacherId] : []);
-    if (!Array.isArray(teacherIds) || teacherIds.length === 0) return [];
-    return teachers.filter((t: any) => teacherIds.includes(t.id));
-  }, [classData, teachers, classTeachers]);
+    
+    return [];
+  }, [teachers, formData.teacherIds, classTeachers, classData]);
 
+  const handleAddTeacher = (teacherId: string) => {
+    if (!formData.teacherIds.includes(teacherId)) {
+      setFormData({ ...formData, teacherIds: [...formData.teacherIds, teacherId] });
+      setTeacherSearchQuery('');
+    }
+  };
+
+  const handleRemoveTeacher = (teacherId: string) => {
+    setFormData({ ...formData, teacherIds: formData.teacherIds.filter(id => id !== teacherId) });
+  };
+  
+  // Prefill formData when modal opens or classData changes
   useEffect(() => {
-    if (isOpen && classData) {
+    if (!isOpen) {
+      // Reset when modal closes
       setFormData({
-        name: classData.name || '',
-        type: classData.type || '',
-        status: classData.status || 'running',
-        maxStudents: classData.maxStudents || 15,
-        tuitionPerSession: classData.tuitionPerSession || 0,
-        scaleAmount: classData.scaleAmount || 0,
-        maxAllowancePerSession: classData.maxAllowancePerSession || 0,
-        studentTuitionPerSession: classData.studentTuitionPerSession || 0,
-        tuitionPackageTotal: classData.tuitionPackageTotal || 0,
-        tuitionPackageSessions: classData.tuitionPackageSessions || '',
+        name: '',
+        type: '',
+        status: 'running',
+        teacherIds: [],
+        maxStudents: 15,
+        tuitionPerSession: 0,
+        scaleAmount: 0,
+        maxAllowancePerSession: 0,
+        studentTuitionPerSession: 0,
+        tuitionPackageTotal: 0,
+        tuitionPackageSessions: '',
       });
+      setTeacherSearchQuery('');
+      return;
     }
-  }, [isOpen, classData]);
 
-  // Calculate preview values
-  const allowancePreview = useMemo(() => {
-    if (formData.tuitionPerSession > 0) {
-      const example = formData.tuitionPerSession * 1.2;
-      return `${formData.tuitionPerSession.toLocaleString('vi-VN')} × 1.2 = ${example.toLocaleString('vi-VN')}`;
+    if (mode === 'create' || !classData) {
+      // Create mode - reset to defaults
+      const defaultType = categories.length > 0 ? categories[0].name : '';
+      setFormData({
+        name: '',
+        type: defaultType,
+        status: 'running',
+        teacherIds: [],
+        maxStudents: 15,
+        tuitionPerSession: 0,
+        scaleAmount: 0,
+        maxAllowancePerSession: 0,
+        studentTuitionPerSession: 0,
+        tuitionPackageTotal: 0,
+        tuitionPackageSessions: '',
+      });
+      setTeacherSearchQuery('');
+      return;
     }
-    return '';
-  }, [formData.tuitionPerSession]);
+
+    // Edit mode - prefill from classData
+    const teacherIds = classData.teacherIds || (classData.teacherId ? [classData.teacherId] : []);
+    const normalizedTeacherIds = Array.isArray(teacherIds) ? teacherIds : [teacherIds].filter(Boolean);
+    
+    // Handle tuitionPackageSessions - can be number, string, or empty
+    let tuitionPackageSessionsValue: number | '' = '';
+    if (classData.tuitionPackageSessions !== undefined && classData.tuitionPackageSessions !== null) {
+      if (typeof classData.tuitionPackageSessions === 'number') {
+        tuitionPackageSessionsValue = classData.tuitionPackageSessions;
+      } else if (typeof classData.tuitionPackageSessions === 'string' && classData.tuitionPackageSessions.trim() !== '') {
+        const parsed = parseInt(classData.tuitionPackageSessions, 10);
+        tuitionPackageSessionsValue = isNaN(parsed) ? '' : parsed;
+      }
+    }
+    
+    const newFormData = {
+      name: classData.name || '',
+      type: classData.type || '',
+      status: (classData.status || 'running') as 'running' | 'stopped',
+      teacherIds: normalizedTeacherIds,
+      maxStudents: classData.maxStudents ?? 15,
+      tuitionPerSession: classData.tuitionPerSession ?? 0,
+      scaleAmount: classData.scaleAmount ?? 0,
+      maxAllowancePerSession: classData.maxAllowancePerSession ?? 0,
+      studentTuitionPerSession: classData.studentTuitionPerSession ?? 0,
+      tuitionPackageTotal: classData.tuitionPackageTotal ?? 0,
+      tuitionPackageSessions: tuitionPackageSessionsValue,
+    };
+    
+    setFormData(newFormData);
+    setTeacherSearchQuery('');
+  }, [isOpen, classData?.id, mode, categories.length]);
+
+
+  // Calculate preview values (removed × 1.2 preview as per backup)
 
   const maxAllowancePreview = useMemo(() => {
     if (formData.maxAllowancePerSession > 0) {
@@ -4432,6 +5232,11 @@ function EditClassModal({
       return;
     }
 
+    if (formData.teacherIds.length === 0) {
+      toast.error('Vui lòng chọn ít nhất một gia sư');
+      return;
+    }
+
     setLoading(true);
     try {
       // Calculate studentTuitionPerSession if needed
@@ -4445,22 +5250,82 @@ function EditClassModal({
         setFormData((prev) => ({ ...prev, tuitionPackageTotal: recalculatedTotal }));
       }
 
-      await updateClass(classData.id, {
+      const classDataToSave: any = {
         name: formData.name.trim(),
         type: formData.type.trim(),
         status: formData.status,
+        teacherIds: formData.teacherIds,
         maxStudents: formData.maxStudents,
-        tuitionPerSession: formData.tuitionPerSession,
-        scaleAmount: formData.scaleAmount,
-        maxAllowancePerSession: formData.maxAllowancePerSession > 0 ? formData.maxAllowancePerSession : null,
-        studentTuitionPerSession: finalStudentTuitionPerSession,
-        tuitionPackageTotal: formData.tuitionPackageTotal,
-        tuitionPackageSessions: typeof formData.tuitionPackageSessions === 'number' ? formData.tuitionPackageSessions : (formData.tuitionPackageSessions === '' ? 0 : Number(formData.tuitionPackageSessions)),
-      });
-      toast.success('Đã cập nhật lớp học');
+      };
+
+      if (formData.tuitionPerSession > 0) {
+        classDataToSave.tuitionPerSession = formData.tuitionPerSession;
+      }
+      if (formData.scaleAmount > 0) {
+        classDataToSave.scaleAmount = formData.scaleAmount;
+      }
+      if (formData.maxAllowancePerSession > 0) {
+        classDataToSave.maxAllowancePerSession = formData.maxAllowancePerSession;
+      }
+      if (finalStudentTuitionPerSession > 0) {
+        classDataToSave.studentTuitionPerSession = finalStudentTuitionPerSession;
+      }
+      if (formData.tuitionPackageTotal > 0) {
+        classDataToSave.tuitionPackageTotal = formData.tuitionPackageTotal;
+      }
+      if (formData.tuitionPackageSessions !== '' && formData.tuitionPackageSessions > 0) {
+        classDataToSave.tuitionPackageSessions = typeof formData.tuitionPackageSessions === 'number' 
+          ? formData.tuitionPackageSessions 
+          : Number(formData.tuitionPackageSessions);
+      }
+
+      if (mode === 'create' && onCreateClass) {
+        await onCreateClass(classDataToSave);
+        // Record action history for create
+        try {
+          await recordAction({
+            entityType: 'class',
+            entityId: '', // Will be set after creation
+            actionType: 'create',
+            beforeValue: null,
+            afterValue: classDataToSave,
+            description: `Tạo lớp học mới "${classDataToSave.name}"`,
+          });
+        } catch (err) {
+          // Silently fail - action history is not critical
+        }
+        toast.success('Đã thêm lớp học mới');
+      } else if (mode === 'edit' && classData) {
+        const oldClassData = { ...classData };
+        await updateClass(classData.id, classDataToSave);
+        
+        // Record action history for update
+        try {
+          const changedFields: Record<string, { old: any; new: any }> = {};
+          if (oldClassData.name !== classDataToSave.name) changedFields.name = { old: oldClassData.name, new: classDataToSave.name };
+          if (oldClassData.type !== classDataToSave.type) changedFields.type = { old: oldClassData.type, new: classDataToSave.type };
+          if (oldClassData.status !== classDataToSave.status) changedFields.status = { old: oldClassData.status, new: classDataToSave.status };
+          if (oldClassData.maxStudents !== classDataToSave.maxStudents) changedFields.maxStudents = { old: oldClassData.maxStudents, new: classDataToSave.maxStudents };
+          if (oldClassData.tuitionPerSession !== classDataToSave.tuitionPerSession) changedFields.tuitionPerSession = { old: oldClassData.tuitionPerSession, new: classDataToSave.tuitionPerSession };
+          
+          await recordAction({
+            entityType: 'class',
+            entityId: classData.id,
+            actionType: 'update',
+            beforeValue: oldClassData,
+            afterValue: { ...oldClassData, ...classDataToSave },
+            changedFields: Object.keys(changedFields).length > 0 ? changedFields : undefined,
+            description: `Cập nhật thông tin lớp học "${classDataToSave.name}"`,
+          });
+        } catch (err) {
+          // Silently fail - action history is not critical
+        }
+        toast.success('Đã cập nhật lớp học');
+      }
+      
       onSave();
     } catch (error: any) {
-      toast.error('Không thể cập nhật lớp học: ' + (error.response?.data?.error || error.message));
+      toast.error('Không thể lưu lớp học: ' + (error.response?.data?.error || error.message));
     } finally {
       setLoading(false);
     }
@@ -4468,7 +5333,7 @@ function EditClassModal({
 
   return (
     <Modal
-      title="Chỉnh sửa lớp học"
+      title={mode === 'create' ? 'Thêm lớp học mới' : 'Chỉnh sửa lớp học'}
       isOpen={isOpen}
       onClose={onClose}
       size="lg"
@@ -4483,7 +5348,9 @@ function EditClassModal({
             id="editClassName"
             className="form-control"
             value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            onChange={(e) => {
+              setFormData({ ...formData, name: e.target.value });
+            }}
             required
             placeholder="Nhập tên lớp"
           />
@@ -4528,56 +5395,128 @@ function EditClassModal({
         </div>
 
         <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
-          <label className="form-label">
-            Gia sư phụ trách
+          <label className="form-label" style={{ marginBottom: 'var(--spacing-2)' }}>
+            Gia sư * (có thể chọn nhiều)
           </label>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-2)' }}>
-            {currentClassTeachers.length === 0 ? (
-              <div style={{ padding: 'var(--spacing-2)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius)', fontSize: 'var(--font-size-sm)', color: 'var(--muted)', textAlign: 'center' }}>
-                Chưa có gia sư nào
-              </div>
-            ) : (
-              <div style={{ 
-                padding: 'var(--spacing-2)', 
-                background: 'var(--bg-secondary)', 
-                borderRadius: 'var(--radius)', 
-                border: '1px solid var(--border)',
-                maxHeight: '150px',
-                overflowY: 'auto'
-              }}>
-                {currentClassTeachers.map((teacher: any, index: number) => (
-                  <div 
+          
+          {/* Current Teachers List */}
+          <div style={{ marginBottom: 'var(--spacing-3)' }}>
+            <h4 style={{ marginBottom: 'var(--spacing-2)', fontSize: '0.875rem', fontWeight: '600' }}>
+              Gia sư đã chọn
+            </h4>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-2)' }}>
+              {selectedTeachers.length > 0 ? (
+                selectedTeachers.map((teacher) => (
+                  <div
                     key={teacher.id}
                     style={{
-                      padding: 'var(--spacing-1) var(--spacing-2)',
-                      fontSize: 'var(--font-size-sm)',
-                      color: 'var(--text)',
-                      borderBottom: index < currentClassTeachers.length - 1 ? '1px solid var(--border)' : 'none'
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: 'var(--spacing-2)',
+                      background: 'var(--bg-secondary)',
+                      borderRadius: 'var(--radius)',
                     }}
                   >
-                    {teacher.fullName || teacher.name || teacher.id}
+                    <span>{teacher.fullName || teacher.full_name || teacher.name || teacher.id}</span>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-danger"
+                      onClick={() => handleRemoveTeacher(teacher.id)}
+                      title="Gỡ khỏi danh sách"
+                    >
+                      Xóa
+                    </button>
                   </div>
-                ))}
-              </div>
-            )}
-            {onOpenTeacherModal && (
-              <button
-                type="button"
-                className="btn btn-sm"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onOpenTeacherModal();
-                }}
-                style={{ alignSelf: 'flex-start' }}
-              >
-                Chỉnh sửa danh sách
-              </button>
-            )}
+                ))
+              ) : (
+                <p style={{ fontSize: '0.875rem', color: 'var(--muted)' }}>Chưa chọn gia sư nào.</p>
+              )}
+            </div>
           </div>
-          <small className="text-muted" style={{ fontSize: 'var(--font-size-xs)', marginTop: 'var(--spacing-1)', display: 'block' }}>
-            Nhấn "Chỉnh sửa danh sách" để thêm/xóa gia sư phụ trách
-          </small>
+
+          {/* Add Teacher Search */}
+          <div>
+            <h4 style={{ marginBottom: 'var(--spacing-2)', fontSize: '0.875rem', fontWeight: '600' }}>
+              Thêm gia sư mới
+            </h4>
+            <div style={{ position: 'relative' }}>
+              <input
+                type="search"
+                value={teacherSearchQuery}
+                onChange={(e) => setTeacherSearchQuery(e.target.value)}
+                placeholder="Nhập tên gia sư để tìm kiếm..."
+                style={{
+                  width: '100%',
+                  padding: 'var(--spacing-2)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius)',
+                }}
+              />
+              {teacherSearchQuery && filteredAvailableTeachers.length > 0 && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    marginTop: 'var(--spacing-1)',
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius)',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                    zIndex: 10,
+                    maxHeight: '200px',
+                    overflowY: 'auto',
+                  }}
+                >
+                  {filteredAvailableTeachers.map((teacher) => (
+                    <button
+                      key={teacher.id}
+                      type="button"
+                      onClick={() => handleAddTeacher(teacher.id)}
+                      style={{
+                        width: '100%',
+                        padding: 'var(--spacing-2)',
+                        textAlign: 'left',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: 'var(--text)',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'var(--bg-secondary)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'none';
+                      }}
+                    >
+                      {teacher.fullName || teacher.full_name || teacher.name || teacher.id}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {teacherSearchQuery && filteredAvailableTeachers.length === 0 && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    marginTop: 'var(--spacing-1)',
+                    padding: 'var(--spacing-2)',
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius)',
+                    fontSize: '0.875rem',
+                    color: 'var(--muted)',
+                  }}
+                >
+                  Không tìm thấy gia sư phù hợp.
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
@@ -4612,11 +5551,6 @@ function EditClassModal({
               placeholder="Ví dụ: 150000"
               required
             />
-            {allowancePreview && (
-              <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--muted)', marginTop: 'var(--spacing-1)' }}>
-                {allowancePreview}
-              </div>
-            )}
           </div>
           <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
             <label htmlFor="editClassScaleAmount" className="form-label" title="Tiền scale cộng thêm cho mỗi buổi">
@@ -4744,7 +5678,7 @@ function EditClassModal({
             Hủy
           </button>
           <button type="submit" className="btn btn-primary" disabled={loading}>
-            {loading ? 'Đang cập nhật...' : 'Cập nhật'}
+            {loading ? (mode === 'create' ? 'Đang tạo...' : 'Đang cập nhật...') : (mode === 'create' ? 'Tạo mới' : 'Cập nhật')}
           </button>
         </div>
       </form>
@@ -5047,6 +5981,20 @@ function MoveStudentModal({
       setLoading(true);
       try {
         await removeStudentFromClass(currentClassId, student.id, true);
+        
+        // Record action history
+        try {
+          await recordAction({
+            entityType: 'student_class',
+            entityId: `${student.id}_${currentClassId}`,
+            actionType: 'delete',
+            beforeValue: { student_id: student.id, class_id: currentClassId, student_name: student.name },
+            description: `Xóa học sinh "${student.name}" khỏi lớp`,
+          });
+        } catch (err) {
+          // Silently fail - action history is not critical
+        }
+        
         toast.success('Đã gỡ học sinh khỏi lớp');
         onSuccess();
       } catch (error: any) {
@@ -5070,6 +6018,27 @@ function MoveStudentModal({
     setLoading(true);
     try {
       await moveStudentToClass(currentClassId, student.id, selectedClassId, true);
+      
+      // Record action history
+      try {
+        await recordAction({
+          entityType: 'student_class',
+          entityId: `${student.id}_${currentClassId}`,
+          actionType: 'delete',
+          beforeValue: { student_id: student.id, class_id: currentClassId, student_name: student.name },
+          description: `Xóa học sinh "${student.name}" khỏi lớp hiện tại`,
+        });
+        await recordAction({
+          entityType: 'student_class',
+          entityId: `${student.id}_${selectedClassId}`,
+          actionType: 'create',
+          afterValue: { student_id: student.id, class_id: selectedClassId, student_name: student.name },
+          description: `Chuyển học sinh "${student.name}" sang lớp "${targetClass.name}"`,
+        });
+      } catch (err) {
+        // Silently fail - action history is not critical
+      }
+      
       toast.success(`Đã chuyển học sinh sang lớp "${targetClass.name}"`);
       onSuccess();
     } catch (error: any) {
@@ -5172,7 +6141,24 @@ function TeacherAllowanceModal({
         customTeacherAllowances: Object.keys(allowances).length > 0 ? allowances : null,
       };
 
+      const oldClassData = { ...classData };
       await updateClass(classId, payload);
+      
+      // Record action history
+      try {
+        await recordAction({
+          entityType: 'class',
+          entityId: classId,
+          actionType: 'update',
+          beforeValue: oldClassData,
+          afterValue: { ...oldClassData, ...payload },
+          changedFields: { custom_teacher_allowances: { old: oldClassData.customTeacherAllowances, new: payload.custom_teacher_allowances } },
+          description: `Cập nhật trợ cấp cho gia sư "${teacher?.fullName || teacher?.full_name || teacher?.id}" trong lớp "${classData?.name || classId}"`,
+        });
+      } catch (err) {
+        // Silently fail - action history is not critical
+      }
+      
       toast.success('Đã cập nhật trợ cấp');
       onSuccess();
     } catch (error: any) {

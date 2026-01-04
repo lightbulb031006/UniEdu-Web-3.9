@@ -34,13 +34,41 @@ export function getNextAttendanceStatus(currentStatus: AttendanceStatus): Attend
 /**
  * Hook to manage attendance state
  */
-export function useAttendance(initialState: AttendanceState = {}) {
+export function useAttendance(
+  initialState: AttendanceState = {},
+  options?: {
+    validateExcused?: (studentId: string, student: any) => boolean | string; // Return true if valid, or error message string
+    onValidationError?: (error: string) => void;
+  }
+) {
   const [attendance, setAttendance] = useState<AttendanceState>(initialState);
 
-  const toggleAttendance = useCallback((studentId: string) => {
+  const toggleAttendance = useCallback((studentId: string, student?: any) => {
     setAttendance((prev) => {
       const current = prev[studentId] || { status: 'present' as AttendanceStatus, remark: '' };
       const nextStatus = getNextAttendanceStatus(current.status);
+      
+      // Validate "excused" status if validation function is provided
+      if (nextStatus === 'excused' && options?.validateExcused && student) {
+        const validationResult = options.validateExcused(studentId, student);
+        if (validationResult !== true) {
+          // Validation failed - show error and skip to absent
+          const errorMessage = typeof validationResult === 'string' ? validationResult : 'Không thể chọn trạng thái "Phép"';
+          if (options.onValidationError) {
+            options.onValidationError(errorMessage);
+          }
+          // Skip excused: if current is present, go to absent; if current is absent, stay absent
+          const finalStatus = current.status === 'present' ? 'absent' : current.status;
+          return {
+            ...prev,
+            [studentId]: {
+              status: finalStatus,
+              remark: current.remark,
+            },
+          };
+        }
+      }
+      
       return {
         ...prev,
         [studentId]: {
@@ -49,7 +77,7 @@ export function useAttendance(initialState: AttendanceState = {}) {
         },
       };
     });
-  }, []);
+  }, [options]);
 
   const updateAttendance = useCallback((studentId: string, record: Partial<AttendanceRecord>) => {
     setAttendance((prev) => ({

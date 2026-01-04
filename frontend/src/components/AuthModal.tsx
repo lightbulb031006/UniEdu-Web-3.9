@@ -4,12 +4,13 @@
  * Migrated from backup/assets/js/pages/home.js openHomeAuthModal
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
 import { authService } from '../services/authService';
 import { useAuthStore } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import { fetchTeachers } from '../services/teachersService';
+import { toast } from '../utils/toast';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -28,6 +29,36 @@ export default function AuthModal({ isOpen, onClose, mode, onModeChange }: AuthM
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
+  
+  // Track failed login attempts
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [isLocked, setIsLocked] = useState(false);
+  const [lockUntil, setLockUntil] = useState<number | null>(null);
+  
+  // Check lock status on mount
+  useEffect(() => {
+    const lockData = localStorage.getItem('loginLock');
+    if (lockData) {
+      const { lockUntil: storedLockUntil, attempts } = JSON.parse(lockData);
+      const now = Date.now();
+      
+      if (storedLockUntil > now) {
+        // Still locked
+        setIsLocked(true);
+        setLockUntil(storedLockUntil);
+        setFailedAttempts(attempts || 0);
+        
+        const minutesLeft = Math.ceil((storedLockUntil - now) / (60 * 1000));
+        toast.error(`Tài khoản bị khóa. Vui lòng thử lại sau ${minutesLeft} phút.`, 5000);
+      } else {
+        // Lock expired, clear it
+        localStorage.removeItem('loginLock');
+        setFailedAttempts(0);
+        setIsLocked(false);
+        setLockUntil(null);
+      }
+    }
+  }, []);
 
   // Register form state
   const [regName, setRegName] = useState('');
@@ -43,18 +74,39 @@ export default function AuthModal({ isOpen, onClose, mode, onModeChange }: AuthM
     setLoading(true);
 
     try {
+      // Check if account is locked
+      if (isLocked && lockUntil && lockUntil > Date.now()) {
+        const minutesLeft = Math.ceil((lockUntil - Date.now()) / (60 * 1000));
+        // Only show toast, don't set error in form
+        toast.error(`Tài khoản bị khóa. Vui lòng thử lại sau ${minutesLeft} phút.`, 5000);
+        setLoading(false);
+        return;
+      }
+
       // Sanitize input (giống code cũ)
       const loginInput = loginEmail.trim();
       const password = loginPassword;
 
       if (!loginInput || !password) {
-        setError('Vui lòng nhập email/handle và mật khẩu');
+        // Only show toast for validation errors too
+        toast.warning('Vui lòng nhập email/handle và mật khẩu', 3000);
         setLoading(false);
         return;
       }
 
       const response = await authService.login({ email: loginInput, password, rememberMe });
+      
+      // Login successful - clear failed attempts
+      localStorage.removeItem('loginLock');
+      setFailedAttempts(0);
+      setIsLocked(false);
+      setLockUntil(null);
+      
+      // Set auth first to ensure state is saved before navigation
       setAuth(response.user, response.token, rememberMe);
+      
+      // Wait a bit to ensure storage is written (especially for sessionStorage)
+      await new Promise(resolve => setTimeout(resolve, 50));
       
       // Nếu là user nhân sự (teacher role), redirect thẳng đến staff detail
       if (response.user.role === 'teacher') {
@@ -89,18 +141,31 @@ export default function AuthModal({ isOpen, onClose, mode, onModeChange }: AuthM
           if (teacherRecord) {
             // Redirect thẳng đến staff detail
             onClose();
+            // Wait a bit more to ensure auth state is fully initialized
             setTimeout(() => {
               navigate(`/staff/${teacherRecord.id}`, { replace: true });
-            }, 100);
+            }, 200);
+            return;
+          } else {
+            // Nếu không tìm thấy teacher record, log và fallback
+            console.warn('[AuthModal] Teacher record not found for user:', {
+              userId: user.id,
+              email: user.email,
+              teachersCount: teachers.length,
+            });
+            onClose();
+            setTimeout(() => {
+              navigate('/home', { replace: true });
+            }, 200);
             return;
           }
         } catch (err) {
-          // Nếu không tìm thấy, fallback về home
-          console.warn('[AuthModal] Could not find staff record, redirecting to home');
+          // Nếu có lỗi khi fetch teachers, log và fallback về home
+          console.error('[AuthModal] Error fetching teachers:', err);
           onClose();
           setTimeout(() => {
             navigate('/home', { replace: true });
-          }, 100);
+          }, 200);
           return;
         }
       }
@@ -114,15 +179,47 @@ export default function AuthModal({ isOpen, onClose, mode, onModeChange }: AuthM
         navigate(defaultPage);
       }, 100);
     } catch (err: any) {
-      // Check if it's a rate limit error
+      // Check if it's a rate limit error (account locked)
       if (err.response?.status === 429) {
-        setError(err.response?.data?.message || 'Đăng nhập sai quá nhiều lần. Vui lòng thử lại sau 10 phút.');
+        const lockDuration = 30 * 60 * 1000; // 30 minutes
+        const lockUntil = Date.now() + lockDuration;
+        
+        setIsLocked(true);
+        setLockUntil(lockUntil);
+        setFailedAttempts(5);
+        
+        // Store lock info
+        localStorage.setItem('loginLock', JSON.stringify({
+          lockUntil,
+          attempts: 5,
+        }));
+        
+        const errorMsg = err.response?.data?.message || 'Đăng nhập sai quá nhiều lần. Vui lòng thử lại sau 30 phút.';
+        // Don't set error in form, only show toast
+        toast.error(errorMsg, 5000);
+        // Clear password for security, keep email
+        setLoginPassword('');
       } else {
-        // Error message từ authService đã được format
-        setError(err.message || 'Đăng nhập thất bại');
+        // Increment failed attempts
+        const newAttempts = failedAttempts + 1;
+        setFailedAttempts(newAttempts);
+        
+        // Show toast for each failed attempt
+        const remainingAttempts = 5 - newAttempts;
+        if (remainingAttempts > 0) {
+          toast.warning(`Mật khẩu sai. Còn ${remainingAttempts} lần thử trước khi bị khóa.`, 4000);
+        } else {
+          // This shouldn't happen (should be caught by 429), but just in case
+          toast.error('Đã vượt quá số lần thử. Tài khoản sẽ bị khóa trong 30 phút.', 5000);
+        }
+        
+        // Don't set error in form, only show toast
+        // Clear password for security, keep email
+        setLoginPassword('');
       }
     } finally {
       setLoading(false);
+      // Form stays open - don't close modal on error
     }
   };
 
@@ -179,7 +276,8 @@ export default function AuthModal({ isOpen, onClose, mode, onModeChange }: AuthM
       size="md"
     >
       <form className="home-auth-form" onSubmit={isLogin ? handleLogin : handleRegister}>
-        {error && (
+        {/* Only show error in form for register form, login errors use toast only */}
+        {error && !isLogin && (
           <div className="text-danger text-sm" style={{ padding: 'var(--spacing-2)', background: 'rgba(239, 68, 68, 0.1)', borderRadius: 'var(--radius)', border: '1px solid rgba(239, 68, 68, 0.3)', marginBottom: 'var(--spacing-3)' }}>
             {error}
           </div>

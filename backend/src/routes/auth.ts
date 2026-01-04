@@ -4,7 +4,7 @@
 
 import express from 'express';
 import { z } from 'zod';
-import { login, register, getUserById, updateProfile } from '../services/authService';
+import { login, register, getUserById, updateProfile, getUsers } from '../services/authService';
 import { authenticate } from '../middleware/auth';
 import { authLimiter, loginFailureLimiter } from '../middleware/rateLimit';
 import { ValidationError } from '../utils/errors';
@@ -30,7 +30,7 @@ const registerSchema = z.object({
 /**
  * POST /api/auth/login
  * Login user
- * Rate limiting: 5 failed attempts -> lock for 10 minutes
+ * Rate limiting: 5 failed attempts -> lock for 30 minutes
  */
 router.post('/login', loginFailureLimiter, async (req, res, next) => {
   try {
@@ -39,9 +39,13 @@ router.post('/login', loginFailureLimiter, async (req, res, next) => {
     res.json(result);
   } catch (error) {
     if (error instanceof z.ZodError) {
+      logger.warn('[LOGIN] Validation error', {
+        errors: error.errors,
+      });
       next(new ValidationError('Invalid input', error.errors));
     } else {
       // Failed login attempt - will be counted by rate limiter
+      // Error is already logged in authService
       next(error);
     }
   }
@@ -78,6 +82,23 @@ router.get('/me', authenticate, async (req: any, res, next) => {
       name: user.name,
       role: user.role,
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/auth/users
+ * Get all users (admin only)
+ */
+router.get('/users', authenticate, async (req: any, res, next) => {
+  try {
+    // Only admin can access
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden: Admin only' });
+    }
+    const users = await getUsers();
+    res.json(users);
   } catch (error) {
     next(error);
   }

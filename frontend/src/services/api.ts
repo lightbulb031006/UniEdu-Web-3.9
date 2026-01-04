@@ -17,9 +17,15 @@ const api = axios.create({
 
 // Request interceptor: Add token to requests
 // Sử dụng 'unicorns.token' giống code cũ
+// Check both localStorage (rememberMe) and sessionStorage (no rememberMe)
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('unicorns.token');
+    // Try localStorage first (rememberMe = true)
+    let token = localStorage.getItem('unicorns.token');
+    // If not found, try sessionStorage (rememberMe = false)
+    if (!token) {
+      token = sessionStorage.getItem('unicorns.token');
+    }
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -35,11 +41,18 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      // Token expired or invalid
+    // Don't redirect on 401 for login endpoint - let the login form handle the error
+    const isLoginEndpoint = error.config?.url?.includes('/auth/login');
+    
+    if (error.response?.status === 401 && !isLoginEndpoint) {
+      // Token expired or invalid (but not for login attempts)
       localStorage.removeItem('unicorns.token');
       localStorage.removeItem('unicorns.currentUser');
       localStorage.removeItem('refreshToken');
+      // Also clear sessionStorage
+      sessionStorage.removeItem('unicorns.token');
+      sessionStorage.removeItem('unicorns.currentUser');
+      sessionStorage.removeItem('refreshToken');
       // Redirect to home (giống code cũ)
       window.location.href = '/';
     }

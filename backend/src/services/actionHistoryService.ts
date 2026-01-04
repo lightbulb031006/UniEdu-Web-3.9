@@ -84,7 +84,11 @@ export async function getActionHistory(filters: ActionHistoryFilters = {}) {
   }
 
   if (startDate) {
-    query = query.gte('created_at', startDate);
+    // Convert YYYY-MM-DD to ISO string with time 00:00:00
+    const startDateTime = startDate.includes('T') 
+      ? startDate 
+      : `${startDate}T00:00:00.000Z`;
+    query = query.gte('created_at', startDateTime);
   } else {
     // Default: only get last 30 days
     const thirtyDaysAgo = new Date();
@@ -93,7 +97,11 @@ export async function getActionHistory(filters: ActionHistoryFilters = {}) {
   }
 
   if (endDate) {
-    query = query.lte('created_at', endDate);
+    // Convert YYYY-MM-DD to ISO string with time 23:59:59
+    const endDateTime = endDate.includes('T')
+      ? endDate
+      : `${endDate}T23:59:59.999Z`;
+    query = query.lte('created_at', endDateTime);
   }
 
   const { data, error } = await query;
@@ -120,23 +128,29 @@ export async function recordAction(params: RecordActionParams): Promise<ActionHi
     actionRecord.entity_id = params.entityId;
   }
 
+  // User info (required for tracking)
   if (params.userId) {
     actionRecord.user_id = params.userId;
   }
 
   if (params.userEmail) {
     actionRecord.user_email = params.userEmail;
+  } else {
+    // Fallback to anonymous if no email provided
+    actionRecord.user_email = 'anonymous@local';
   }
 
   if (params.userRole) {
     actionRecord.user_role = params.userRole;
+  } else {
+    actionRecord.user_role = 'unknown';
   }
 
-  if (params.beforeValue) {
+  if (params.beforeValue !== undefined) {
     actionRecord.before_value = params.beforeValue;
   }
 
-  if (params.afterValue) {
+  if (params.afterValue !== undefined) {
     actionRecord.after_value = params.afterValue;
   }
 
@@ -148,6 +162,7 @@ export async function recordAction(params: RecordActionParams): Promise<ActionHi
     actionRecord.description = params.description;
   }
 
+  // Insert into database
   const { data, error } = await supabase.from('action_history').insert(actionRecord).select().single();
 
   if (error) {
@@ -271,7 +286,6 @@ export async function undoAction(actionId: string, currentUserId?: string, curre
       userEmail: currentUserEmail,
     });
   } catch (recordError) {
-    console.warn('Failed to record undo action:', recordError);
     // Continue anyway - the undo was successful
   }
 

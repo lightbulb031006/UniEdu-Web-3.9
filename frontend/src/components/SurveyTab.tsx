@@ -22,10 +22,11 @@ const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep
 
 interface SurveyTabProps {
   classId: string;
-  canManage?: boolean; // Permission to create/edit/delete surveys
+  canManage?: boolean; // Permission to create/edit surveys
+  canDelete?: boolean; // Permission to delete surveys (only admin)
 }
 
-export default function SurveyTab({ classId, canManage = true }: SurveyTabProps) {
+export default function SurveyTab({ classId, canManage = true, canDelete = false }: SurveyTabProps) {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingSurvey, setEditingSurvey] = useState<SurveyWithTeacher | null>(null);
@@ -59,15 +60,12 @@ export default function SurveyTab({ classId, canManage = true }: SurveyTabProps)
   // Get class teachers from classData
   const classTeachers = useMemo(() => {
     if (!classData) {
-      console.log('[SurveyTab] No classData, returning empty teachers array');
       return [];
     }
     if (!(classData as any).teachers) {
-      console.warn('[SurveyTab] No teachers in classData. classData keys:', Object.keys(classData));
       return [];
     }
     const teachers = Array.isArray((classData as any).teachers) ? (classData as any).teachers : [];
-    console.log('[SurveyTab] Found teachers:', teachers.length);
     return teachers;
   }, [classData]);
 
@@ -462,8 +460,8 @@ export default function SurveyTab({ classId, canManage = true }: SurveyTabProps)
                 <th style={{ padding: 'var(--spacing-3)', textAlign: 'center', fontWeight: '600', fontSize: '0.875rem', width: '50px' }}>#</th>
                 <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem' }}>Nội dung</th>
                 <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', width: '250px' }}>Thông tin</th>
-                {canManage && (
-                  <th style={{ width: '50px', textAlign: 'center', padding: 'var(--spacing-3)' }}></th>
+                {canDelete && (
+                  <th className="session-actions-header" style={{ width: '60px', textAlign: 'center', padding: 'var(--spacing-3)' }}></th>
                 )}
               </tr>
             </thead>
@@ -538,7 +536,7 @@ export default function SurveyTab({ classId, canManage = true }: SurveyTabProps)
                       </div>
                     </div>
                   </td>
-                  {canManage && (
+                  {canDelete && (
                     <td
                       className="session-actions"
                       onClick={(e) => e.stopPropagation()}

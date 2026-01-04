@@ -20,6 +20,7 @@ export interface Session {
   subsidy_original?: number;
   subsidy_modified_by?: string;
   subsidy_modified_at?: string;
+  tuition_fee?: number; // Học phí của buổi học (số tiền học sinh đóng cho buổi đó) - chỉ admin thấy
   studentPaidCount?: number; // Number of students who paid (present in attendance)
   created_at?: string;
   updated_at?: string;
@@ -52,6 +53,7 @@ function normalizeSession(session: any): Session {
     subsidy_original: session.subsidy_original || session.subsidyOriginal,
     subsidy_modified_by: session.subsidy_modified_by || session.subsidyModifiedBy,
     subsidy_modified_at: session.subsidy_modified_at || session.subsidyModifiedAt,
+    tuition_fee: session.tuition_fee !== undefined ? session.tuition_fee : (session.tuitionFee !== undefined ? session.tuitionFee : undefined),
     studentPaidCount: session.studentPaidCount !== undefined ? session.studentPaidCount : (session.student_paid_count !== undefined ? session.student_paid_count : 0),
     created_at: session.created_at || session.createdAt,
     updated_at: session.updated_at || session.updatedAt,

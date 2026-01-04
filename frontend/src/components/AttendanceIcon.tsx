@@ -63,7 +63,7 @@ const AttendanceIcon: React.FC<AttendanceIconProps> = ({
             fill="none" 
             stroke="currentColor" 
             strokeWidth="2.5" 
-            style={iconStyle}
+            style={{ ...iconStyle, fill: '#f59e0b', opacity: 0.2 }}
           >
             <path d="M20 6L9 17l-5-5" />
           </svg>

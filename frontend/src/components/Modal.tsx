@@ -14,9 +14,10 @@ interface ModalProps {
   children: React.ReactNode;
   size?: 'sm' | 'md' | 'lg';
   zIndex?: number;
+  headerExtra?: React.ReactNode; // Extra content to display in header (e.g., tuition fee)
 }
 
-export default function Modal({ title, isOpen, onClose, children, size = 'md', zIndex }: ModalProps) {
+export default function Modal({ title, isOpen, onClose, children, size = 'md', zIndex, headerExtra }: ModalProps) {
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -75,13 +76,20 @@ export default function Modal({ title, isOpen, onClose, children, size = 'md', z
         onClick={(e) => e.stopPropagation()}
         style={{ zIndex: modalZIndex }}
       >
-        <div className="modal-header">
-          <h3>{title}</h3>
+        <div className="modal-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-2)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-3)', flex: 1, minWidth: 0 }}>
+            <h3 style={{ margin: 0, flex: 1, minWidth: 0 }}>{title}</h3>
+            {headerExtra && (
+              <div style={{ flexShrink: 0 }}>
+                {headerExtra}
+              </div>
+            )}
+          </div>
           <button
             className="btn btn-ghost btn-icon"
             onClick={onClose}
             aria-label="Đóng"
-            style={{ padding: 'var(--spacing-2)' }}
+            style={{ padding: 'var(--spacing-2)', flexShrink: 0 }}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M18 6L6 18" />

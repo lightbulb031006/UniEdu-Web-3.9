@@ -60,22 +60,24 @@ function normalizeActionHistory(action: any): ActionHistory {
  */
 export async function fetchActionHistory(filters: ActionHistoryFilters = {}): Promise<ActionHistory[]> {
   const params = new URLSearchParams();
-  if (filters.entityType) {
+  
+  // Only add params if they have non-empty values (like backup)
+  if (filters.entityType && filters.entityType !== '') {
     params.append('entityType', filters.entityType);
   }
-  if (filters.entityId) {
+  if (filters.entityId && filters.entityId !== '') {
     params.append('entityId', filters.entityId);
   }
-  if (filters.userId) {
+  if (filters.userId && filters.userId !== '') {
     params.append('userId', filters.userId);
   }
-  if (filters.actionType) {
+  if (filters.actionType && filters.actionType !== '') {
     params.append('actionType', filters.actionType);
   }
-  if (filters.startDate) {
+  if (filters.startDate && filters.startDate !== '') {
     params.append('startDate', filters.startDate);
   }
-  if (filters.endDate) {
+  if (filters.endDate && filters.endDate !== '') {
     params.append('endDate', filters.endDate);
   }
   if (filters.limit) {
@@ -87,6 +89,22 @@ export async function fetchActionHistory(filters: ActionHistoryFilters = {}): Pr
 
   const response = await api.get<ActionHistory[]>(`/action-history?${params.toString()}`);
   return (response.data || []).map(normalizeActionHistory);
+}
+
+/**
+ * Record an action
+ */
+export async function recordAction(params: {
+  entityType: string;
+  entityId?: string;
+  actionType: 'create' | 'update' | 'delete' | 'undo';
+  beforeValue?: any;
+  afterValue?: any;
+  changedFields?: Record<string, { old: any; new: any }>;
+  description?: string;
+}): Promise<ActionHistory> {
+  const response = await api.post<ActionHistory>('/action-history', params);
+  return normalizeActionHistory(response.data);
 }
 
 /**

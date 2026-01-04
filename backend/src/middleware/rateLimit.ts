@@ -39,11 +39,11 @@ export const authLimiter = rateLimit({
   },
 });
 
-// Rate limiter for login failures - lock for 10 minutes after 5 failed attempts
+// Rate limiter for login failures - lock for 30 minutes after 5 failed attempts
 export const loginFailureLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000, // 10 minutes lock period
+  windowMs: 30 * 60 * 1000, // 30 minutes lock period
   max: 5, // 5 failed attempts
-  message: 'Đăng nhập sai quá nhiều lần. Vui lòng thử lại sau 10 phút.',
+  message: 'Đăng nhập sai quá nhiều lần. Vui lòng thử lại sau 30 phút.',
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true, // Only count failed attempts
