@@ -277,12 +277,36 @@ function ClassDetail() {
     }
   }, [monthPopupOpen]);
 
-  // Filter sessions by selected month
+  // Filter sessions by selected month and sort by created_at (newest first)
   const monthSessions = useMemo(() => {
-    return sessions.filter((s) => {
+    const filtered = sessions.filter((s) => {
       if (!s.date) return false;
       const sessionMonth = s.date.slice(0, 7); // YYYY-MM
       return sessionMonth === selectedMonth;
+    });
+    
+    // Sort by created_at (newest first), then by date and time
+    return filtered.sort((a, b) => {
+      // First sort by created_at (newest first)
+      const aCreatedAt = (a as any).createdAt || (a as any).created_at || '';
+      const bCreatedAt = (b as any).createdAt || (b as any).created_at || '';
+      if (aCreatedAt && bCreatedAt) {
+        return bCreatedAt.localeCompare(aCreatedAt);
+      }
+      // If no created_at, sort by date (newest first)
+      const aDate = a.date || '';
+      const bDate = b.date || '';
+      if (aDate !== bDate) {
+        return bDate.localeCompare(aDate);
+      }
+      // If same date, sort by start_time (newest first)
+      const aTime = (a as any).start_time || (a as any).startTime || '';
+      const bTime = (b as any).start_time || (b as any).startTime || '';
+      if (aTime !== bTime) {
+        return bTime.localeCompare(aTime);
+      }
+      // If same date and time, sort by id (newest first)
+      return (b.id || '').localeCompare(a.id || '');
     });
   }, [sessions, selectedMonth]);
 
@@ -290,13 +314,28 @@ function ClassDetail() {
   const handleSessionCreated = useCallback((newSession: any) => {
     setOptimisticSessions((prev) => {
       const updated = [...prev, newSession];
+      // Sort by created_at (newest first), then by date and time
       return updated.sort((a, b) => {
+        // First sort by created_at (newest first)
+        const aCreatedAt = a.createdAt || a.created_at || '';
+        const bCreatedAt = b.createdAt || b.created_at || '';
+        if (aCreatedAt && bCreatedAt) {
+          return bCreatedAt.localeCompare(aCreatedAt);
+        }
+        // If no created_at, sort by date (newest first)
         const dateA = a.date || '';
         const dateB = b.date || '';
-        if (dateA !== dateB) return dateA.localeCompare(dateB);
+        if (dateA !== dateB) {
+          return dateB.localeCompare(dateA);
+        }
+        // If same date, sort by start_time (newest first)
         const timeA = a.start_time || a.startTime || '';
         const timeB = b.start_time || b.startTime || '';
-        return timeA.localeCompare(timeB);
+        if (timeA !== timeB) {
+          return timeB.localeCompare(timeA);
+        }
+        // If same date and time, sort by id (newest first)
+        return (b.id || '').localeCompare(a.id || '');
       });
     });
   }, []);
@@ -3680,14 +3719,6 @@ function EditSessionModal({
   canManagePaymentStatus?: boolean;
   canEditAllowanceManually?: boolean;
 }) {
-  console.log('[EditSessionModal] Component called with:', {
-    sessionId: session?.id,
-    session: session,
-    classId,
-    hasClassData: !!classData,
-    teachersCount: teachers?.length,
-    studentsCount: students?.length,
-  });
   
   const currentUser = useAuthStore((state) => state.user);
   const isAdmin = hasRole('admin');
@@ -3722,6 +3753,9 @@ function EditSessionModal({
     getAttendanceSummary,
     getEligibleCount,
   } = useAttendance({});
+  
+  // Use ref to track current loading session to prevent duplicate fetches
+  const loadingSessionIdRef = useRef<string | null>(null);
 
   // Custom toggle with validation for "excused" status
   const toggleAttendance = useCallback((studentId: string) => {
@@ -3822,11 +3856,39 @@ function EditSessionModal({
     // No need to set local state here
   }, [session?.id, classData?.teacherIds, teachers]);
   
-  // Fetch existing attendance
+  // Fetch existing attendance - combined reset and load logic
   useEffect(() => {
+    const sessionId = session?.id;
+    
+    // Don't fetch if session.id is not available or students are not ready
+    if (!sessionId || !Array.isArray(students) || students.length === 0) {
+      setLoadingAttendance(false);
+      setAttendance({});
+      loadingSessionIdRef.current = null;
+      return;
+    }
+    
+    // Prevent duplicate fetches for the same session
+    if (loadingSessionIdRef.current === sessionId) {
+      return;
+    }
+    
+    // Mark this session as loading
+    loadingSessionIdRef.current = sessionId;
+    
     const loadAttendance = async () => {
+      // Reset attendance to empty first to prevent showing stale data
+      setAttendance({});
+      setLoadingAttendance(true);
+      
       try {
-        const existingAttendance = await fetchAttendanceBySession(session.id);
+        const existingAttendance = await fetchAttendanceBySession(sessionId);
+        
+        // Check if session is still the same (user might have changed session while loading)
+        if (loadingSessionIdRef.current !== sessionId) {
+          return;
+        }
+        
         const attendanceMap: Record<string, { status: AttendanceStatus; remark: string }> = {};
         
         // Initialize with existing attendance (check if it's an array)
@@ -3856,7 +3918,13 @@ function EditSessionModal({
         
         setAttendance(attendanceMap);
       } catch (error) {
-        console.error('Failed to load attendance:', error);
+        console.error('[EditSessionModal] Failed to load attendance:', error);
+        
+        // Check if session is still the same
+        if (loadingSessionIdRef.current !== sessionId) {
+          return;
+        }
+        
         // Initialize with default values
         const defaultAttendance: Record<string, { status: AttendanceStatus; remark: string }> = {};
         if (Array.isArray(students)) {
@@ -3870,12 +3938,23 @@ function EditSessionModal({
         }
         setAttendance(defaultAttendance);
       } finally {
-        setLoadingAttendance(false);
+        // Only clear loading flag if this is still the current session
+        if (loadingSessionIdRef.current === sessionId) {
+          setLoadingAttendance(false);
+          loadingSessionIdRef.current = null;
+        }
       }
     };
     
     loadAttendance();
-  }, [session.id, students]);
+    
+    // Cleanup: reset ref if component unmounts or session changes
+    return () => {
+      if (loadingSessionIdRef.current === sessionId) {
+        loadingSessionIdRef.current = null;
+      }
+    };
+  }, [session?.id, students, setAttendance]);
   
   // Use session financials hook to calculate allowance and tuition fee
   const { estimatedTuitionFee, allowancePreview: calculatedAllowancePreview, allowanceFormula } = useSessionFinancials(
@@ -4441,67 +4520,75 @@ function EditSessionModal({
           <label style={{ display: 'block', marginBottom: 'var(--spacing-2)', fontWeight: '500' }}>
             Điểm danh học sinh *
           </label>
-          <div className="card" style={{ marginTop: 'var(--spacing-2)', maxHeight: '300px', overflowY: 'auto', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
-            <div className="table-container">
-              <table style={{ fontSize: 'var(--font-size-sm)', width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr>
-                    <th style={{ width: '60px', textAlign: 'center', padding: 'var(--spacing-2)' }}>Trạng thái</th>
-                    <th style={{ padding: 'var(--spacing-2)', textAlign: 'left' }}>Tên học sinh</th>
-                    <th style={{ padding: 'var(--spacing-2)', textAlign: 'left' }}>Ghi chú</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {students.map((student) => {
-                    const att = attendance[student.id] || { status: 'absent' as AttendanceStatus, remark: '' };
-                    return (
-                      <tr key={student.id}>
-                        <td style={{ textAlign: 'center', verticalAlign: 'middle', padding: 'var(--spacing-2)' }}>
-                          <AttendanceIcon
-                            status={att.status}
-                            onClick={() => toggleAttendance(student.id)}
-                            size={20}
-                          />
-                        </td>
-                        <td style={{ verticalAlign: 'middle', padding: 'var(--spacing-2)' }}>{student.fullName}</td>
-                        <td style={{ verticalAlign: 'middle', padding: 'var(--spacing-2)' }}>
-                          <input
-                            type="text"
-                            className="form-control"
-                            value={att.remark || ''}
-                            onChange={(e) => {
-                              updateAttendance(student.id, { remark: e.target.value });
-                            }}
-                            placeholder="Ghi chú (nếu cần)"
-                            style={{
-                              fontSize: 'var(--font-size-xs)',
-                              padding: 'var(--spacing-1) var(--spacing-2)',
-                              width: '100%',
-                              border: '1px solid var(--border)',
-                              borderRadius: 'var(--radius)',
-                            }}
-                          />
-                        </td>
+          {loadingAttendance ? (
+            <div className="card" style={{ marginTop: 'var(--spacing-2)', padding: 'var(--spacing-4)', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', textAlign: 'center' }}>
+              <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--muted)' }}>Đang tải dữ liệu điểm danh...</div>
+            </div>
+          ) : (
+            <>
+              <div className="card" style={{ marginTop: 'var(--spacing-2)', maxHeight: '300px', overflowY: 'auto', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
+                <div className="table-container">
+                  <table style={{ fontSize: 'var(--font-size-sm)', width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ width: '60px', textAlign: 'center', padding: 'var(--spacing-2)' }}>Trạng thái</th>
+                        <th style={{ padding: 'var(--spacing-2)', textAlign: 'left' }}>Tên học sinh</th>
+                        <th style={{ padding: 'var(--spacing-2)', textAlign: 'left' }}>Ghi chú</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--muted)', marginTop: 'var(--spacing-2)', lineHeight: '1.6' }}>
-            <div style={{ display: 'flex', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>
-              <span>
-                <span style={{ color: '#10b981', fontWeight: '500' }}>Học</span>: <span id="presentCount">{getAttendanceSummary().present}</span>
-              </span>
-              <span>
-                <span style={{ color: '#f59e0b', fontWeight: '500' }}>Phép</span>: <span id="excusedCount">{getAttendanceSummary().excused}</span>
-              </span>
-              <span>
-                <span style={{ color: '#dc2626', fontWeight: '500' }}>Vắng</span>: <span id="absentCount">{getAttendanceSummary().absent}</span>
-              </span>
-            </div>
-          </div>
+                    </thead>
+                    <tbody>
+                      {students.map((student) => {
+                        const att = attendance[student.id] || { status: 'absent' as AttendanceStatus, remark: '' };
+                        return (
+                          <tr key={student.id}>
+                            <td style={{ textAlign: 'center', verticalAlign: 'middle', padding: 'var(--spacing-2)' }}>
+                              <AttendanceIcon
+                                status={att.status}
+                                onClick={() => toggleAttendance(student.id)}
+                                size={20}
+                              />
+                            </td>
+                            <td style={{ verticalAlign: 'middle', padding: 'var(--spacing-2)' }}>{student.fullName}</td>
+                            <td style={{ verticalAlign: 'middle', padding: 'var(--spacing-2)' }}>
+                              <input
+                                type="text"
+                                className="form-control"
+                                value={att.remark || ''}
+                                onChange={(e) => {
+                                  updateAttendance(student.id, { remark: e.target.value });
+                                }}
+                                placeholder="Ghi chú (nếu cần)"
+                                style={{
+                                  fontSize: 'var(--font-size-xs)',
+                                  padding: 'var(--spacing-1) var(--spacing-2)',
+                                  width: '100%',
+                                  border: '1px solid var(--border)',
+                                  borderRadius: 'var(--radius)',
+                                }}
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--muted)', marginTop: 'var(--spacing-2)', lineHeight: '1.6' }}>
+                <div style={{ display: 'flex', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>
+                  <span>
+                    <span style={{ color: '#10b981', fontWeight: '500' }}>Học</span>: <span id="presentCount">{getAttendanceSummary().present}</span>
+                  </span>
+                  <span>
+                    <span style={{ color: '#f59e0b', fontWeight: '500' }}>Phép</span>: <span id="excusedCount">{getAttendanceSummary().excused}</span>
+                  </span>
+                  <span>
+                    <span style={{ color: '#dc2626', fontWeight: '500' }}>Vắng</span>: <span id="absentCount">{getAttendanceSummary().absent}</span>
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       ) : (
         <div style={{ marginBottom: 'var(--spacing-4)', fontSize: 'var(--font-size-sm)', color: 'var(--muted)' }}>

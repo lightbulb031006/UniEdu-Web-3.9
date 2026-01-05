@@ -418,11 +418,11 @@ function Classes() {
         mode={editingClass ? 'edit' : 'create'}
         onCreateClass={async (data) => {
           await createClass(data);
-        }}
+                  }}
         onSave={async () => {
           setShowModal(false);
           refetch();
-        }}
+                  }}
       />
     </div>
   );

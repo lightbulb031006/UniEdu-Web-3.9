@@ -31,6 +31,7 @@ interface ClassData {
 /**
  * Calculate weighted count for teacher allowance
  * Present = 1, Excused = 1
+ * Note: Always counts as 1 student for teacher allowance, regardless of remaining sessions or wallet balance
  */
 export function calculateWeightedCount(
   students: Student[],
@@ -39,13 +40,9 @@ export function calculateWeightedCount(
   let weightedCount = 0;
   students.forEach((student) => {
     const att = attendance[student.id];
-    const hasRemaining = (student.remainingSessions || 0) > 0;
-    if (hasRemaining) {
-      if (att?.status === 'present') {
-        weightedCount += 1;
-      } else if (att?.status === 'excused') {
-        weightedCount += 1;
-      }
+    // Always count as 1 student for teacher allowance (not dependent on remaining sessions or wallet balance)
+    if (att?.status === 'present' || att?.status === 'excused') {
+      weightedCount += 1;
     }
   });
   return weightedCount;
@@ -54,6 +51,8 @@ export function calculateWeightedCount(
 /**
  * Calculate estimated tuition fee based on attendance
  * Sum of tuition per session for students with status 'present' or 'excused'
+ * Note: Uses each student's individual tuitionPerSession (from student detail), 
+ * regardless of remaining sessions or wallet balance
  */
 export function calculateEstimatedTuitionFee(
   students: Student[],
@@ -64,6 +63,7 @@ export function calculateEstimatedTuitionFee(
     const att = attendance[student.id];
     const isEligible = att?.status === 'present' || att?.status === 'excused';
     if (isEligible) {
+      // Use student's individual tuition per session (from student detail)
       const studentTuition = student.tuitionPerSession || 0;
       total += studentTuition;
     }
@@ -131,19 +131,18 @@ export function useSessionFinancials(
   }, [teacherId, coefficient, weightedCount, classData]);
 
   // Calculate present and excused counts for formula display
+  // Note: Count all students with these statuses, regardless of remaining sessions or wallet balance
   const presentCount = useMemo(() => {
     return students.filter((s) => {
       const att = attendance[s.id];
-      const hasRemaining = (s.remainingSessions || 0) > 0;
-      return att?.status === 'present' && hasRemaining;
+      return att?.status === 'present';
     }).length;
   }, [students, attendance]);
 
   const excusedCount = useMemo(() => {
     return students.filter((s) => {
       const att = attendance[s.id];
-      const hasRemaining = (s.remainingSessions || 0) > 0;
-      return att?.status === 'excused' && hasRemaining;
+      return att?.status === 'excused';
     }).length;
   }, [students, attendance]);
 

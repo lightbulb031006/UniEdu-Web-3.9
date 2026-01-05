@@ -36,6 +36,7 @@ export function CurrencyInput({
     if (value !== undefined && value !== currencyInput.numericValue) {
       currencyInput.setValue(value);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
   // Calculate hint text

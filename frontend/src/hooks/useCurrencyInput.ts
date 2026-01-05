@@ -70,16 +70,26 @@ export interface UseCurrencyInputReturn {
  */
 export function useCurrencyInput(options: UseCurrencyInputOptions = {}): UseCurrencyInputReturn {
   const { initialValue = 0, required = false, onChange } = options;
-  const [displayValue, setDisplayValue] = useState<string>('');
+  
+  // Initialize display value from initialValue immediately (lazy initialization)
+  const getInitialDisplayValue = (val: number) => {
+    if (val === 0) return '';
+    const digits = String(val);
+    const sanitized = sanitizeCurrencyDigits(digits);
+    return formatCurrencyDigits(sanitized);
+  };
+  
+  const [displayValue, setDisplayValue] = useState<string>(() => getInitialDisplayValue(initialValue));
   const [numericValue, setNumericValue] = useState<number>(initialValue);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  // Initialize display value from initialValue
+  // Initialize display value from initialValue when it changes
   useEffect(() => {
     if (initialValue !== undefined && initialValue !== numericValue) {
       const digits = String(initialValue);
       const sanitized = sanitizeCurrencyDigits(digits);
-      setDisplayValue(formatCurrencyDigits(sanitized));
+      const formatted = formatCurrencyDigits(sanitized);
+      setDisplayValue(formatted);
       setNumericValue(initialValue);
     }
   }, [initialValue]);

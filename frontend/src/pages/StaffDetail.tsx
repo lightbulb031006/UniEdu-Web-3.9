@@ -41,7 +41,7 @@ function StaffDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
-  
+
 
   // Month state for income statistics
   const currentMonth = useMemo(() => {

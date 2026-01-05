@@ -222,19 +222,19 @@ function Layout({ children }: LayoutProps) {
                           }
                         }
                         
-                        // Tìm teacher record
-                        let teacherRecord = null;
-                        if (user.id) {
+                          // Tìm teacher record
+                          let teacherRecord = null;
+                          if (user.id) {
                           teacherRecord = teachersToUse.find((t) => (t as any).userId === user.id);
-                        }
-                        if (!teacherRecord && user.email) {
+                          }
+                          if (!teacherRecord && user.email) {
                           teacherRecord = teachersToUse.find((t) => 
-                            t.email?.toLowerCase() === user.email?.toLowerCase()
-                          );
-                        }
+                              t.email?.toLowerCase() === user.email?.toLowerCase()
+                            );
+                          }
                         
-                        if (teacherRecord) {
-                          navigate(`/staff/${teacherRecord.id}`, { replace: false });
+                          if (teacherRecord) {
+                            navigate(`/staff/${teacherRecord.id}`, { replace: false });
                         } else {
                           console.warn('[Layout] Teacher record not found for user:', {
                             userId: user.id,

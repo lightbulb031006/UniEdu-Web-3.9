@@ -41,6 +41,9 @@ async function rollbackAttendanceFinancials(
   sessionId: string,
   oldAttendanceData: Array<{ student_id: string; status: AttendanceStatus }>
 ): Promise<void> {
+  console.log('[rollbackAttendanceFinancials] Starting rollback for session:', sessionId);
+  console.log('[rollbackAttendanceFinancials] Attendance data:', oldAttendanceData);
+  
   // Get session to retrieve class_id
   const { data: session, error: sessionError } = await supabase
     .from('sessions')
@@ -58,6 +61,7 @@ async function rollbackAttendanceFinancials(
   // Rollback each student's attendance
   for (const att of oldAttendanceData) {
     const { student_id, status } = att;
+    console.log(`[rollbackAttendanceFinancials] Processing student ${student_id} with status: ${status}`);
 
     // Get student_class record
     const { data: studentClass, error: scError } = await supabase
@@ -86,6 +90,17 @@ async function rollbackAttendanceFinancials(
 
     // Find transactions related to this specific session
     const sessionTransactions = transactions || [];
+    
+    // Determine what was deducted based on attendance status and transactions
+    // Logic khi xóa session:
+    // - Nếu status là "present" hoặc "excused": Luôn khôi phục 1 remaining_session (vì đã được tính là 1 học sinh cho gia sư)
+    // - Nếu status là "absent": Chỉ khôi phục nếu đã trừ từ remaining_sessions (không có wallet transactions)
+    // - Nếu có wallet transactions: Rollback wallet/loan, nhưng vẫn khôi phục remaining_sessions nếu status là present/excused
+    
+    // Chỉ khôi phục remaining_sessions cho học sinh có trạng thái present/excused
+    // Hoặc absent nhưng không có wallet transactions (tức là đã trừ từ remaining_sessions)
+    const shouldRestoreSession = (status === 'present' || status === 'excused') || 
+                                  (status === 'absent' && sessionTransactions.length === 0);
     
     // Rollback wallet/loan transactions for this session
     if (sessionTransactions.length > 0) {
@@ -121,27 +136,33 @@ async function rollbackAttendanceFinancials(
         // Update balances
         const currentWallet = Number(student.wallet_balance || 0);
         const currentLoan = Number(student.loan_balance || 0);
-        const updates: any = {};
+        const studentUpdates: any = {};
 
         if (totalWalletRefund > 0) {
-          updates.wallet_balance = currentWallet + totalWalletRefund;
+          studentUpdates.wallet_balance = currentWallet + totalWalletRefund;
         }
         if (totalLoanRefund > 0) {
-          updates.loan_balance = Math.max(0, currentLoan - totalLoanRefund);
+          studentUpdates.loan_balance = Math.max(0, currentLoan - totalLoanRefund);
         }
 
-        if (Object.keys(updates).length > 0) {
+        if (Object.keys(studentUpdates).length > 0) {
           await supabase
             .from('students')
-            .update(updates)
+            .update(studentUpdates)
             .eq('id', student_id);
         }
       }
-    } else {
-      // No wallet transactions found - we must have deducted from remaining_sessions
-      // Add it back
+    }
+    
+    // Restore remaining_sessions if needed
+    // For present/excused: Always restore 1 session (because it was counted as 1 student for teacher)
+    // For absent: Only restore if no wallet transactions (meaning it was deducted from remaining_sessions)
+    if (shouldRestoreSession) {
       const currentRemaining = studentClass.remaining_sessions || 0;
       updates.remaining_sessions = currentRemaining + 1;
+      console.log(`[rollbackAttendanceFinancials] Restoring 1 session for student ${student_id} (status: ${status}). Current: ${currentRemaining} → New: ${currentRemaining + 1}`);
+    } else {
+      console.log(`[rollbackAttendanceFinancials] NOT restoring session for student ${student_id} (status: ${status}, hasTransactions: ${sessionTransactions.length > 0})`);
     }
 
     // Rollback total_attended_sessions for present/excused
@@ -154,12 +175,23 @@ async function rollbackAttendanceFinancials(
 
     // Update student_class
     if (Object.keys(updates).length > 0) {
-      await supabase
+      console.log(`[rollbackAttendanceFinancials] Updating student_class for student ${student_id}:`, updates);
+      const { error: updateError } = await supabase
         .from('student_classes')
         .update(updates)
         .eq('id', studentClass.id);
+      
+      if (updateError) {
+        console.error(`[rollbackAttendanceFinancials] Error updating student_class for student ${student_id}:`, updateError);
+      } else {
+        console.log(`[rollbackAttendanceFinancials] Successfully updated student_class for student ${student_id}`);
+      }
+    } else {
+      console.log(`[rollbackAttendanceFinancials] No updates needed for student ${student_id}`);
     }
   }
+  
+  console.log('[rollbackAttendanceFinancials] Rollback completed for session:', sessionId);
 }
 
 /**
@@ -271,21 +303,9 @@ export async function saveAttendanceForSession(
  * Delete attendance records for a session
  */
 export async function deleteAttendanceBySession(sessionId: string): Promise<void> {
-  // Rollback financials before deleting attendance
-  const existingAttendance = await getAttendanceBySession(sessionId);
-  if (existingAttendance.length > 0) {
-    try {
-      const oldAttendanceData = existingAttendance.map(att => ({
-        student_id: att.student_id,
-        status: att.status,
-      }));
-      await rollbackAttendanceFinancials(sessionId, oldAttendanceData);
-    } catch (rollbackError) {
-      console.error('[deleteAttendanceBySession] Error rolling back financials:', rollbackError);
-      // Continue anyway
-    }
-  }
-
+  // Simply delete attendance records without rolling back financials
+  // When a session is deleted, we just remove the attendance records
+  // No financial rollback is performed (as per user requirement)
   const { error } = await supabase.from('attendance').delete().eq('session_id', sessionId);
   if (error) {
     throw new Error(`Failed to delete attendance: ${error.message}`);
@@ -407,14 +427,15 @@ export async function processAttendanceFinancials(
             .update({ wallet_balance: newWalletBalance })
             .eq('id', student_id);
 
-          // Create wallet transaction
+          // Create wallet transaction with session ID
+          const formatAmount = (amt: number) => amt.toLocaleString('vi-VN');
           await supabase.from('wallet_transactions').insert({
             id: `WTX${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
             student_id: student_id,
             type: 'extend',
             amount: -studentTuitionPerSession,
             date: new Date().toISOString().split('T')[0],
-            note: `Học phí buổi học ${sessionId} (Vắng)`,
+            note: `Gia hạn buổi học (Vắng) [Session: ${sessionId}]: Trừ ${formatAmount(studentTuitionPerSession)}đ, Số dư: ${formatAmount(walletBalance)}đ → ${formatAmount(walletBalance - studentTuitionPerSession)}đ`,
           });
         } else {
           // Deduct partial amount (use all remaining wallet balance)
@@ -424,14 +445,15 @@ export async function processAttendanceFinancials(
             .update({ wallet_balance: newWalletBalance })
             .eq('id', student_id);
 
-          // Create wallet transaction
+          // Create wallet transaction with session ID
+          const formatAmount = (amt: number) => amt.toLocaleString('vi-VN');
           await supabase.from('wallet_transactions').insert({
             id: `WTX${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
             student_id: student_id,
             type: 'extend',
             amount: -walletBalance,
             date: new Date().toISOString().split('T')[0],
-            note: `Học phí buổi học ${sessionId} (Vắng - dùng hết số dư)`,
+            note: `Gia hạn buổi học (Vắng - dùng hết số dư) [Session: ${sessionId}]: Trừ ${formatAmount(walletBalance)}đ, Số dư: ${formatAmount(walletBalance)}đ → ${formatAmount(0)}đ`,
           });
         }
         // Note: For absent, if wallet balance is insufficient, we don't add to loan
@@ -454,15 +476,16 @@ export async function processAttendanceFinancials(
               .update({ wallet_balance: newWalletBalance })
               .eq('id', student_id);
 
-            // Create wallet transaction with session_id reference in note for easier rollback
+            // Create wallet transaction with detailed note (like bank statement)
             const statusLabel = status === 'present' ? 'Học' : 'Phép';
+            const formatAmount = (amt: number) => amt.toLocaleString('vi-VN');
             await supabase.from('wallet_transactions').insert({
               id: `WTX${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
               student_id: student_id,
               type: 'extend',
               amount: -studentTuitionPerSession,
               date: new Date().toISOString().split('T')[0],
-              note: `Học phí buổi học ${sessionId} (${statusLabel})`,
+              note: `Gia hạn buổi học (${statusLabel}) [Session: ${sessionId}]: Trừ ${formatAmount(studentTuitionPerSession)}đ, Số dư: ${formatAmount(walletBalance)}đ → ${formatAmount(newWalletBalance)}đ`,
             });
           } else {
             // Add to loan
@@ -478,26 +501,29 @@ export async function processAttendanceFinancials(
               })
               .eq('id', student_id);
 
-            // Create wallet transaction for loan
+            // Create wallet transaction for loan with detailed note (like bank statement)
             if (walletBalance > 0) {
+              const statusLabel = status === 'present' ? 'Học' : 'Phép';
+              const formatAmount = (amt: number) => amt.toLocaleString('vi-VN');
               await supabase.from('wallet_transactions').insert({
                 id: `WTX${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
                 student_id: student_id,
                 type: 'extend',
                 amount: -walletBalance,
                 date: new Date().toISOString().split('T')[0],
-                note: `Học phí buổi học ${sessionId} (dùng hết số dư)`,
+                note: `Ghi nợ buổi học (${statusLabel}) [Session: ${sessionId}]: Trừ ${formatAmount(walletBalance)}đ, Số dư: ${formatAmount(walletBalance)}đ → ${formatAmount(newWalletBalance)}đ`,
               });
             }
 
             const statusLabel = status === 'present' ? 'Học' : 'Phép';
+            const formatAmount = (amt: number) => amt.toLocaleString('vi-VN');
             await supabase.from('wallet_transactions').insert({
               id: `WTX${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
               student_id: student_id,
               type: 'loan',
               amount: debtAmount,
               date: new Date().toISOString().split('T')[0],
-              note: `Học phí buổi học ${sessionId} (${statusLabel} - nợ)`,
+              note: `Ghi nợ buổi học (${statusLabel}) [Session: ${sessionId}]: Ghi nợ ${formatAmount(debtAmount)}đ, Nợ: ${formatAmount(loanBalance)}đ → ${formatAmount(newLoanBalance)}đ`,
             });
           }
         }

@@ -78,10 +78,89 @@ export async function createWalletTransaction(transactionData: Omit<WalletTransa
   // Generate ID if not provided
   const id = (transactionData as any).id || `WT${Date.now()}${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
 
-  // Create transaction first
+  // Get current balances BEFORE creating transaction (for note formatting)
+  const { getStudentById } = await import('./studentsService');
+  const studentBefore = await getStudentById(transactionData.student_id);
+  const currentWalletBalance = Number((studentBefore as any)?.wallet_balance || (studentBefore as any)?.walletBalance || 0);
+  const currentLoanBalance = Number((studentBefore as any)?.loan_balance || (studentBefore as any)?.loanBalance || 0);
+
+  // Calculate new balances for note formatting
+  const amount = Number(transactionData.amount) || 0;
+  const absoluteAmount = Math.abs(amount);
+  const isPayment = amount < 0;
+  let newWalletBalance = currentWalletBalance;
+  let newLoanBalance = currentLoanBalance;
+  
+  // Calculate new balances based on transaction type
+  switch (transactionData.type) {
+    case 'topup':
+      if (isPayment) {
+        newWalletBalance = currentWalletBalance - absoluteAmount;
+      } else {
+        newWalletBalance = currentWalletBalance + absoluteAmount;
+      }
+      break;
+    case 'loan':
+    case 'advance':
+      if (isPayment) {
+        newWalletBalance = currentWalletBalance - absoluteAmount;
+        newLoanBalance = Math.max(0, currentLoanBalance - absoluteAmount);
+      } else {
+        newWalletBalance = currentWalletBalance + absoluteAmount;
+        newLoanBalance = currentLoanBalance + absoluteAmount;
+      }
+      break;
+    case 'repayment':
+      newWalletBalance = currentWalletBalance - absoluteAmount;
+      newLoanBalance = Math.max(0, currentLoanBalance - absoluteAmount);
+      break;
+    case 'extend':
+      newWalletBalance = currentWalletBalance - absoluteAmount;
+      break;
+    case 'refund':
+      newWalletBalance = currentWalletBalance + absoluteAmount;
+      break;
+    default:
+      break;
+  }
+  
+  // Format note with before/after balances if note is empty or doesn't contain "→" (indicating it's not already formatted)
+  let formattedNote = transactionData.note || '';
+  const formatAmount = (amt: number) => amt.toLocaleString('vi-VN');
+  
+  // Auto-format note if it's empty or doesn't contain "→" (not already formatted)
+  if (!formattedNote || !formattedNote.includes('→')) {
+    const transactionTypeLabels: Record<string, string> = {
+      topup: amount > 0 ? 'Nạp tiền' : 'Trừ tiền',
+      loan: 'Ứng tiền',
+      advance: 'Ứng tiền',
+      repayment: 'Thanh toán nợ',
+      extend: 'Gia hạn buổi học',
+      refund: 'Hoàn trả buổi học',
+    };
+    
+    const typeLabel = transactionTypeLabels[transactionData.type] || transactionData.type;
+    const action = amount > 0 ? 'Cộng' : 'Trừ';
+    const amountText = formatAmount(absoluteAmount);
+    
+    if (transactionData.type === 'loan' || transactionData.type === 'advance') {
+      if (amount > 0) {
+        formattedNote = `${typeLabel}: ${action} ${amountText}đ, Số dư: ${formatAmount(currentWalletBalance)}đ → ${formatAmount(newWalletBalance)}đ, Nợ: ${formatAmount(currentLoanBalance)}đ → ${formatAmount(newLoanBalance)}đ`;
+      } else {
+        formattedNote = `${typeLabel}: ${action} ${amountText}đ, Số dư: ${formatAmount(currentWalletBalance)}đ → ${formatAmount(newWalletBalance)}đ, Nợ: ${formatAmount(currentLoanBalance)}đ → ${formatAmount(newLoanBalance)}đ`;
+      }
+    } else if (transactionData.type === 'repayment') {
+      formattedNote = `${typeLabel}: ${action} ${amountText}đ, Số dư: ${formatAmount(currentWalletBalance)}đ → ${formatAmount(newWalletBalance)}đ, Nợ: ${formatAmount(currentLoanBalance)}đ → ${formatAmount(newLoanBalance)}đ`;
+    } else {
+      formattedNote = `${typeLabel}: ${action} ${amountText}đ, Số dư: ${formatAmount(currentWalletBalance)}đ → ${formatAmount(newWalletBalance)}đ`;
+    }
+  }
+
+  // Create transaction with formatted note
+  const transactionToInsert = { ...transactionData, id, note: formattedNote };
   const { data, error } = await supabase
     .from('wallet_transactions')
-    .insert([{ ...transactionData, id }])
+    .insert([transactionToInsert])
     .select()
     .single();
 
@@ -90,7 +169,6 @@ export async function createWalletTransaction(transactionData: Omit<WalletTransa
   }
 
   // Invalidate dashboard cache if this is a revenue transaction (only topup, not extend/refund)
-  const amount = Number(transactionData.amount) || 0;
   if (transactionData.type === 'topup' && amount !== 0) {
     // Invalidate dashboard cache in background (don't wait)
     // Chỉ tính topup thực sự vào doanh thu, không tính extend/refund
@@ -101,62 +179,10 @@ export async function createWalletTransaction(transactionData: Omit<WalletTransa
 
   // Update student wallet_balance and loan_balance based on transaction type
   try {
-    const { getStudentById } = await import('./studentsService');
-    const student = await getStudentById(transactionData.student_id);
-    
-    if (student) {
-      const currentWalletBalance = Number((student as any).wallet_balance || (student as any).walletBalance || 0);
-      const currentLoanBalance = Number((student as any).loan_balance || (student as any).loanBalance || 0);
-      const amount = Number(transactionData.amount) || 0;
-      let newWalletBalance = currentWalletBalance;
-      let newLoanBalance = currentLoanBalance;
-
-      // Calculate new balances based on transaction type
-      // Handle negative amounts (payments) correctly
-      const isPayment = amount < 0;
-      const absoluteAmount = Math.abs(amount);
-      
-      switch (transactionData.type) {
-        case 'topup':
-          if (isPayment) {
-            // Payment (negative amount): giảm số dư
-            newWalletBalance = currentWalletBalance - absoluteAmount;
-          } else {
-            // Topup (positive amount): tăng số dư
-            newWalletBalance = currentWalletBalance + absoluteAmount;
-          }
-          break;
-        case 'loan':
-        case 'advance':
-          if (isPayment) {
-            // Trả nợ ứng (negative amount): giảm số dư VÀ giảm nợ
-            newWalletBalance = currentWalletBalance - absoluteAmount;
-            newLoanBalance = Math.max(0, currentLoanBalance - absoluteAmount);
-          } else {
-            // Vay/Ứng (positive amount): tăng số dư VÀ tăng nợ
-            newWalletBalance = currentWalletBalance + absoluteAmount;
-            newLoanBalance = currentLoanBalance + absoluteAmount;
-          }
-          break;
-        case 'repayment':
-          // Trả nợ: giảm số dư VÀ giảm nợ
-          newWalletBalance = currentWalletBalance - absoluteAmount;
-          newLoanBalance = Math.max(0, currentLoanBalance - absoluteAmount);
-          break;
-        case 'extend':
-          // Gia hạn: giảm số dư (thanh toán cho buổi học)
-          newWalletBalance = currentWalletBalance - absoluteAmount;
-          break;
-        case 'refund':
-          // Hoàn trả: tăng số dư (hoàn lại tiền)
-          newWalletBalance = currentWalletBalance + absoluteAmount;
-          break;
-        default:
-          // Unknown type, don't update
-          break;
-      }
+    if (studentBefore) {
 
       // Update balances directly in database (bypass updateStudent to avoid field filtering)
+      // Note: newWalletBalance and newLoanBalance are already calculated above
       const updates: any = {};
       if (newWalletBalance !== currentWalletBalance) {
         updates.wallet_balance = newWalletBalance;

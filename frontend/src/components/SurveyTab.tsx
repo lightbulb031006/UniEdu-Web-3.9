@@ -115,12 +115,36 @@ export default function SurveyTab({ classId, canManage = true, canDelete = false
     }
   }, [monthPopupOpen]);
 
-  // Filter surveys by selected month
+  // Filter surveys by selected month and sort by created_at (newest first)
   const monthSurveys = useMemo(() => {
-    return surveysList.filter((s) => {
+    const filtered = surveysList.filter((s) => {
       if (!s.report_date) return false;
       const surveyMonth = s.report_date.slice(0, 7); // YYYY-MM
       return surveyMonth === selectedMonth;
+    });
+    
+    // Sort by created_at (newest first), then by report_date and test_number
+    return filtered.sort((a, b) => {
+      // First sort by created_at (newest first)
+      const aCreatedAt = (a as any).created_at || (a as any).createdAt || '';
+      const bCreatedAt = (b as any).created_at || (b as any).createdAt || '';
+      if (aCreatedAt && bCreatedAt) {
+        return bCreatedAt.localeCompare(aCreatedAt);
+      }
+      // If no created_at, sort by report_date (newest first)
+      const aDate = a.report_date || '';
+      const bDate = b.report_date || '';
+      if (aDate !== bDate) {
+        return bDate.localeCompare(aDate);
+      }
+      // If same date, sort by test_number (newest first - higher number first)
+      const aTestNumber = a.test_number || 0;
+      const bTestNumber = b.test_number || 0;
+      if (aTestNumber !== bTestNumber) {
+        return bTestNumber - aTestNumber;
+      }
+      // If same date and test_number, sort by id (newest first)
+      return (b.id || '').localeCompare(a.id || '');
     });
   }, [surveysList, selectedMonth]);
 
@@ -402,7 +426,7 @@ export default function SurveyTab({ classId, canManage = true, canDelete = false
                           e.currentTarget.style.background = 'transparent';
                         }
                       }}
-                      style={{
+        style={{
                         borderRadius: 'var(--radius)',
                         border: isActive ? '1px solid var(--primary)' : '1px solid transparent',
                         background: isActive ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
@@ -424,9 +448,9 @@ export default function SurveyTab({ classId, canManage = true, canDelete = false
         </div>
         {canManage && (
           <div className="session-toolbar-actions" style={{ display: 'flex', gap: 'var(--spacing-2)' }}>
-            <button
+          <button
               className="btn btn-primary"
-              onClick={() => setAddModalOpen(true)}
+            onClick={() => setAddModalOpen(true)}
               title="Thêm báo cáo"
               style={{ 
                 width: '36px', 
@@ -437,12 +461,12 @@ export default function SurveyTab({ classId, canManage = true, canDelete = false
                 justifyContent: 'center',
                 borderRadius: 'var(--radius)',
               }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-            </button>
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
           </div>
         )}
       </div>
@@ -493,7 +517,7 @@ export default function SurveyTab({ classId, canManage = true, canDelete = false
                   }}
                   onMouseEnter={(e) => {
                     if (canManage) {
-                      e.currentTarget.style.background = 'var(--bg-secondary)';
+                    e.currentTarget.style.background = 'var(--bg-secondary)';
                     }
                   }}
                   onMouseLeave={(e) => {
@@ -542,12 +566,12 @@ export default function SurveyTab({ classId, canManage = true, canDelete = false
                       onClick={(e) => e.stopPropagation()}
                       style={{ textAlign: 'center', padding: 'var(--spacing-3)' }}
                     >
-                      <button
+                        <button
                         className="btn-delete-icon"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDelete(survey.id);
-                        }}
+                          }}
                         title="Xóa báo cáo"
                         style={{
                           background: 'none',
@@ -559,12 +583,12 @@ export default function SurveyTab({ classId, canManage = true, canDelete = false
                           alignItems: 'center',
                           justifyContent: 'center',
                         }}
-                      >
+                        >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
-                          <polyline points="3 6 5 6 21 6" />
-                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                        </svg>
-                      </button>
+                            <polyline points="3 6 5 6 21 6" />
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                          </svg>
+                        </button>
                     </td>
                   )}
                 </tr>

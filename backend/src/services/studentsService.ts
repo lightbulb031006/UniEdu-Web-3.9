@@ -607,13 +607,13 @@ export async function extendStudentSessions(
     throw new Error(`Không thể cập nhật lớp học: ${updateError.message}`);
   }
 
-  // Create wallet transaction - backend will automatically update wallet balance
+  // Create wallet transaction - backend will automatically update wallet balance and format note
   const walletService = await import('./walletService');
   await walletService.createWalletTransaction({
     student_id: studentId,
     type: 'extend', // Type riêng cho gia hạn, không tính vào doanh thu
     amount: -totalCost, // Negative because it's a payment (decrease balance)
-    note: `Gia hạn ${sessions} buổi học`,
+    note: `Gia hạn ${sessions} buổi học`, // Note will be auto-formatted with before/after balances
     date: new Date().toISOString().slice(0, 10),
   });
 
@@ -685,13 +685,13 @@ export async function refundStudentSessions(
     throw new Error(`Không thể cập nhật lớp học: ${updateError.message}`);
   }
 
-  // Create wallet transaction - backend will automatically update wallet balance
+  // Create wallet transaction - backend will automatically update wallet balance and format note
   const walletService = await import('./walletService');
   await walletService.createWalletTransaction({
     student_id: studentId,
     type: 'refund', // Type riêng cho hoàn trả, không tính vào doanh thu
     amount: totalRefund, // Positive amount for refund (increase balance)
-    note: `Hoàn trả ${sessions} buổi học`,
+    note: `Hoàn trả ${sessions} buổi học`, // Note will be auto-formatted with before/after balances
     date: new Date().toISOString().slice(0, 10),
   });
 
@@ -739,12 +739,16 @@ export async function updateStudentClassFee(studentId: string, classId: string, 
     throw new Error('Student is not enrolled in this class');
   }
 
+  // Calculate student_tuition_per_session (giống backup: feeTotal / feeSessions)
+  const studentTuitionPerSession = feeSessions > 0 ? Math.round(feeTotal / feeSessions) : 0;
+
   // Update the student_class record
   const { data, error } = await supabase
     .from('student_classes')
     .update({
       student_fee_total: feeTotal,
       student_fee_sessions: feeSessions,
+      student_tuition_per_session: studentTuitionPerSession,
     })
     .eq('id', studentClass.id)
     .select()

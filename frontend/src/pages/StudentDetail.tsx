@@ -1904,11 +1904,30 @@ function TransactionHistoryModal({ studentId }: { studentId: string }) {
     loan: 'Ứng tiền',
     advance: 'Ứng tiền',
     repayment: 'Thanh toán nợ',
+    extend: 'Gia hạn buổi học',
+    refund: 'Hoàn trả buổi học',
   };
 
+  // Filter and sort transactions: include all types, sort by created_at (newest first)
+  // If created_at is the same, sort by date, then by id (newest first)
   const filteredTransactions = (transactions || []).filter((tx: any) =>
-    ['topup', 'loan', 'advance', 'repayment'].includes(tx.type)
-  ).sort((a: any, b: any) => (b.date || '').localeCompare(a.date || ''));
+    ['topup', 'loan', 'advance', 'repayment', 'extend', 'refund'].includes(tx.type)
+  ).sort((a: any, b: any) => {
+    // First sort by created_at (newest first)
+    const aCreatedAt = a.createdAt || a.created_at || '';
+    const bCreatedAt = b.createdAt || b.created_at || '';
+    if (aCreatedAt && bCreatedAt) {
+      return bCreatedAt.localeCompare(aCreatedAt);
+    }
+    // If no created_at, sort by date (newest first)
+    const aDate = a.date || '';
+    const bDate = b.date || '';
+    if (aDate !== bDate) {
+      return bDate.localeCompare(aDate);
+    }
+    // If same date, sort by id (newest first - assuming newer IDs come later alphabetically)
+    return (b.id || '').localeCompare(a.id || '');
+  });
 
   if (isLoading) {
     return <div style={{ textAlign: 'center', padding: 'var(--spacing-4)' }}>Đang tải...</div>;
@@ -2570,11 +2589,14 @@ function EditFeeModal({
   const [feeSessionsInput, setFeeSessionsInput] = useState<string>(String(currentSessions));
   const [loading, setLoading] = useState(false);
 
-  // Đồng bộ feeSessionsInput khi currentSessions thay đổi
+  // Prefill values when modal opens or financialData changes
   useEffect(() => {
-    setFeeSessionsInput(String(currentSessions));
+    // Update all values when currentTotal or currentSessions change
+    // This ensures form is prefilled with latest data when modal opens
+    setFeeTotal(currentTotal);
     setFeeSessions(currentSessions);
-  }, [currentSessions]);
+    setFeeSessionsInput(String(currentSessions));
+  }, [currentTotal, currentSessions]);
 
   // Calculate per session price (giống backup: updatePerSession)
   const perSessionPrice = useMemo(() => {
@@ -2623,6 +2645,7 @@ function EditFeeModal({
           Tổng học phí (VND) *
         </label>
         <CurrencyInput
+          key={`fee-total-${classId}-${feeTotal}`}
           id="studentFeeTotal"
           className="form-control"
           value={feeTotal}
