@@ -133,13 +133,11 @@ function App() {
         <Route
           path="/classes/:id"
           element={
-            <ProtectedRoute>
-              <Layout>
-                <Suspense fallback={<PageLoader />}>
-                  <ClassDetail />
-                </Suspense>
-              </Layout>
-            </ProtectedRoute>
+            <Layout>
+              <Suspense fallback={<PageLoader />}>
+                <ClassDetail />
+              </Suspense>
+            </Layout>
           }
         />
         <Route

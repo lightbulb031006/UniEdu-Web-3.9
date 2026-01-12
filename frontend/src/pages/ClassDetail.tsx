@@ -29,6 +29,7 @@ function ClassDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const currentUser = useAuthStore((state) => state.user);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   // Month state for sessions
   const currentMonth = useMemo(() => {
@@ -84,29 +85,51 @@ function ClassDetail() {
   const fetchClassFn = useCallback(() => {
     if (!id) throw new Error('Class ID is required');
     // Include teachers in class data to avoid fetching all teachers
-    return fetchClassById(id, { includeTeachers: true });
+    return fetchClassById(id, { includeTeachers: true }).catch((error) => {
+      console.error('[ClassDetail] Error fetching class:', error);
+      throw error;
+    });
   }, [id]);
 
   const { data: classData, isLoading, error, refetch: refetchClass } = useDataLoading(fetchClassFn, [id], {
     cacheKey: `class-${id}`,
     staleTime: 2 * 60 * 1000,
+    allowPublicAccess: true, // Allow fetching without authentication for public class view
   });
 
-  // Fetch students with remaining sessions
+  // Fetch students with remaining sessions - allow public access
   const fetchStudentsWithRemainingFn = useCallback(() => {
     if (!id) throw new Error('Class ID is required');
-    return fetchClassStudentsWithRemaining(id);
+    return fetchClassStudentsWithRemaining(id).catch((error) => {
+      console.error('[ClassDetail] Error fetching students with remaining:', error);
+      // Return empty array if not authenticated instead of throwing
+      if (error?.response?.status === 401) {
+        return [];
+      }
+      throw error;
+    });
   }, [id]);
   const { data: studentsWithRemainingData, refetch: refetchStudents } = useDataLoading(fetchStudentsWithRemainingFn, [id], {
     cacheKey: `class-students-remaining-${id}`,
     staleTime: 1 * 60 * 1000,
+    allowPublicAccess: true, // Allow fetching without authentication for public class view
   });
 
-  // Fetch sessions
-  const fetchSessionsFn = useCallback(() => fetchSessions({ classId: id }), [id]);
+  // Fetch sessions - allow public access
+  const fetchSessionsFn = useCallback(() => {
+    return fetchSessions({ classId: id }).catch((error) => {
+      console.error('[ClassDetail] Error fetching sessions:', error);
+      // Return empty array if not authenticated instead of throwing
+      if (error?.response?.status === 401) {
+        return [];
+      }
+      throw error;
+    });
+  }, [id]);
   const { data: sessionsData, refetch: refetchSessions } = useDataLoading(fetchSessionsFn, [id], {
     cacheKey: `sessions-class-${id}`,
     staleTime: 1 * 60 * 1000,
+    allowPublicAccess: true, // Allow fetching without authentication for public class view
   });
 
   // Optimistic updates state for sessions
@@ -158,20 +181,38 @@ function ClassDetail() {
     }
   }, [editClassModalOpen, allTeachers.length, loadAllTeachers]);
 
-  // Fetch categories for type dropdown
+  // Fetch categories for type dropdown - only if authenticated (not needed for public view)
   const { data: categoriesData } = useDataLoading(
-    () => fetchCategories(),
+    () => {
+      return fetchCategories().catch((error) => {
+        console.error('[ClassDetail] Error fetching categories:', error);
+        if (error?.response?.status === 401) {
+          return [];
+        }
+        throw error;
+      });
+    },
     [],
     {
       cacheKey: 'categories-for-class-detail',
       staleTime: 5 * 60 * 1000,
+      enabled: isAuthenticated, // Only fetch if authenticated
     }
   );
 
-  // Fetch students to get enrolled students
-  const { data: studentsData } = useDataLoading(() => fetchStudents(), [], {
+  // Fetch students to get enrolled students - only if authenticated
+  const { data: studentsData } = useDataLoading(() => {
+    return fetchStudents().catch((error) => {
+      console.error('[ClassDetail] Error fetching students:', error);
+      if (error?.response?.status === 401) {
+        return [];
+      }
+      throw error;
+    });
+  }, [], {
     cacheKey: 'students-for-class-detail',
     staleTime: 5 * 60 * 1000,
+    enabled: isAuthenticated, // Only fetch if authenticated
   });
 
   const students = Array.isArray(studentsData) ? studentsData : [];
@@ -202,36 +243,37 @@ function ClassDetail() {
     });
   }, [allTeachers, classData]);
 
-  // Permission checks
-  const isAdmin = hasRole('admin');
-  const canEdit = isAdmin;
-  const canManage = isAdmin || hasRole('accountant') || userHasStaffRole('cskh_sale', currentUser, classTeachers);
+  // Permission checks - only allow actions if authenticated
+  const isAdmin = isAuthenticated && hasRole('admin');
+  const canEdit = isAuthenticated && isAdmin;
+  const canManage = isAuthenticated && (isAdmin || hasRole('accountant') || userHasStaffRole('cskh_sale', currentUser, classTeachers));
   const canManageStudents = canManage;
   const canManageTeacherList = canManage;
-  const showClassFinancialDetails = isAdmin;
+  // Show financial details only if authenticated and admin
+  const showClassFinancialDetails = isAuthenticated && isAdmin;
   
   // Payment status management permissions
-  const userStaffRoles = getUserStaffRoles(currentUser, classTeachers);
-  const hasCskhPrivileges = userHasStaffRole('cskh_sale', currentUser, classTeachers);
-  const canManagePaymentStatus = isAdmin || hasRole('accountant') || hasCskhPrivileges;
+  const userStaffRoles = isAuthenticated ? getUserStaffRoles(currentUser, classTeachers) : [];
+  const hasCskhPrivileges = isAuthenticated && userHasStaffRole('cskh_sale', currentUser, classTeachers);
+  const canManagePaymentStatus = isAuthenticated && (isAdmin || hasRole('accountant') || hasCskhPrivileges);
   
   // Session management permissions
   // Teacher role hoặc staff role 'teacher' đều có thể tạo/chỉnh sửa session
-  const isTutor = currentUser?.role === 'teacher' || userHasStaffRole('teacher', currentUser, classTeachers);
+  const isTutor = isAuthenticated && (currentUser?.role === 'teacher' || userHasStaffRole('teacher', currentUser, classTeachers));
   const canShowDelete = canManage && !isTutor;
   const canSelectSessions = canManage || hasCskhPrivileges;
-  const canBulkUpdateStatus = isAdmin || hasRole('accountant') || hasCskhPrivileges;
+  const canBulkUpdateStatus = isAuthenticated && (isAdmin || hasRole('accountant') || hasCskhPrivileges);
   // Teacher (gia sư) có thể tạo và chỉnh sửa session
-  const canCreateSession = isAdmin || isTutor || hasRole('accountant') || hasCskhPrivileges;
-  const canEditSession = isAdmin || isTutor || hasRole('accountant') || hasCskhPrivileges;
+  const canCreateSession = isAuthenticated && (isAdmin || isTutor || hasRole('accountant') || hasCskhPrivileges);
+  const canEditSession = isAuthenticated && (isAdmin || isTutor || hasRole('accountant') || hasCskhPrivileges);
   // Chỉ admin và accountant mới có thể chỉnh sửa allowance thủ công
-  const canEditAllowanceManually = isAdmin || hasRole('accountant');
+  const canEditAllowanceManually = isAuthenticated && (isAdmin || hasRole('accountant'));
   // Teacher (gia sư) có thể chỉnh sửa lịch học
-  const canEditSchedule = isAdmin || isTutor || hasRole('accountant') || hasCskhPrivileges;
+  const canEditSchedule = isAuthenticated && (isAdmin || isTutor || hasRole('accountant') || hasCskhPrivileges);
   // Teacher (gia sư) có thể quản lý khảo sát
-  const canManageSurveys = isAdmin || isTutor || hasRole('accountant') || hasCskhPrivileges;
+  const canManageSurveys = isAuthenticated && (isAdmin || isTutor || hasRole('accountant') || hasCskhPrivileges);
   // Chỉ admin mới có thể xóa khảo sát
-  const canDeleteSurveys = isAdmin;
+  const canDeleteSurveys = isAuthenticated && isAdmin;
 
   // Month navigation handlers
   const handleMonthChange = (delta: number) => {
@@ -443,16 +485,22 @@ function ClassDetail() {
   // Check if current user is a teacher viewer
   const isTeacherViewer = currentUser?.role === 'teacher';
   
-  // Fetch class detail data with teacher statistics calculated in backend
+  // Fetch class detail data with teacher statistics calculated in backend - only if authenticated
   const fetchClassDetailDataFn = useCallback(() => {
     if (!id) throw new Error('Class ID is required');
-    return fetchClassDetailData(id);
+    return fetchClassDetailData(id).catch((error) => {
+      console.error('[ClassDetail] Error fetching class detail data:', error);
+      if (error?.response?.status === 401) {
+        return { teacherStats: [] };
+      }
+      throw error;
+    });
   }, [id]);
 
   const { data: classDetailData, refetch: refetchClassDetailData } = useDataLoading(fetchClassDetailDataFn, [id], {
     cacheKey: `class-detail-data-${id}`,
     staleTime: 1 * 60 * 1000,
-    enabled: !!classData && !isLoading,
+    enabled: isAuthenticated && !!classData && !isLoading, // Only fetch if authenticated
   });
 
   // Use teacher stats from backend (all calculations done in backend)
@@ -484,6 +532,13 @@ function ClassDetail() {
       };
     });
   }, [classDetailData, classTeachers, sessions, classData]);
+
+  // Log errors for debugging
+  useEffect(() => {
+    if (error) {
+      console.error('[ClassDetail] Error loading class:', error);
+    }
+  }, [error]);
 
   if (error) {
     return (
@@ -756,11 +811,11 @@ function ClassDetail() {
                 return (
                   <div
                     key={teacher.id}
-                    className={`teacher-row ${showClassFinancialDetails ? '' : 'teacher-row-compact'}${isTeacherViewer ? '' : ' teacher-row-clickable'}`}
+                    className={`teacher-row ${showClassFinancialDetails ? '' : 'teacher-row-compact'}${isTeacherViewer || !isAuthenticated ? '' : ' teacher-row-clickable'}`}
                     data-teacher-id={teacher.id}
                     onClick={(e) => {
-                      // Don't navigate if clicking on allowance button or if teacher viewer
-                      if (isTeacherViewer || (e.target as HTMLElement).closest('.teacher-allowance')) {
+                      // Don't navigate if clicking on allowance button, if teacher viewer, or if not authenticated
+                      if (isTeacherViewer || !isAuthenticated || (e.target as HTMLElement).closest('.teacher-allowance')) {
                         return;
                       }
                       navigate(`/staff/${teacher.id}`);
@@ -773,18 +828,18 @@ function ClassDetail() {
                       padding: showClassFinancialDetails ? 'var(--spacing-2) var(--spacing-3)' : 'var(--spacing-2)',
                       borderRadius: 'var(--radius)',
                       background: 'var(--bg-secondary)',
-                      cursor: isTeacherViewer ? 'default' : 'pointer',
+                      cursor: isTeacherViewer || !isAuthenticated ? 'default' : 'pointer',
                       transition: 'background-color 0.2s ease-in-out',
                     }}
                     onMouseEnter={(e) => {
-                      if (!isTeacherViewer) {
+                      if (!isTeacherViewer && isAuthenticated) {
                         e.currentTarget.style.background = 'var(--bg)';
                         e.currentTarget.style.transform = 'translateX(2px)';
                         e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05)';
                       }
                     }}
                     onMouseLeave={(e) => {
-                      if (!isTeacherViewer) {
+                      if (!isTeacherViewer && isAuthenticated) {
                         e.currentTarget.style.background = 'var(--bg-secondary)';
                         e.currentTarget.style.transform = '';
                         e.currentTarget.style.boxShadow = '';
@@ -1072,7 +1127,7 @@ function ClassDetail() {
                       <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '180px' }}>Tên</th>
                       <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '100px' }}>Năm sinh</th>
                       <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '120px' }}>Tỉnh</th>
-                      {isAdmin && (
+                      {showClassFinancialDetails && (
                       <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '120px' }}>Còn lại</th>
                       )}
                       <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '120px' }}>Trạng thái</th>
@@ -1102,17 +1157,17 @@ function ClassDetail() {
                             ) {
                               return;
                             }
-                            // Navigate to student detail when clicking on row (except buttons) - only if not tutor
-                            if (!isTutor) {
+                            // Navigate to student detail when clicking on row (except buttons) - only if not tutor and authenticated
+                            if (!isTutor && isAuthenticated) {
                               navigate(`/students/${student.id}`);
                             }
                           }}
                           style={{
                             transition: 'all 0.2s ease',
-                            cursor: isTutor ? 'default' : 'pointer',
+                            cursor: isTutor || !isAuthenticated ? 'default' : 'pointer',
                           }}
                           onMouseEnter={(e) => {
-                            if (!isTutor) {
+                            if (!isTutor && isAuthenticated) {
                               e.currentTarget.style.background = 'var(--bg-secondary)';
                             }
                           }}
@@ -1129,7 +1184,7 @@ function ClassDetail() {
                           <td style={{ padding: 'var(--spacing-3)' }}>
                             <span style={{ color: 'var(--muted)' }}>{student.province || '-'}</span>
                           </td>
-                          {isAdmin && (
+                          {showClassFinancialDetails && (
                           <td style={{ padding: 'var(--spacing-3)' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-1)' }}>
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--primary)', flexShrink: 0 }}>
@@ -2036,17 +2091,19 @@ function ClassDetail() {
                   <div style={{ fontSize: '0.875rem', color: 'var(--muted)', marginBottom: 'var(--spacing-1)' }}>Tổng số buổi</div>
                   <div style={{ fontSize: '1.25rem', fontWeight: '600', color: 'var(--text)' }}>{monthSessions.length}</div>
                 </div>
-                <div className="class-detail-stat-item" style={{ padding: 'var(--spacing-3)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: '0.875rem', color: 'var(--muted)', marginBottom: 'var(--spacing-1)' }}>Tổng trợ cấp</div>
-                  <div style={{ fontSize: '1.25rem', fontWeight: '600', color: 'var(--primary)' }}>
-                    {formatCurrencyVND(
-                      monthSessions.reduce((sum, s) => {
-                        const allowance = (s as any).allowanceAmount || s.allowance_amount || 0;
-                        return sum + allowance;
-                      }, 0)
-                    )}
+                {showClassFinancialDetails && (
+                  <div className="class-detail-stat-item" style={{ padding: 'var(--spacing-3)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: '0.875rem', color: 'var(--muted)', marginBottom: 'var(--spacing-1)' }}>Tổng trợ cấp</div>
+                    <div style={{ fontSize: '1.25rem', fontWeight: '600', color: 'var(--primary)' }}>
+                      {formatCurrencyVND(
+                        monthSessions.reduce((sum, s) => {
+                          const allowance = (s as any).allowanceAmount || s.allowance_amount || 0;
+                          return sum + allowance;
+                        }, 0)
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
               {canManage && (
                 <div style={{ marginTop: 'var(--spacing-4)', padding: 'var(--spacing-3)', background: 'var(--bg)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>

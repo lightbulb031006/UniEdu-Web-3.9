@@ -4,7 +4,7 @@
  */
 
 import { Router } from 'express';
-import { authenticate } from '../middleware/auth';
+import { authenticate, optionalAuthenticate } from '../middleware/auth';
 import {
   getClasses,
   getClassById,
@@ -34,14 +34,19 @@ router.get('/', authenticate, async (req, res, next) => {
   }
 });
 
-router.get('/:id', authenticate, async (req, res, next) => {
+router.get('/:id', optionalAuthenticate, async (req, res, next) => {
   try {
+    const classId = req.params.id;
+    const user = (req as any).user; // Get user from optional auth
+    
     // Check if includeTeachers query param is present
     const includeTeachers = req.query.include === 'teachers' || req.query.includeTeachers === 'true';
-    const cls = await getClassById(req.params.id, { includeTeachers });
+    
+    const cls = await getClassById(classId, { includeTeachers, user });
     if (!cls) {
       return res.status(404).json({ error: 'Class not found' });
     }
+    
     res.json(cls);
   } catch (error: any) {
     console.error(`[GET /classes/:id] Error for class ${req.params.id}:`, error);
@@ -79,10 +84,39 @@ router.delete('/:id', authenticate, async (req, res, next) => {
 /**
  * GET /api/classes/:id/students-with-remaining
  * Get students enrolled in a class with their remaining sessions
+ * Public access allowed, but filter sensitive data if not authenticated
  */
-router.get('/:id/students-with-remaining', authenticate, async (req, res, next) => {
+router.get('/:id/students-with-remaining', optionalAuthenticate, async (req, res, next) => {
   try {
+    const user = (req as any).user;
     const students = await getClassStudentsWithRemainingSessions(req.params.id);
+    
+    // Filter sensitive data if user is not admin or staff
+    const isAdmin = user?.role === 'admin';
+    const isAccountant = user?.role === 'accountant';
+    const isStaff = user?.role === 'teacher';
+    
+    if (!user || (!isAdmin && !isAccountant && !isStaff)) {
+      // Remove sensitive fields from student data
+      const filteredStudents = students.map((item: any) => {
+        const filteredItem = { ...item };
+        if (filteredItem.studentClass) {
+          // Remove remaining_sessions and total_attended_sessions for public view
+          const { remaining_sessions, total_attended_sessions, ...filteredClass } = filteredItem.studentClass;
+          filteredItem.studentClass = filteredClass;
+        }
+        if (filteredItem.student) {
+          // Keep basic student info but remove sensitive fields
+          const { id, full_name, birth_year, province, status } = filteredItem.student;
+          filteredItem.student = { id, full_name, birth_year, province, status };
+        }
+        // Remove remainingSessions and totalAttended from top level
+        const { remainingSessions, totalAttended, ...rest } = filteredItem;
+        return rest;
+      });
+      return res.json(filteredStudents);
+    }
+    
     res.json(students);
   } catch (error) {
     next(error);

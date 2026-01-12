@@ -83,7 +83,7 @@ export async function getClasses(filters: ClassFilters = {}) {
   }
 }
 
-export async function getClassById(id: string, options: { includeTeachers?: boolean } = {}) {
+export async function getClassById(id: string, options: { includeTeachers?: boolean; user?: { userId: string; role: string; email?: string } } = {}) {
   try {
     // Select columns including denormalized teacher_ids for fast access
     const { data, error } = await supabase.from('classes').select('id, name, type, status, max_students, tuition_per_session, scale_amount, max_allowance_per_session, student_tuition_per_session, tuition_package_total, tuition_package_sessions, schedule, custom_teacher_allowances, teacher_ids, created_at, updated_at').eq('id', id).single();
@@ -94,11 +94,28 @@ export async function getClassById(id: string, options: { includeTeachers?: bool
     }
 
     if (!data) {
-      console.warn(`[getClassById] Class ${id} not found`);
       return null;
     }
 
     const cls = data as any;
+    
+    // Filter sensitive financial data if user is not admin or staff
+    const user = options.user;
+    const isAdmin = user?.role === 'admin';
+    const isAccountant = user?.role === 'accountant';
+    const isStaff = user?.role === 'teacher'; // Teachers can see financial data for their classes
+    
+    // If no user or user doesn't have permission, remove sensitive fields
+    if (!user || (!isAdmin && !isAccountant && !isStaff)) {
+      // Remove sensitive financial fields
+      delete cls.tuition_per_session;
+      delete cls.student_tuition_per_session;
+      delete cls.tuition_package_total;
+      delete cls.tuition_package_sessions;
+      delete cls.scale_amount;
+      delete cls.max_allowance_per_session;
+      delete cls.custom_teacher_allowances;
+    }
 
     // Use denormalized teacher_ids from classes table (much faster than querying class_teachers)
     let teacherIds: string[] = [];

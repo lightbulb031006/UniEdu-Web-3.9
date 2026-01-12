@@ -4,12 +4,9 @@
 
 import { Router } from 'express';
 import { getSessions, getSessionsForDateRange, getSessionById, createSession, updateSession, deleteSession } from '../services/sessionsService';
-import { authenticate, AuthRequest } from '../middleware/auth';
+import { authenticate, optionalAuthenticate, AuthRequest } from '../middleware/auth';
 
 const router = Router();
-
-// All routes require authentication
-router.use(authenticate);
 
 /**
  * Helper function to filter tuition_fee based on user role
@@ -26,9 +23,10 @@ function filterTuitionFeeForRole(session: any, userRole: string): any {
 /**
  * GET /api/sessions
  * Get all sessions with optional filters
+ * Public access allowed for GET requests (read-only)
  * Only admin can see tuition_fee field
  */
-router.get('/', async (req: AuthRequest, res, next) => {
+router.get('/', optionalAuthenticate, async (req: AuthRequest, res, next) => {
   try {
     const filters: any = {};
     if (req.query.classId) {
@@ -72,9 +70,10 @@ router.get('/', async (req: AuthRequest, res, next) => {
 /**
  * GET /api/sessions/:id
  * Get a single session by ID
+ * Public access allowed for GET requests (read-only)
  * Only admin can see tuition_fee field
  */
-router.get('/:id', async (req: AuthRequest, res, next) => {
+router.get('/:id', optionalAuthenticate, async (req: AuthRequest, res, next) => {
   try {
     const session = await getSessionById(req.params.id);
     if (!session) {
@@ -91,8 +90,9 @@ router.get('/:id', async (req: AuthRequest, res, next) => {
 /**
  * POST /api/sessions
  * Create a new session
+ * Requires authentication
  */
-router.post('/', async (req, res, next) => {
+router.post('/', authenticate, async (req, res, next) => {
   try {
     const session = await createSession(req.body);
     res.status(201).json(session);
@@ -104,8 +104,9 @@ router.post('/', async (req, res, next) => {
 /**
  * PUT /api/sessions/:id
  * Update an existing session
+ * Requires authentication
  */
-router.put('/:id', async (req, res, next) => {
+router.put('/:id', authenticate, async (req, res, next) => {
   try {
     const session = await updateSession(req.params.id, req.body);
     res.json(session);
@@ -117,8 +118,9 @@ router.put('/:id', async (req, res, next) => {
 /**
  * DELETE /api/sessions/:id
  * Delete a session
+ * Requires authentication
  */
-router.delete('/:id', async (req, res, next) => {
+router.delete('/:id', authenticate, async (req, res, next) => {
   try {
     await deleteSession(req.params.id);
     res.status(204).send();

@@ -39,7 +39,7 @@ export default function SurveyTab({ classId, canManage = true, canDelete = false
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonth);
   const [monthPopupOpen, setMonthPopupOpen] = useState(false);
 
-  // Fetch surveys
+  // Fetch surveys - allow public access
   const fetchSurveysFn = useCallback(() => fetchSurveysByClassId(classId), [classId]);
   const {
     data: surveys,
@@ -48,13 +48,15 @@ export default function SurveyTab({ classId, canManage = true, canDelete = false
   } = useDataLoading(fetchSurveysFn, [classId], {
     cacheKey: `surveys-class-${classId}`,
     staleTime: 1 * 60 * 1000,
+    allowPublicAccess: true, // Allow fetching without authentication for public class view
   });
 
-  // Fetch class data with teachers (only teachers of this class)
+  // Fetch class data with teachers (only teachers of this class) - allow public access
   const fetchClassFn = useCallback(() => fetchClassById(classId, { includeTeachers: true }), [classId]);
   const { data: classData } = useDataLoading(fetchClassFn, [classId], {
     cacheKey: `class-${classId}-for-surveys`,
     staleTime: 5 * 60 * 1000,
+    allowPublicAccess: true, // Allow fetching without authentication for public class view
   });
 
   // Get class teachers from classData

@@ -13,9 +13,10 @@ export function useDataLoading<T>(
     cacheKey?: string;
     staleTime?: number;
     persistCache?: boolean; // If true, use localStorage instead of sessionStorage
+    allowPublicAccess?: boolean; // If true, allow fetching without token (for public APIs)
   } = {}
 ) {
-  const { enabled = true, refetchInterval, cacheKey, staleTime = 5 * 60 * 1000, persistCache = false } = options;
+  const { enabled = true, refetchInterval, cacheKey, staleTime = 5 * 60 * 1000, persistCache = false, allowPublicAccess = false } = options;
 
   // Helper function to get cached data synchronously (for initial state)
   const getCachedDataSync = (): T | null => {
@@ -144,11 +145,11 @@ export function useDataLoading<T>(
       setError(null);
 
       try {
-        // Check if user is authenticated before making request
+        // Check if user is authenticated before making request (unless allowPublicAccess is true)
         // Check both localStorage and sessionStorage (for "remember me" functionality)
         const token = localStorage.getItem('unicorns.token') || sessionStorage.getItem('unicorns.token');
-        if (!token) {
-          // No token, don't retry
+        if (!allowPublicAccess && !token) {
+          // No token and public access not allowed, don't retry
           setIsLoading(false);
           setIsRefetching(false);
           isFetchingRef.current = false;
@@ -163,17 +164,15 @@ export function useDataLoading<T>(
             setIsLoading(false);
             setIsRefetching(false);
             isFetchingRef.current = false;
-            // Still fetch in background for freshness (only if token exists)
-            if (token) {
-              fetchFnRef.current()
-                .then((freshData) => {
-                  setData(freshData);
-                  setCachedData(freshData);
-                })
-                .catch(() => {
-                  // Ignore background fetch errors
-                });
-            }
+            // Still fetch in background for freshness
+            fetchFnRef.current()
+              .then((freshData) => {
+                setData(freshData);
+                setCachedData(freshData);
+              })
+              .catch(() => {
+                // Ignore background fetch errors
+              });
             return;
           }
         }
@@ -216,11 +215,11 @@ export function useDataLoading<T>(
   useEffect(() => {
     if (!enabled) return;
 
-    // Check if user is authenticated
+    // Check if user is authenticated (unless allowPublicAccess is true)
     // Check both localStorage and sessionStorage (for "remember me" functionality)
     const token = localStorage.getItem('unicorns.token') || sessionStorage.getItem('unicorns.token');
-    if (!token) {
-      // No token, don't fetch
+    if (!allowPublicAccess && !token) {
+      // No token and public access not allowed, don't fetch
       setIsLoading(false);
       return;
     }
@@ -234,7 +233,7 @@ export function useDataLoading<T>(
       fetchData(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, ...dependencies]);
+  }, [enabled, allowPublicAccess, ...dependencies]);
 
   // Refetch interval
   useEffect(() => {

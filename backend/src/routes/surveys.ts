@@ -4,7 +4,7 @@
  */
 
 import { Router } from 'express';
-import { authenticate } from '../middleware/auth';
+import { authenticate, optionalAuthenticate } from '../middleware/auth';
 import {
   getSurveysByClassId,
   getSurveyById,
@@ -15,8 +15,8 @@ import {
 
 const router = Router();
 
-// Get all surveys for a class
-router.get('/class/:classId', authenticate, async (req, res, next) => {
+// Get all surveys for a class - public access allowed
+router.get('/class/:classId', optionalAuthenticate, async (req, res, next) => {
   try {
     const surveys = await getSurveysByClassId(req.params.classId);
     res.json(surveys);
@@ -26,8 +26,8 @@ router.get('/class/:classId', authenticate, async (req, res, next) => {
   }
 });
 
-// Get survey by ID
-router.get('/:id', authenticate, async (req, res, next) => {
+// Get survey by ID - public access allowed
+router.get('/:id', optionalAuthenticate, async (req, res, next) => {
   try {
     const survey = await getSurveyById(req.params.id);
     if (!survey) {

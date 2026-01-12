@@ -43,9 +43,14 @@ api.interceptors.response.use(
   (error) => {
     // Don't redirect on 401 for login endpoint - let the login form handle the error
     const isLoginEndpoint = error.config?.url?.includes('/auth/login');
+    // Don't redirect on 401 for public endpoints - allow public access
+    const isPublicClassEndpoint = error.config?.url?.includes('/classes/') && error.config?.method === 'get';
+    const isPublicSessionsEndpoint = error.config?.url?.includes('/sessions') && error.config?.method === 'get';
+    const isPublicSurveysEndpoint = error.config?.url?.includes('/surveys') && error.config?.method === 'get';
+    const isPublicEndpoint = isPublicClassEndpoint || isPublicSessionsEndpoint || isPublicSurveysEndpoint;
     
-    if (error.response?.status === 401 && !isLoginEndpoint) {
-      // Token expired or invalid (but not for login attempts)
+    if (error.response?.status === 401 && !isLoginEndpoint && !isPublicEndpoint) {
+      // Token expired or invalid (but not for login attempts or public class access)
       localStorage.removeItem('unicorns.token');
       localStorage.removeItem('unicorns.currentUser');
       localStorage.removeItem('refreshToken');
