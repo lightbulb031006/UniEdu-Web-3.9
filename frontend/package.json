@@ -1,6 +1,6 @@
 {
   "name": "uniedu-frontend",
-  "version": "4.1.1",
+  "version": "4.2.0",
   "type": "module",
   "description": "UniEdu Frontend - React application for education management",
   "scripts": {
