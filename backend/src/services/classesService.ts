@@ -106,6 +106,8 @@ export async function getClassById(id: string, options: { includeTeachers?: bool
     const isStaff = user?.role === 'teacher'; // Teachers can see financial data for their classes
     
     // If no user or user doesn't have permission, remove sensitive fields
+    // BUT keep custom_teacher_allowances for getClassDetailData to calculate teacher stats
+    // (The allowance values are needed for display, even if user can't see other financial data)
     if (!user || (!isAdmin && !isAccountant && !isStaff)) {
       // Remove sensitive financial fields
       delete cls.tuition_per_session;
@@ -114,7 +116,8 @@ export async function getClassById(id: string, options: { includeTeachers?: bool
       delete cls.tuition_package_sessions;
       delete cls.scale_amount;
       delete cls.max_allowance_per_session;
-      delete cls.custom_teacher_allowances;
+      // Keep custom_teacher_allowances - it's needed for teacher stats display
+      // delete cls.custom_teacher_allowances;
     }
 
     // Use denormalized teacher_ids from classes table (much faster than querying class_teachers)
@@ -724,9 +727,9 @@ export async function moveStudentToClass(studentId: string, fromClassId: string,
  * Get class detail data with teacher statistics calculated in backend
  * Returns teacher stats (totalReceived, allowance) for each teacher in the class
  */
-export async function getClassDetailData(classId: string) {
-  // Get class data
-  const classData = await getClassById(classId);
+export async function getClassDetailData(classId: string, user?: { userId: string; role: string; email?: string }) {
+  // Get class data with user context to preserve custom_teacher_allowances
+  const classData = await getClassById(classId, { user });
   if (!classData) {
     throw new Error('Class not found');
   }
@@ -770,20 +773,97 @@ export async function getClassDetailData(classId: string) {
     console.error('Failed to fetch sessions:', sessionsError);
   }
 
+  // Calculate studentPaidCount for each session from attendance records
+  if (sessions && sessions.length > 0) {
+    const sessionIds = sessions.map((s: any) => s.id);
+    const { data: attendanceData } = await supabase
+      .from('attendance')
+      .select('session_id, status, present')
+      .in('session_id', sessionIds);
+
+    if (attendanceData) {
+      // Count present and excused students per session (both count as 1 student)
+      const paidCountMap = new Map<string, number>();
+      attendanceData.forEach((att: any) => {
+        // Count both 'present' and 'excused' as 1 student each
+        const status = att.status || (att.present ? 'present' : 'absent');
+        if (status === 'present' || status === 'excused') {
+          const current = paidCountMap.get(att.session_id) || 0;
+          paidCountMap.set(att.session_id, current + 1);
+        }
+      });
+
+      // Add studentPaidCount to each session
+      sessions.forEach((session: any) => {
+        session.student_paid_count = paidCountMap.get(session.id) || 0;
+        session.studentPaidCount = session.student_paid_count; // Also set camelCase for compatibility
+      });
+    } else {
+      // If no attendance data, set to 0
+      sessions.forEach((session: any) => {
+        session.student_paid_count = 0;
+        session.studentPaidCount = 0;
+      });
+    }
+  }
+
   // Get custom allowances
-  const customAllowances = ((classData as any)?.custom_teacher_allowances || {}) as Record<string, number>;
+  // Handle case where custom_teacher_allowances might be null, undefined, or not an object
+  let customAllowances: Record<string, number> = {};
+  if (classData && (classData as any).custom_teacher_allowances) {
+    const allowances = (classData as any).custom_teacher_allowances;
+    if (typeof allowances === 'object' && allowances !== null && !Array.isArray(allowances)) {
+      customAllowances = allowances as Record<string, number>;
+    } else if (typeof allowances === 'string') {
+      // If it's a JSON string, try to parse it
+      try {
+        customAllowances = JSON.parse(allowances) as Record<string, number>;
+      } catch (e) {
+        console.warn('[getClassDetailData] Failed to parse custom_teacher_allowances:', e);
+        customAllowances = {};
+      }
+    }
+  }
   const defaultSalary = Number(classData.tuition_per_session) || 0;
 
   // Calculate teacher stats
+  // Get date 30 days ago
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
+
   const teacherStats = (teachers || []).map((teacher: any) => {
     const teacherSessions = (sessions || []).filter((s: any) => s.teacher_id === teacher.id);
     
-    // Calculate total received from paid sessions
-    const totalReceived = teacherSessions
-      .filter((s: any) => s.payment_status === 'paid')
+    // Calculate unpaid amount from unpaid sessions in the last 30 days
+    const unpaidAmount = teacherSessions
+      .filter((s: any) => {
+        // Filter unpaid sessions
+        const isUnpaid = (s.payment_status || 'unpaid') === 'unpaid';
+        // Filter sessions in the last 30 days
+        const sessionDate = s.date ? new Date(s.date) : null;
+        const isWithin30Days = sessionDate && sessionDate >= thirtyDaysAgo;
+        return isUnpaid && isWithin30Days;
+      })
       .reduce((sum: number, s: any) => {
-        // Use allowance_amount if available
-        const allowance = s.allowance_amount != null ? Number(s.allowance_amount) : 0;
+        // Use allowance_amount if available, otherwise calculate from allowance and coefficient
+        let allowance = 0;
+        if (s.allowance_amount != null) {
+          allowance = Number(s.allowance_amount);
+        } else {
+          // Calculate allowance: baseAllowance * coefficient * studentPaidCount + scale
+          const baseAllowance = customAllowances[teacher.id] ?? defaultSalary;
+          const coefficient = Number(s.coefficient || 1);
+          const studentPaidCount = Number(s.student_paid_count || 0);
+          const scaleAmount = Number((classData as any).scale_amount || 0);
+          const maxPerSession = Number((classData as any).max_allowance_per_session || 0);
+          
+          allowance = baseAllowance * coefficient * studentPaidCount + scaleAmount;
+          if (maxPerSession > 0 && allowance > maxPerSession) {
+            allowance = maxPerSession;
+          }
+          allowance = Math.round(allowance > 0 ? allowance : 0);
+        }
         return sum + allowance;
       }, 0);
 
@@ -797,7 +877,7 @@ export async function getClassDetailData(classId: string) {
         phone: teacher.phone,
       },
       allowance,
-      totalReceived,
+      unpaidAmount,
     };
   });
 

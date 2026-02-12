@@ -196,16 +196,18 @@ async function rollbackAttendanceFinancials(
 
 /**
  * Create or update attendance records for a session
+ * @param skipFinancialProcessing - If true, skip rollback and financial processing (for editing attendance only)
  */
 export async function saveAttendanceForSession(
   sessionId: string,
-  attendanceData: Array<{ student_id: string; present?: boolean; status?: AttendanceStatus; remark?: string }>
+  attendanceData: Array<{ student_id: string; present?: boolean; status?: AttendanceStatus; remark?: string }>,
+  skipFinancialProcessing: boolean = false
 ): Promise<Attendance[]> {
   // Get existing attendance BEFORE deleting to rollback financials
   const existingAttendance = await getAttendanceBySession(sessionId);
   
-  // Rollback financial changes from old attendance if it exists
-  if (existingAttendance.length > 0) {
+  // Rollback financial changes from old attendance if it exists and not skipping financial processing
+  if (existingAttendance.length > 0 && !skipFinancialProcessing) {
     try {
       const oldAttendanceData = existingAttendance.map(att => ({
         student_id: att.student_id,
@@ -270,30 +272,34 @@ export async function saveAttendanceForSession(
     status: att.status || (att.present ? 'present' : 'absent'),
   })) as Attendance[];
 
-  // Process financial calculations based on NEW attendance status
-  try {
-    // Filter and normalize attendance data to ensure status is always defined
-    const normalizedAttendanceData = attendanceData
-      .map(att => {
-        // Determine status: use status if provided, otherwise convert present boolean
-        let status: AttendanceStatus = 'present';
-        if (att.status && ['present', 'excused', 'absent'].includes(att.status)) {
-          status = att.status;
-        } else if (att.present !== undefined) {
-          status = att.present ? 'present' : 'absent';
-        }
-        return {
-          student_id: att.student_id,
-          status,
-        };
-      })
-      .filter(att => att.status !== undefined); // Ensure status is defined
-    
-    await processAttendanceFinancials(sessionId, normalizedAttendanceData);
-  } catch (financialError) {
-    console.error('[saveAttendanceForSession] Error processing financials:', financialError);
-    // Don't fail the attendance save if financial processing fails
-    // Log error and continue
+  // Process financial calculations based on NEW attendance status (only if not skipping)
+  if (!skipFinancialProcessing) {
+    try {
+      // Filter and normalize attendance data to ensure status is always defined
+      const normalizedAttendanceData = attendanceData
+        .map(att => {
+          // Determine status: use status if provided, otherwise convert present boolean
+          let status: AttendanceStatus = 'present';
+          if (att.status && ['present', 'excused', 'absent'].includes(att.status)) {
+            status = att.status;
+          } else if (att.present !== undefined) {
+            status = att.present ? 'present' : 'absent';
+          }
+          return {
+            student_id: att.student_id,
+            status,
+          };
+        })
+        .filter(att => att.status !== undefined); // Ensure status is defined
+      
+      await processAttendanceFinancials(sessionId, normalizedAttendanceData);
+    } catch (financialError) {
+      console.error('[saveAttendanceForSession] Error processing financials:', financialError);
+      // Don't fail the attendance save if financial processing fails
+      // Log error and continue
+    }
+  } else {
+    console.log('[saveAttendanceForSession] Skipping financial processing (edit mode)');
   }
 
   return normalized;

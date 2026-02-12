@@ -60,13 +60,16 @@ export async function fetchAttendanceBySession(sessionId: string): Promise<Atten
 
 /**
  * Create or update attendance records for a session
+ * @param skipFinancialProcessing - If true, skip financial processing (for editing attendance only)
  */
 export async function saveAttendanceForSession(
   sessionId: string,
-  attendanceData: Array<{ student_id: string; present?: boolean; status?: AttendanceStatus; remark?: string }>
+  attendanceData: Array<{ student_id: string; present?: boolean; status?: AttendanceStatus; remark?: string }>,
+  skipFinancialProcessing: boolean = false
 ): Promise<Attendance[]> {
   const response = await api.post<Attendance[]>(`/attendance/session/${sessionId}`, {
     attendance: attendanceData,
+    skipFinancialProcessing,
   });
   return (response.data || []).map(normalizeAttendance);
 }

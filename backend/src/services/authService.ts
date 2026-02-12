@@ -194,7 +194,7 @@ export async function login(credentials: LoginCredentials): Promise<AuthResult> 
     userId: user.id,
     role: user.role,
     email: user.email,
-  });
+  }, rememberMe);
 
   const refreshToken = generateRefreshToken({
     userId: user.id,
@@ -388,6 +388,45 @@ export async function updateProfile(userId: string, data: UpdateProfileData) {
   logger.info('User profile updated successfully', { userId, email: updatedUser.email });
 
   return updatedUser;
+}
+
+/**
+ * Refresh access token using refresh token
+ */
+export async function refreshAccessToken(refreshToken: string): Promise<{ token: string; refreshToken: string }> {
+  try {
+    // Verify refresh token
+    const decoded = jwt.verify(refreshToken, env.JWT_SECRET as string) as {
+      userId: string;
+    };
+
+    // Get user to verify they still exist and get their role/email
+    const user = await getUserById(decoded.userId);
+
+    // Generate new tokens
+    const newToken = generateToken({
+      userId: user.id,
+      role: user.role,
+      email: user.email,
+    }, false); // Use default expiration for refresh (not rememberMe)
+
+    const newRefreshToken = generateRefreshToken({
+      userId: user.id,
+    });
+
+    logger.info('[REFRESH] Token refreshed successfully', { userId: user.id });
+
+    return {
+      token: newToken,
+      refreshToken: newRefreshToken,
+    };
+  } catch (error) {
+    if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError) {
+      logger.warn('[REFRESH] Invalid or expired refresh token');
+      throw new AuthenticationError('Invalid or expired refresh token');
+    }
+    throw error;
+  }
 }
 
 /**

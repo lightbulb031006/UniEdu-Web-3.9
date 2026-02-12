@@ -4,7 +4,7 @@
 
 import express from 'express';
 import { z } from 'zod';
-import { login, register, getUserById, updateProfile, getUsers } from '../services/authService';
+import { login, register, getUserById, updateProfile, getUsers, refreshAccessToken } from '../services/authService';
 import { authenticate } from '../middleware/auth';
 import { authLimiter, loginFailureLimiter } from '../middleware/rateLimit';
 import { ValidationError } from '../utils/errors';
@@ -101,6 +101,28 @@ router.get('/users', authenticate, async (req: any, res, next) => {
     res.json(users);
   } catch (error) {
     next(error);
+  }
+});
+
+/**
+ * POST /api/auth/refresh
+ * Refresh access token using refresh token
+ */
+const refreshSchema = z.object({
+  refreshToken: z.string().min(1, 'Refresh token is required'),
+});
+
+router.post('/refresh', async (req, res, next) => {
+  try {
+    const validated = refreshSchema.parse(req.body);
+    const result = await refreshAccessToken(validated.refreshToken);
+    res.json(result);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      next(new ValidationError('Invalid input', error.errors));
+    } else {
+      next(error);
+    }
   }
 });
 

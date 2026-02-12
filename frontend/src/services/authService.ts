@@ -164,6 +164,48 @@ export const authService = {
   },
 
   /**
+   * Refresh access token using refresh token
+   */
+  async refreshToken(): Promise<{ token: string; refreshToken: string }> {
+    // Get refreshToken from storage (check both localStorage and sessionStorage)
+    let refreshToken = localStorage.getItem('refreshToken');
+    if (!refreshToken) {
+      refreshToken = sessionStorage.getItem('refreshToken');
+    }
+
+    if (!refreshToken) {
+      throw new Error('No refresh token available');
+    }
+
+    try {
+      const { data } = await api.post<{ token: string; refreshToken: string }>('/auth/refresh', {
+        refreshToken,
+      });
+
+      // Determine which storage to use based on rememberMe
+      const currentUser = useAuthStore.getState().user;
+      const currentKey = localStorage.getItem('unicorns.currentUser') || sessionStorage.getItem('unicorns.currentUser');
+      const rememberMe = currentKey ? JSON.parse(currentKey).rememberMe : false;
+      const storage = rememberMe ? localStorage : sessionStorage;
+
+      // Update tokens in storage
+      storage.setItem('unicorns.token', data.token);
+      storage.setItem('refreshToken', data.refreshToken);
+
+      // Update store
+      if (currentUser) {
+        useAuthStore.getState().setAuth(currentUser, data.token, rememberMe);
+      }
+
+      return data;
+    } catch (error: any) {
+      // If refresh fails, logout
+      useAuthStore.getState().logout();
+      throw error;
+    }
+  },
+
+  /**
    * Logout
    */
   logout() {

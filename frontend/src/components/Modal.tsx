@@ -15,9 +15,10 @@ interface ModalProps {
   size?: 'sm' | 'md' | 'lg';
   zIndex?: number;
   headerExtra?: React.ReactNode; // Extra content to display in header (e.g., tuition fee)
+  closeOnBackdropClick?: boolean; // Whether to close modal when clicking on backdrop (default: true)
 }
 
-export default function Modal({ title, isOpen, onClose, children, size = 'md', zIndex, headerExtra }: ModalProps) {
+export default function Modal({ title, isOpen, onClose, children, size = 'md', zIndex, headerExtra, closeOnBackdropClick = true }: ModalProps) {
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -57,7 +58,7 @@ export default function Modal({ title, isOpen, onClose, children, size = 'md', z
   return createPortal(
     <div 
       className="modal-backdrop" 
-      onClick={onClose} 
+      onClick={closeOnBackdropClick ? onClose : undefined} 
       style={{ 
         display: 'flex !important', 
         position: 'fixed',

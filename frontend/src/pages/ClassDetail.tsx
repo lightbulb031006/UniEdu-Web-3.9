@@ -149,13 +149,34 @@ function ClassDetail() {
   // Use optimistic sessions if available, otherwise use server data
   const sessions = optimisticSessions.length > 0 ? optimisticSessions : (Array.isArray(sessionsData) ? sessionsData : []);
 
+  // Fetch class detail data (teacher stats) - must be declared before refetch callback
+  const fetchClassDetailDataFn = useCallback(() => {
+    if (!id) throw new Error('Class ID is required');
+    return fetchClassDetailData(id).catch((error) => {
+      console.error('[ClassDetail] Error fetching class detail data:', error);
+      if (error?.response?.status === 401) {
+        return { teacherStats: [] };
+      }
+      throw error;
+    });
+  }, [id]);
+
+  const { data: classDetailData, refetch: refetchClassDetailData } = useDataLoading(fetchClassDetailDataFn, [id], {
+    cacheKey: `class-detail-data-${id}`,
+    staleTime: 1 * 60 * 1000,
+    enabled: isAuthenticated && !!classData && !isLoading, // Only fetch if authenticated
+  });
+
   const refetch = useCallback(() => {
     refetchClass();
     refetchStudents();
     refetchSessions();
+    if (refetchClassDetailData) {
+      refetchClassDetailData(); // Also refetch teacher stats to update unpaidAmount
+    }
     // Clear optimistic operations after refetch
     setOptimisticOperations(new Map());
-  }, [refetchClass, refetchStudents, refetchSessions]);
+  }, [refetchClass, refetchStudents, refetchSessions, refetchClassDetailData]);
 
   // Fetch all teachers only when needed (for EditTeacherModal) - lazy loading
   const [allTeachers, setAllTeachers] = useState<any[]>([]);
@@ -484,24 +505,6 @@ function ClassDetail() {
 
   // Check if current user is a teacher viewer
   const isTeacherViewer = currentUser?.role === 'teacher';
-  
-  // Fetch class detail data with teacher statistics calculated in backend - only if authenticated
-  const fetchClassDetailDataFn = useCallback(() => {
-    if (!id) throw new Error('Class ID is required');
-    return fetchClassDetailData(id).catch((error) => {
-      console.error('[ClassDetail] Error fetching class detail data:', error);
-      if (error?.response?.status === 401) {
-        return { teacherStats: [] };
-      }
-      throw error;
-    });
-  }, [id]);
-
-  const { data: classDetailData, refetch: refetchClassDetailData } = useDataLoading(fetchClassDetailDataFn, [id], {
-    cacheKey: `class-detail-data-${id}`,
-    staleTime: 1 * 60 * 1000,
-    enabled: isAuthenticated && !!classData && !isLoading, // Only fetch if authenticated
-  });
 
   // Use teacher stats from backend (all calculations done in backend)
   const teacherStats = useMemo(() => {
@@ -512,23 +515,31 @@ function ClassDetail() {
         return {
           teacher,
           allowance: stat.allowance,
-          totalReceived: stat.totalReceived,
+          unpaidAmount: stat.unpaidAmount || 0,
         };
       });
     }
     // Fallback: calculate locally if backend data not available (should not happen in production)
     const customAllowances = (classData as any)?.customTeacherAllowances || {};
     const defaultSalary = classData?.tuitionPerSession || 0;
+    // Calculate unpaid amount for last 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     return classTeachers.map((teacher) => {
       const teacherSessions = sessions.filter((s) => (s as any).teacherId === teacher.id || s.teacher_id === teacher.id);
-      const totalReceived = teacherSessions
-        .filter((s) => (s as any).paymentStatus === 'paid' || s.payment_status === 'paid')
+      const unpaidAmount = teacherSessions
+        .filter((s) => {
+          const isUnpaid = ((s as any).paymentStatus || s.payment_status || 'unpaid') === 'unpaid';
+          const sessionDate = s.date ? new Date(s.date) : null;
+          const isWithin30Days = sessionDate && sessionDate >= thirtyDaysAgo;
+          return isUnpaid && isWithin30Days;
+        })
         .reduce((sum, s) => sum + ((s as any).allowanceAmount || s.allowance_amount || 0), 0);
       const allowance = customAllowances[teacher.id] ?? defaultSalary;
       return {
         teacher,
         allowance,
-        totalReceived,
+        unpaidAmount,
       };
     });
   }, [classDetailData, classTeachers, sessions, classData]);
@@ -802,10 +813,10 @@ function ClassDetail() {
                 <div className="teacher-row teacher-row-header" style={{ display: 'grid', gridTemplateColumns: '1fr 140px 160px', gap: 'var(--spacing-3)', alignItems: 'center', padding: '0 var(--spacing-3) var(--spacing-1)', borderBottom: '1px solid var(--border)', marginBottom: 'var(--spacing-2)', cursor: 'default', fontSize: 'var(--font-size-xs)', fontWeight: '600', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', background: 'transparent' }}>
                   <span className="teacher-col-name" style={{ textAlign: 'left' }}>TÊN GIA SƯ</span>
                   <span className="teacher-col-allowance" style={{ textAlign: 'left' }}>TRỢ CẤP</span>
-                  <span className="teacher-col-total" style={{ textAlign: 'right', justifySelf: 'end' }}>TỔNG NHẬN</span>
+                  <span className="teacher-col-total" style={{ textAlign: 'right', justifySelf: 'end' }}>CHƯA NHẬN</span>
                 </div>
               )}
-              {teacherStats.map(({ teacher, allowance, totalReceived }) => {
+              {teacherStats.map(({ teacher, allowance, unpaidAmount }) => {
                 const contacts = [(teacher as any).phone, (teacher as any).email || (teacher as any).gmail].filter(Boolean).join(' • ');
                 const teacherNameClass = isTeacherViewer ? 'teacher-col-name' : 'teacher-col-name teacher-name-link';
                 return (
@@ -893,7 +904,7 @@ function ClassDetail() {
                             <span>{formatCurrencyVND(allowance)}</span>
                           )}
                         </span>
-                        <span className="teacher-col-total" style={{ fontWeight: '500', textAlign: 'right', justifySelf: 'end' }}>{formatCurrencyVND(totalReceived)}</span>
+                        <span className="teacher-col-total" style={{ fontWeight: '500', textAlign: 'right', justifySelf: 'end' }}>{formatCurrencyVND(unpaidAmount || 0)}</span>
                       </>
                     )}
                     {!showClassFinancialDetails && contacts && (
@@ -2398,6 +2409,7 @@ function ClassDetail() {
           setIsEditHeaderTuitionFeeManuallyEdited(false);
         }}
         size="md"
+        closeOnBackdropClick={false}
         headerExtra={
           isAdmin ? (
             isEditingEditHeaderTuitionFee ? (
@@ -2641,7 +2653,9 @@ function ClassDetail() {
             onSuccess={() => {
               setTeacherAllowanceModalOpen(false);
               setEditingTeacherForAllowance(null);
+              // Refetch both classData and classDetailData to update UI
               refetchClass();
+              refetchClassDetailData();
             }}
             onClose={() => {
               setTeacherAllowanceModalOpen(false);
@@ -4157,6 +4171,7 @@ function EditSessionModal({
       }
       
       // Update attendance records
+      // When editing a session, skip financial processing to avoid affecting student balances
       if (students.length > 0) {
         const attendanceData = students.map((student) => {
           const att = attendance[student.id] || { status: 'absent' as AttendanceStatus, remark: '' };
@@ -4167,7 +4182,8 @@ function EditSessionModal({
           };
         });
         
-        await saveAttendanceForSession(session.id, attendanceData);
+        // Skip financial processing when editing (session already exists and financials were calculated on creation)
+        await saveAttendanceForSession(session.id, attendanceData, true);
       }
       
       // Optimistic update: update session in UI immediately
@@ -4393,7 +4409,7 @@ function EditSessionModal({
         <label style={{ display: 'block', marginBottom: 'var(--spacing-2)', fontWeight: '500' }}>
           Trợ cấp giáo viên
         </label>
-        {editingAllowance && canEditAllowanceManually && lockedAllowance ? (
+        {editingAllowance && canEditAllowanceManually ? (
           <div style={{ display: 'flex', gap: 'var(--spacing-2)', alignItems: 'center' }}>
             <div style={{ flex: 1, position: 'relative' }}>
               <CurrencyInput
@@ -4410,14 +4426,21 @@ function EditSessionModal({
                 }}
                 onBlur={async () => {
                   const parsed = allowanceInputValue ? parseFloat(allowanceInputValue) : 0;
-                  if (Number.isFinite(parsed)) {
+                  if (Number.isFinite(parsed) && parsed >= 0) {
                     try {
                       await updateSession(session.id, { allowance_amount: parsed });
                       setAllowanceAmount(parsed);
                       toast.success('Đã cập nhật trợ cấp');
+                      // Trigger refetch to update UI
+                      if (onSessionUpdated) {
+                        const updatedSession = { ...session, allowance_amount: parsed };
+                        onSessionUpdated(updatedSession);
+                      }
                     } catch (error: any) {
                       toast.error('Không thể cập nhật trợ cấp: ' + (error.response?.data?.error || error.message));
                     }
+                  } else if (allowanceInputValue && !Number.isFinite(parseFloat(allowanceInputValue))) {
+                    toast.error('Vui lòng nhập số hợp lệ');
                   }
                   setEditingAllowance(false);
                   setAllowanceInputValue('');
@@ -4437,9 +4460,9 @@ function EditSessionModal({
         ) : (
           <div
             onClick={() => {
-              if (canEditAllowanceManually && lockedAllowance) {
+              if (canEditAllowanceManually) {
                 setEditingAllowance(true);
-                setAllowanceInputValue(String(currentAllowance));
+                setAllowanceInputValue(String(currentAllowance > 0 ? currentAllowance : ''));
               }
             }}
             style={{
@@ -4450,11 +4473,11 @@ function EditSessionModal({
               fontSize: '1rem',
               fontWeight: '500',
               color: currentAllowance > 0 ? 'var(--text)' : 'var(--muted)',
-              cursor: canEditAllowanceManually && lockedAllowance ? 'pointer' : 'default',
+              cursor: canEditAllowanceManually ? 'pointer' : 'default',
               transition: 'background-color 0.2s ease',
             }}
             onMouseEnter={(e) => {
-              if (canEditAllowanceManually && lockedAllowance) {
+              if (canEditAllowanceManually) {
                 e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)';
               }
             }}
@@ -4470,7 +4493,7 @@ function EditSessionModal({
               formatCurrencyVND(currentAllowance)
             ) : (
               // Otherwise, show placeholder
-              <span style={{ fontStyle: 'italic' }}>Tự động tính sau khi lưu buổi học</span>
+              <span style={{ fontStyle: 'italic' }}>Click để nhập trợ cấp thủ công</span>
             )}
             {canEditAllowanceManually && lockedAllowance && (
               <span style={{ marginLeft: 'var(--spacing-1)', fontSize: '0.9em', opacity: 0.7 }}>✏️</span>

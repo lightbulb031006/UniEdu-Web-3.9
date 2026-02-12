@@ -201,7 +201,8 @@ router.post('/:id/move-student', authenticate, async (req, res, next) => {
  */
 router.get('/:id/detail-data', authenticate, async (req, res, next) => {
   try {
-    const data = await getClassDetailData(req.params.id);
+    const user = (req as any).user;
+    const data = await getClassDetailData(req.params.id, user);
     res.json(data);
   } catch (error: any) {
     next(error);

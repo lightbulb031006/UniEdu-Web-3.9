@@ -36,17 +36,22 @@ router.get('/', async (req, res, next) => {
 /**
  * POST /api/attendance/session/:sessionId
  * Create or update attendance records for a session
+ * Body: { attendance: [...], skipFinancialProcessing?: boolean }
  */
 router.post('/session/:sessionId', async (req, res, next) => {
   try {
     const { sessionId } = req.params;
-    const { attendance } = req.body;
+    const { attendance, skipFinancialProcessing } = req.body;
 
     if (!Array.isArray(attendance)) {
       return res.status(400).json({ error: 'attendance must be an array' });
     }
 
-    const savedAttendance = await saveAttendanceForSession(sessionId, attendance);
+    const savedAttendance = await saveAttendanceForSession(
+      sessionId, 
+      attendance, 
+      skipFinancialProcessing === true
+    );
     res.json(savedAttendance);
   } catch (error: any) {
     next(error);
