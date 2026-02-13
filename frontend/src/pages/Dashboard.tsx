@@ -1076,7 +1076,7 @@ function Dashboard() {
                       Số dư ít hơn 200.000 đ
                     </div>
                     <ul className="alert-list" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                      {alerts.studentsLowBalance.map((item: any) => (
+                      {(alerts.studentsLowBalance.slice(0, 10) as any[]).map((item: any) => (
                         <li
                           key={item.id}
                           style={{
@@ -1118,6 +1118,11 @@ function Dashboard() {
                           </span>
                         </li>
                       ))}
+                      {alerts.studentsLowBalance.length > 10 && (
+                        <li style={{ padding: 'var(--spacing-2)', color: 'var(--muted)', fontSize: 'var(--font-size-xs)', borderBottom: '1px solid var(--border)', borderLeft: '3px solid #f59e0b' }}>
+                          ... ({alerts.studentsLowBalance.length - 10}+)
+                        </li>
+                      )}
                     </ul>
                   </>
                 )}

@@ -432,7 +432,7 @@ export async function getDashboardData(params: DashboardParams) {
     .filter((item: any) => item.walletBalance > 0 && item.walletBalance < LOW_BALANCE_THRESHOLD)
     .filter((item: any, idx: number, arr: any[]) => arr.findIndex((x) => x.studentId === item.studentId) === idx) // Mỗi học sinh chỉ 1 dòng
     .sort((a: any, b: any) => a.walletBalance - b.walletBalance)
-    .slice(0, 5);
+    .slice(0, 25); // Đủ để hiển thị 10 + "... (X+)" ở frontend
 
   // 3. Pending staff payouts - Group by staff and aggregate from 3 tables
   // Gia sư (màu vàng) + Công việc/Giáo án (màu đỏ) + Bonus (màu xanh)
