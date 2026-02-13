@@ -52,7 +52,14 @@ export interface DashboardData {
       studentId: string;
       studentName: string;
       className: string;
-      remaining: number;
+      walletBalance?: number;
+    }>;
+    studentsLowBalance?: Array<{
+      id: string;
+      studentId: string;
+      studentName: string;
+      className: string;
+      walletBalance: number;
     }>;
     pendingStaffPayouts: Array<{
       staffId: string;

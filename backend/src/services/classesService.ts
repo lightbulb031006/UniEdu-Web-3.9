@@ -30,7 +30,11 @@ export async function getClasses(filters: ClassFilters = {}) {
     let query = supabase.from('classes').select('id, name, type, status, max_students, tuition_per_session, scale_amount, max_allowance_per_session, student_tuition_per_session, tuition_package_total, tuition_package_sessions, schedule, custom_teacher_allowances, teacher_ids, created_at, updated_at');
 
     if (filters.status && filters.status !== 'all') {
-      query = query.eq('status', filters.status);
+      if (filters.status === 'stopped') {
+        query = query.in('status', ['ended', 'paused']);
+      } else {
+        query = query.eq('status', filters.status);
+      }
     }
 
     if (filters.type && filters.type !== 'all') {
@@ -63,8 +67,10 @@ export async function getClasses(filters: ClassFilters = {}) {
           }
         }
       }
+      const apiStatus = cls.status === 'ended' || cls.status === 'paused' ? 'stopped' : (cls.status || 'running');
       return {
         ...cls,
+        status: apiStatus,
         teacher_ids: teacherIds,
       };
     });
@@ -89,6 +95,9 @@ export async function getClassById(id: string, options: { includeTeachers?: bool
     const { data, error } = await supabase.from('classes').select('id, name, type, status, max_students, tuition_per_session, scale_amount, max_allowance_per_session, student_tuition_per_session, tuition_package_total, tuition_package_sessions, schedule, custom_teacher_allowances, teacher_ids, created_at, updated_at').eq('id', id).single();
 
     if (error) {
+      if ((error as any).code === 'PGRST116') {
+        return null;
+      }
       console.error(`[getClassById] Error fetching class ${id}:`, error);
       throw new Error(`Failed to fetch class: ${error.message}`);
     }
@@ -136,6 +145,9 @@ export async function getClassById(id: string, options: { includeTeachers?: bool
       }
     }
     cls.teacher_ids = teacherIds;
+    if (cls.status === 'ended' || cls.status === 'paused') {
+      cls.status = 'stopped';
+    }
 
     // If includeTeachers is true, fetch teacher details
     if (options.includeTeachers && cls.teacher_ids.length > 0) {
@@ -170,9 +182,11 @@ export async function getClassById(id: string, options: { includeTeachers?: bool
   }
 }
 
-export async function createClass(classData: Omit<Class, 'id' | 'teacher_ids'> & { teacherIds?: string[] }) {
-  // Extract teacherIds if provided
-  const { teacherIds, ...classFields } = classData as any;
+export async function createClass(classData: Omit<Class, 'id' | 'teacher_ids'> & { teacherIds?: string[]; teacher_ids?: string[] }) {
+  const payload = classData as any;
+  // Accept both camelCase and snake_case from API
+  const teacherIds = Array.isArray(payload.teacherIds) ? payload.teacherIds : (Array.isArray(payload.teacher_ids) ? payload.teacher_ids : []);
+  const { teacherIds: _ti, teacher_ids: _tid, ...classFields } = payload;
 
   // Generate ID if not provided
   const id = (classData as any).id || `CLS${Date.now()}${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
@@ -204,14 +218,16 @@ export async function createClass(classData: Omit<Class, 'id' | 'teacher_ids'> &
     if (fieldMapping[key] !== undefined) {
       const dbField = fieldMapping[key];
       let value = classFields[key];
-      
+      if (dbField === 'status' && value === 'stopped') {
+        value = 'ended';
+      }
       // Handle empty string for numeric fields - convert to null
-      if ((dbField === 'tuition_package_sessions' || 
-           dbField === 'tuition_package_total' || 
+      if ((dbField === 'tuition_package_sessions' ||
+           dbField === 'tuition_package_total' ||
            dbField === 'student_tuition_per_session' ||
            dbField === 'tuition_per_session' ||
            dbField === 'scale_amount' ||
-           dbField === 'max_allowance_per_session') && 
+           dbField === 'max_allowance_per_session') &&
           value === '') {
         value = null;
       }
@@ -245,9 +261,10 @@ export async function createClass(classData: Omit<Class, 'id' | 'teacher_ids'> &
   const cls = data as any;
 
   // Handle teacher assignments if teacherIds provided
-  if (teacherIds && Array.isArray(teacherIds) && teacherIds.length > 0) {
-    const classTeacherRecords = teacherIds.map((teacherId) => ({
-      id: `CT${Date.now()}${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
+  if (teacherIds.length > 0) {
+    const now = Date.now();
+    const classTeacherRecords = teacherIds.map((teacherId: string, idx: number) => ({
+      id: `CT${now}${idx}${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
       class_id: id,
       teacher_id: teacherId,
     }));
@@ -257,11 +274,14 @@ export async function createClass(classData: Omit<Class, 'id' | 'teacher_ids'> &
     if (ctError) {
       console.error('Failed to create class_teachers records:', ctError);
       // Don't throw - class is already created, just log the error
+    } else {
+      // Ensure denormalized teacher_ids on classes is set (in case DB trigger is missing or delayed)
+      await supabase.from('classes').update({ teacher_ids: teacherIds }).eq('id', id);
     }
   }
 
-  // Fetch the class with teacher relationships
-  return await getClassById(id);
+  // Fetch the class with teachers populated so UI shows them immediately
+  return await getClassById(id, { includeTeachers: true });
 }
 
 export async function updateClass(id: string, classData: Partial<Class> & { teacherIds?: string[]; schedule?: any; customTeacherAllowances?: any }) {
@@ -290,7 +310,9 @@ export async function updateClass(id: string, classData: Partial<Class> & { teac
     if (fieldMapping[key] !== undefined) {
       const dbField = fieldMapping[key];
       let value = classFields[key];
-      
+      if (dbField === 'status' && value === 'stopped') {
+        value = 'ended';
+      }
       // Handle empty string for numeric fields - convert to null
       if ((dbField === 'tuition_package_sessions' || 
            dbField === 'tuition_package_total' || 
@@ -536,6 +558,7 @@ export async function getClassStudentsWithRemainingSessions(classId: string) {
         birth_year: student.birth_year,
         province: student.province,
         status: student.status,
+        wallet_balance: Number(student.wallet_balance ?? 0),
       },
       studentClass: {
         id: sc.id,

@@ -417,12 +417,16 @@ function Classes() {
         categories={categories}
         mode={editingClass ? 'edit' : 'create'}
         onCreateClass={async (data) => {
-          await createClass(data);
-                  }}
-        onSave={async () => {
+          const created = await createClass(data);
+          return created ?? undefined;
+        }}
+        onSave={async (createdClassId?: string) => {
           setShowModal(false);
           refetch();
-                  }}
+          if (createdClassId) {
+            navigate(`/classes/${createdClassId}`);
+          }
+        }}
       />
     </div>
   );

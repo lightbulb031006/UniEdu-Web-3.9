@@ -72,8 +72,8 @@ export async function createCost(costData: Omit<Cost, 'id' | 'created_at' | 'upd
     throw new Error('Category is required');
   }
 
-  if (!Number.isFinite(costData.amount) || costData.amount < 0) {
-    throw new Error('Amount must be a valid positive number');
+  if (!Number.isFinite(costData.amount)) {
+    throw new Error('Amount must be a valid number (có thể dương hoặc âm)');
   }
 
   // Build payload with only required fields first

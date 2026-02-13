@@ -260,31 +260,34 @@ function Dashboard() {
   // Optimistic revenue updates - chỉ cộng/trừ transaction mới, không tính lại từ đầu
   const [revenueAdjustment, setRevenueAdjustment] = useState<number>(0);
 
-  // Listen for wallet transaction events to update revenue optimistically
+  // Khi số dư học sinh thay đổi (topup/loan/refund/...) → xóa cache dashboard để quay lại sẽ refetch bảng gia hạn
+  const invalidateDashboardCacheStorage = useCallback(() => {
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const k = sessionStorage.key(i);
+        if (k && k.startsWith('dashboard-')) keysToRemove.push(k);
+      }
+      keysToRemove.forEach((k) => sessionStorage.removeItem(k));
+    } catch (e) {
+      // Ignore
+    }
+  }, []);
+
+  // Listen for wallet transaction events: xóa cache dashboard (bảng gia hạn refetch khi quay lại) + optimistic revenue nếu topup
   useEffect(() => {
     if (user?.role !== 'admin') return;
 
     const handleWalletTransactionCreated = (event: CustomEvent) => {
       const { type, amount, date } = event.detail || {};
-      
-      // Chỉ cập nhật nếu là topup (cả số dương và số âm đều ảnh hưởng đến doanh thu)
+      // Bất kỳ giao dịch nào ảnh hưởng số dư → xóa cache để dashboard refetch bảng gia hạn khi quay lại
+      invalidateDashboardCacheStorage();
+      // Optimistic doanh thu chỉ cho topup trong range hiện tại
       if (type === 'topup' && amount !== 0) {
-        // Kiểm tra xem transaction có trong range hiện tại không
         const range = getFilterRange(state);
         const transactionDate = new Date(date);
         if (transactionDate >= range.start && transactionDate <= range.end) {
-          // Cộng/trừ transaction mới vào doanh thu hiện tại (optimistic update)
           setRevenueAdjustment((prev) => prev + amount);
-          
-          // Invalidate backend cache để lần sau refetch sẽ có dữ liệu mới
-          // Nhưng không refetch ngay để tránh tính lại từ đầu
-          const cacheKey = `dashboard-${state.filterType}-${state.filterValue}`;
-          try {
-            sessionStorage.removeItem(cacheKey);
-            localStorage.removeItem(cacheKey);
-          } catch (e) {
-            // Ignore storage errors
-          }
         }
       }
     };
@@ -294,7 +297,7 @@ function Dashboard() {
     return () => {
       window.removeEventListener('wallet-transaction-created', handleWalletTransactionCreated as EventListener);
     };
-  }, [user?.role, state]);
+  }, [user?.role, state, invalidateDashboardCacheStorage]);
 
   // Reset revenue adjustment khi filter thay đổi
   useEffect(() => {
@@ -972,8 +975,8 @@ function Dashboard() {
                   display: 'flex',
                   alignItems: 'center',
                   padding: 'var(--spacing-2) var(--spacing-3)',
-                  background: 'linear-gradient(135deg, rgba(251, 191, 36, 0.15) 0%, rgba(251, 191, 36, 0.05) 100%)',
-                  borderBottom: '2px solid rgba(251, 191, 36, 0.3)',
+                  background: 'linear-gradient(135deg, rgba(220, 38, 38, 0.12) 0%, rgba(220, 38, 38, 0.04) 100%)',
+                  borderBottom: '2px solid rgba(220, 38, 38, 0.3)',
                   gap: 'var(--spacing-2)',
                   minHeight: '48px',
                   flexShrink: 0,
@@ -987,11 +990,11 @@ function Dashboard() {
                     width: '28px',
                     height: '28px',
                     borderRadius: 'var(--radius)',
-                    background: 'rgba(251, 191, 36, 0.2)',
+                    background: 'rgba(220, 38, 38, 0.15)',
                     flexShrink: 0,
                   }}
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: '#f59e0b' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: '#dc2626' }}>
                     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
                     <circle cx="9" cy="7" r="4" />
                     <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
@@ -1003,37 +1006,32 @@ function Dashboard() {
                     Học sinh cần gia hạn
                   </span>
                   <span
-                    className="badge badge-warning"
+                    className="badge badge-danger"
                     style={{
                       fontSize: '9px',
                       padding: '1px 5px',
                       borderRadius: 'var(--radius-full)',
                       width: 'fit-content',
-                      background: 'rgba(251, 191, 36, 0.2)',
-                      color: '#92400e',
+                      background: 'rgba(220, 38, 38, 0.15)',
+                      color: '#b91c1c',
                     }}
                   >
-                    {alerts.studentsNeedRenewal?.length || 0} mục
+                    {(alerts.studentsNeedRenewal?.length || 0) + (alerts.studentsLowBalance?.length || 0)} mục
                   </span>
                 </div>
               </div>
-              <div className="alert-body" style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)', minHeight: 0, maxHeight: '200px' }}>
+              <div className="alert-body" style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)', minHeight: 0, maxHeight: '320px' }}>
                 <ul className="alert-list" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
                   {alerts.studentsNeedRenewal && alerts.studentsNeedRenewal.length > 0 ? (
-                    alerts.studentsNeedRenewal.map((item: any) => {
-                      const remaining = item.remaining || 0;
-                      const isZero = remaining === 0;
-                      const isOne = remaining === 1;
-                      const color = isZero ? '#dc2626' : isOne ? '#f59e0b' : 'var(--muted)';
-                      
-                      return (
+                    <>
+                      {(alerts.studentsNeedRenewal.slice(0, 10) as any[]).map((item: any) => (
                         <li
                           key={item.id}
                           style={{
                             padding: 'var(--spacing-2)',
                             borderBottom: '1px solid var(--border)',
                             transition: 'background 0.2s ease',
-                            borderLeft: `3px solid ${color}`,
+                            borderLeft: '3px solid #dc2626',
                           }}
                         >
                           <button
@@ -1042,7 +1040,7 @@ function Dashboard() {
                             style={{
                               background: 'none',
                               border: 'none',
-                              color: color,
+                              color: '#dc2626',
                               cursor: 'pointer',
                               fontWeight: '500',
                               textAlign: 'left',
@@ -1058,14 +1056,71 @@ function Dashboard() {
                             {item.className}
                           </span>
                         </li>
-                      );
-                    })
+                      ))}
+                      {alerts.studentsNeedRenewal.length > 10 && (
+                        <li style={{ padding: 'var(--spacing-2)', color: 'var(--muted)', fontSize: 'var(--font-size-xs)', borderBottom: '1px solid var(--border)', borderLeft: '3px solid #dc2626' }}>
+                          ... ({alerts.studentsNeedRenewal.length - 10}+)
+                        </li>
+                      )}
+                    </>
                   ) : (
-                    <li className="text-muted" style={{ padding: 'var(--spacing-3)', textAlign: 'center' }}>
-                      Không có học sinh cần gia hạn
+                    <li className="text-muted" style={{ padding: 'var(--spacing-2)', textAlign: 'center', fontSize: 'var(--font-size-xs)' }}>
+                      Không có học sinh số dư = 0
                     </li>
                   )}
                 </ul>
+                {/* Số dư dưới 200k - bên dưới bảng học sinh cần gia hạn */}
+                {alerts.studentsLowBalance && alerts.studentsLowBalance.length > 0 && (
+                  <>
+                    <div style={{ padding: 'var(--spacing-2) var(--spacing-3)', borderTop: '1px solid var(--border)', fontSize: 'var(--font-size-xs)', fontWeight: '600', color: '#92400e', background: 'rgba(251, 191, 36, 0.08)' }}>
+                      Số dư ít hơn 200.000 đ
+                    </div>
+                    <ul className="alert-list" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                      {alerts.studentsLowBalance.map((item: any) => (
+                        <li
+                          key={item.id}
+                          style={{
+                            padding: 'var(--spacing-2)',
+                            borderBottom: '1px solid var(--border)',
+                            transition: 'background 0.2s ease',
+                            borderLeft: '3px solid #f59e0b',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 'var(--spacing-2)',
+                          }}
+                        >
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <button
+                              className="alert-link"
+                              onClick={() => item.studentId && navigate(`/students/${item.studentId}`)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#b45309',
+                                cursor: 'pointer',
+                                fontWeight: '500',
+                                textAlign: 'left',
+                                padding: 0,
+                                margin: 0,
+                                width: '100%',
+                                fontSize: 'var(--font-size-sm)',
+                              }}
+                            >
+                              {item.studentName}
+                            </button>
+                            <span className="alert-meta" style={{ display: 'block', marginTop: 'var(--spacing-1)', color: 'var(--muted)', fontSize: 'var(--font-size-xs)' }}>
+                              {item.className}
+                            </span>
+                          </div>
+                          <span style={{ flexShrink: 0, fontSize: 'var(--font-size-xs)', color: '#92400e', whiteSpace: 'nowrap' }}>
+                            Còn {typeof item.walletBalance === 'number' ? item.walletBalance.toLocaleString('vi-VN') : '0'} đồng
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
               </div>
             </div>
 

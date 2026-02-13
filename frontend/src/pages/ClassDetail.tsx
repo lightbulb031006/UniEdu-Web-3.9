@@ -422,6 +422,7 @@ function ClassDetail() {
       return studentsWithRemainingData.map((item) => {
         const student = item.student || {};
         const studentData = item.student || {};
+        const walletBalance = Number(studentData.wallet_balance ?? (studentData as any).walletBalance ?? 0);
         return {
           id: studentData.id,
           fullName: studentData.full_name || '',
@@ -430,7 +431,9 @@ function ClassDetail() {
           status: studentData.status || 'active',
           remainingSessions: item.remainingSessions || item.studentClass?.remaining_sessions || 0,
           totalAttended: item.totalAttended || item.studentClass?.total_attended_sessions || 0,
-          tuitionPerSession: item.tuitionPerSession || 0, // Add tuition per session
+          tuitionPerSession: item.tuitionPerSession || 0,
+          wallet_balance: walletBalance,
+          walletBalance: walletBalance,
         };
       });
     }
@@ -1354,9 +1357,7 @@ function ClassDetail() {
                 {canManageStudents && (
                   <button
                     className="btn btn-primary"
-                    onClick={() => {
-                      // TODO: Open add student modal
-                    }}
+                    onClick={() => setAddStudentModalOpen(true)}
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--spacing-1)' }}
                   >
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -2409,7 +2410,6 @@ function ClassDetail() {
           setIsEditHeaderTuitionFeeManuallyEdited(false);
         }}
         size="md"
-        closeOnBackdropClick={false}
         headerExtra={
           isAdmin ? (
             isEditingEditHeaderTuitionFee ? (
@@ -3250,15 +3250,14 @@ function AddSessionModal({
     const currentStatus = attendance[studentId]?.status || 'absent';
     const nextStatus = currentStatus === 'present' ? 'excused' : currentStatus === 'excused' ? 'absent' : 'present';
     
-    // Check if trying to set to "excused" when student has no remaining sessions and no wallet balance
-    // According to requirements: "Nếu số dư = 0 và số buổi còn lại = 0 → không cho chọn trạng thái Phép"
+    // Check if trying to set to "excused" when student has no wallet balance
+    // Cho phép chọn Phép khi số dư > 0 (số buổi còn lại không cần dương)
     if (nextStatus === 'excused') {
-      const remainingSessions = (student as any).remainingSessions || 0;
       const walletBalance = (student as any).wallet_balance || (student as any).walletBalance || 0;
-    
-      if (remainingSessions === 0 && walletBalance === 0) {
+
+      if (walletBalance <= 0) {
         // Cannot select "excused" - show error and skip to absent
-        toast.error('Không thể chọn "Phép" khi học sinh không còn số buổi và số dư = 0');
+        toast.error('Không thể chọn "Phép" khi số dư = 0');
         // Skip excused status - toggle twice to go from present → absent
         if (currentStatus === 'present') {
           baseToggleAttendance(studentId); // present → excused
@@ -3266,14 +3265,14 @@ function AddSessionModal({
         } else {
           // If already absent, just go to present
           baseToggleAttendance(studentId);
-    }
+        }
         return;
       }
     }
-    
+
     baseToggleAttendance(studentId);
   }, [attendance, students, baseToggleAttendance]);
-  
+
   // Get attendance summary for display
   const attendanceSummary = useMemo(() => getAttendanceSummary(), [attendance, getAttendanceSummary]);
   
@@ -3836,15 +3835,14 @@ function EditSessionModal({
     const currentStatus = attendance[studentId]?.status || 'absent';
     const nextStatus = currentStatus === 'present' ? 'excused' : currentStatus === 'excused' ? 'absent' : 'present';
     
-    // Check if trying to set to "excused" when student has no remaining sessions and no wallet balance
-    // According to requirements: "Nếu số dư = 0 và số buổi còn lại = 0 → không cho chọn trạng thái Phép"
+    // Check if trying to set to "excused" when student has no wallet balance
+    // Cho phép chọn Phép khi số dư > 0 (số buổi còn lại không cần dương)
     if (nextStatus === 'excused') {
-      const remainingSessions = (student as any).remainingSessions || 0;
       const walletBalance = (student as any).wallet_balance || (student as any).walletBalance || 0;
-      
-      if (remainingSessions === 0 && walletBalance === 0) {
+
+      if (walletBalance <= 0) {
         // Cannot select "excused" - show error and skip to absent
-        toast.error('Không thể chọn "Phép" khi học sinh không còn số buổi và số dư = 0');
+        toast.error('Không thể chọn "Phép" khi số dư = 0');
         // Skip excused status - toggle twice to go from present → absent
         if (currentStatus === 'present') {
           baseToggleAttendance(studentId); // present → excused
@@ -3856,7 +3854,7 @@ function EditSessionModal({
         return;
       }
     }
-    
+
     baseToggleAttendance(studentId);
   }, [attendance, students, baseToggleAttendance]);
 
@@ -5210,10 +5208,10 @@ export function EditClassModal({
   teachers: any[];
   classTeachers?: any[];
   categories: any[];
-  onSave: () => void;
+  onSave: (createdClassId?: string) => void;
   onOpenTeacherModal?: () => void;
   mode?: 'create' | 'edit';
-  onCreateClass?: (data: any) => Promise<void>;
+  onCreateClass?: (data: any) => Promise<{ id: string } | void>;
 }) {
   // Removed excessive logging to prevent re-render loops
   
@@ -5447,21 +5445,11 @@ export function EditClassModal({
       }
 
       if (mode === 'create' && onCreateClass) {
-        await onCreateClass(classDataToSave);
-        // Record action history for create
-        try {
-          await recordAction({
-            entityType: 'class',
-            entityId: '', // Will be set after creation
-            actionType: 'create',
-            beforeValue: null,
-            afterValue: classDataToSave,
-            description: `Tạo lớp học mới "${classDataToSave.name}"`,
-          });
-        } catch (err) {
-          // Silently fail - action history is not critical
-        }
+        const created = await onCreateClass(classDataToSave);
+        // Skip recordAction for create: entity_id is required by DB and we don't have the new class id yet
         toast.success('Đã thêm lớp học mới');
+        onSave((created as any)?.id);
+        return;
       } else if (mode === 'edit' && classData) {
         const oldClassData = { ...classData };
         await updateClass(classData.id, classDataToSave);
@@ -5489,7 +5477,7 @@ export function EditClassModal({
         }
         toast.success('Đã cập nhật lớp học');
       }
-      
+
       onSave();
     } catch (error: any) {
       toast.error('Không thể lưu lớp học: ' + (error.response?.data?.error || error.message));

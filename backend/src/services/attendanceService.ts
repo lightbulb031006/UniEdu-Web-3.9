@@ -411,9 +411,9 @@ export async function processAttendanceFinancials(
     const walletBalance = Number(student.wallet_balance || 0);
     const loanBalance = Number(student.loan_balance || 0);
 
-    // Validation: Cannot select "excused" if walletBalance === 0 and remainingSessions === 0
-    if (status === 'excused' && remainingSessions === 0 && walletBalance === 0) {
-      throw new Error(`Không thể chọn trạng thái "Phép" cho học sinh khi số dư = 0 và số buổi còn lại = 0`);
+    // Validation: Cannot select "excused" if walletBalance <= 0 (số buổi còn lại không cần dương)
+    if (status === 'excused' && walletBalance <= 0) {
+      throw new Error(`Không thể chọn trạng thái "Phép" cho học sinh khi số dư = 0`);
     }
 
     // Process financial deductions based on attendance status
@@ -441,7 +441,7 @@ export async function processAttendanceFinancials(
             type: 'extend',
             amount: -studentTuitionPerSession,
             date: new Date().toISOString().split('T')[0],
-            note: `Gia hạn buổi học (Vắng) [Session: ${sessionId}]: Trừ ${formatAmount(studentTuitionPerSession)}đ, Số dư: ${formatAmount(walletBalance)}đ → ${formatAmount(walletBalance - studentTuitionPerSession)}đ`,
+            note: `Gia hạn buổi học [${sessionId}]: -${formatAmount(studentTuitionPerSession)}đ. SD: ${formatAmount(walletBalance)}đ → ${formatAmount(newWalletBalance)}đ`,
           });
         } else {
           // Deduct partial amount (use all remaining wallet balance)
@@ -459,7 +459,7 @@ export async function processAttendanceFinancials(
             type: 'extend',
             amount: -walletBalance,
             date: new Date().toISOString().split('T')[0],
-            note: `Gia hạn buổi học (Vắng - dùng hết số dư) [Session: ${sessionId}]: Trừ ${formatAmount(walletBalance)}đ, Số dư: ${formatAmount(walletBalance)}đ → ${formatAmount(0)}đ`,
+            note: `Gia hạn buổi học [${sessionId}]: -${formatAmount(walletBalance)}đ. SD: ${formatAmount(walletBalance)}đ → 0đ`,
           });
         }
         // Note: For absent, if wallet balance is insufficient, we don't add to loan
@@ -483,7 +483,6 @@ export async function processAttendanceFinancials(
               .eq('id', student_id);
 
             // Create wallet transaction with detailed note (like bank statement)
-            const statusLabel = status === 'present' ? 'Học' : 'Phép';
             const formatAmount = (amt: number) => amt.toLocaleString('vi-VN');
             await supabase.from('wallet_transactions').insert({
               id: `WTX${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -491,7 +490,7 @@ export async function processAttendanceFinancials(
               type: 'extend',
               amount: -studentTuitionPerSession,
               date: new Date().toISOString().split('T')[0],
-              note: `Gia hạn buổi học (${statusLabel}) [Session: ${sessionId}]: Trừ ${formatAmount(studentTuitionPerSession)}đ, Số dư: ${formatAmount(walletBalance)}đ → ${formatAmount(newWalletBalance)}đ`,
+              note: `Gia hạn buổi học [${sessionId}]: -${formatAmount(studentTuitionPerSession)}đ. SD: ${formatAmount(walletBalance)}đ → ${formatAmount(newWalletBalance)}đ`,
             });
           } else {
             // Add to loan
@@ -509,7 +508,6 @@ export async function processAttendanceFinancials(
 
             // Create wallet transaction for loan with detailed note (like bank statement)
             if (walletBalance > 0) {
-              const statusLabel = status === 'present' ? 'Học' : 'Phép';
               const formatAmount = (amt: number) => amt.toLocaleString('vi-VN');
               await supabase.from('wallet_transactions').insert({
                 id: `WTX${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -517,11 +515,10 @@ export async function processAttendanceFinancials(
                 type: 'extend',
                 amount: -walletBalance,
                 date: new Date().toISOString().split('T')[0],
-                note: `Ghi nợ buổi học (${statusLabel}) [Session: ${sessionId}]: Trừ ${formatAmount(walletBalance)}đ, Số dư: ${formatAmount(walletBalance)}đ → ${formatAmount(newWalletBalance)}đ`,
+                note: `Gia hạn buổi học [${sessionId}]: -${formatAmount(walletBalance)}đ. SD: ${formatAmount(walletBalance)}đ → 0đ`,
               });
             }
 
-            const statusLabel = status === 'present' ? 'Học' : 'Phép';
             const formatAmount = (amt: number) => amt.toLocaleString('vi-VN');
             await supabase.from('wallet_transactions').insert({
               id: `WTX${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
@@ -529,7 +526,7 @@ export async function processAttendanceFinancials(
               type: 'loan',
               amount: debtAmount,
               date: new Date().toISOString().split('T')[0],
-              note: `Ghi nợ buổi học (${statusLabel}) [Session: ${sessionId}]: Ghi nợ ${formatAmount(debtAmount)}đ, Nợ: ${formatAmount(loanBalance)}đ → ${formatAmount(newLoanBalance)}đ`,
+              note: `Ứng tiền [${sessionId}]: +${formatAmount(debtAmount)}đ. SD: ${formatAmount(0)}đ → ${formatAmount(0)}đ`,
             });
           }
         }

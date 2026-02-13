@@ -124,14 +124,23 @@ export async function createWalletTransaction(transactionData: Omit<WalletTransa
       break;
   }
   
-  // Format note with before/after balances if note is empty or doesn't contain "→" (indicating it's not already formatted)
-  let formattedNote = transactionData.note || '';
+  // Format note with before/after balances
+  // Format: [User note (if any)]. Hành động: +/-số tiền. SD: Ađ → Bđ
+  const userNote = (transactionData.note || '').trim();
   const formatAmount = (amt: number) => amt.toLocaleString('vi-VN');
   
-  // Auto-format note if it's empty or doesn't contain "→" (not already formatted)
-  if (!formattedNote || !formattedNote.includes('→')) {
+  // Check if note is already formatted (contains "SD:" or "→")
+  const isAlreadyFormatted = userNote.includes('SD:') || userNote.includes('→');
+  
+  let formattedNote = '';
+  
+  if (isAlreadyFormatted) {
+    // Use note as-is if already formatted
+    formattedNote = userNote;
+  } else {
+    // Build formatted note
     const transactionTypeLabels: Record<string, string> = {
-      topup: amount > 0 ? 'Nạp tiền' : 'Trừ tiền',
+      topup: 'Nạp tiền',
       loan: 'Ứng tiền',
       advance: 'Ứng tiền',
       repayment: 'Thanh toán nợ',
@@ -140,19 +149,36 @@ export async function createWalletTransaction(transactionData: Omit<WalletTransa
     };
     
     const typeLabel = transactionTypeLabels[transactionData.type] || transactionData.type;
-    const action = amount > 0 ? 'Cộng' : 'Trừ';
+    const sign = amount >= 0 ? '+' : '-';
     const amountText = formatAmount(absoluteAmount);
     
-    if (transactionData.type === 'loan' || transactionData.type === 'advance') {
-      if (amount > 0) {
-        formattedNote = `${typeLabel}: ${action} ${amountText}đ, Số dư: ${formatAmount(currentWalletBalance)}đ → ${formatAmount(newWalletBalance)}đ, Nợ: ${formatAmount(currentLoanBalance)}đ → ${formatAmount(newLoanBalance)}đ`;
-      } else {
-        formattedNote = `${typeLabel}: ${action} ${amountText}đ, Số dư: ${formatAmount(currentWalletBalance)}đ → ${formatAmount(newWalletBalance)}đ, Nợ: ${formatAmount(currentLoanBalance)}đ → ${formatAmount(newLoanBalance)}đ`;
+    // Extract session ID from user note if it's an extend transaction
+    // Support formats: [Session: SES...] or [SES...]
+    let sessionIdPart = '';
+    let cleanUserNote = userNote;
+    if (transactionData.type === 'extend' && userNote) {
+      // Try to extract session ID from note (format: [Session: SES...] or [SES...])
+      const sessionMatch = userNote.match(/\[(?:Session:\s*)?([A-Z0-9]+)\]/i);
+      if (sessionMatch) {
+        sessionIdPart = ` [${sessionMatch[1]}]`;
+        // Remove session ID pattern from user note
+        cleanUserNote = userNote.replace(/\[(?:Session:\s*)?[A-Z0-9]+\]/gi, '').trim();
+        // Remove extra spaces and clean up
+        cleanUserNote = cleanUserNote.replace(/\s+/g, ' ').trim();
       }
-    } else if (transactionData.type === 'repayment') {
-      formattedNote = `${typeLabel}: ${action} ${amountText}đ, Số dư: ${formatAmount(currentWalletBalance)}đ → ${formatAmount(newWalletBalance)}đ, Nợ: ${formatAmount(currentLoanBalance)}đ → ${formatAmount(newLoanBalance)}đ`;
+    }
+    
+    // Build action part
+    const actionPart = `${typeLabel}${sessionIdPart}: ${sign}${amountText}đ`;
+    
+    // Build balance part
+    const balancePart = `SD: ${formatAmount(currentWalletBalance)}đ → ${formatAmount(newWalletBalance)}đ`;
+    
+    // Combine: [User note]. Hành động: +/-số tiền. SD: Ađ → Bđ
+    if (cleanUserNote) {
+      formattedNote = `${cleanUserNote}. ${actionPart}. ${balancePart}`;
     } else {
-      formattedNote = `${typeLabel}: ${action} ${amountText}đ, Số dư: ${formatAmount(currentWalletBalance)}đ → ${formatAmount(newWalletBalance)}đ`;
+      formattedNote = `${actionPart}. ${balancePart}`;
     }
   }
 
@@ -168,14 +194,13 @@ export async function createWalletTransaction(transactionData: Omit<WalletTransa
     throw new Error(`Failed to create wallet transaction: ${error.message}`);
   }
 
-  // Invalidate dashboard cache if this is a revenue transaction (only topup, not extend/refund)
-  if (transactionData.type === 'topup' && amount !== 0) {
-    // Invalidate dashboard cache in background (don't wait)
-    // Chỉ tính topup thực sự vào doanh thu, không tính extend/refund
-    import('./dashboardService').then(({ invalidateDashboardCache }) => {
+  // Invalidate dashboard cache: số dư thay đổi → bảng gia hạn cần refetch; topup còn ảnh hưởng doanh thu theo tháng
+  import('./dashboardService').then(({ invalidateAllDashboardCache, invalidateDashboardCache }) => {
+    invalidateAllDashboardCache().catch(() => {});
+    if (transactionData.type === 'topup' && amount !== 0) {
       invalidateDashboardCache(transactionData.date || new Date().toISOString().split('T')[0]).catch(() => {});
-    }).catch(() => {});
-  }
+    }
+  }).catch(() => {});
 
   // Update student wallet_balance and loan_balance based on transaction type
   try {

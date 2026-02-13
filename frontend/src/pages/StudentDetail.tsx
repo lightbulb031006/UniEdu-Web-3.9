@@ -1521,6 +1521,9 @@ function RefundSessionsModal({
     try {
       await refundStudentSessions(studentId, classId, roundedSessions, unitPrice);
       toast.success('Đã hoàn trả học phí');
+      window.dispatchEvent(new CustomEvent('wallet-transaction-created', {
+        detail: { type: 'refund', amount: roundedSessions * unitPrice, date: new Date().toISOString().split('T')[0] },
+      }));
       onSuccess();
     } catch (error: any) {
       toast.error('Không thể hoàn trả học phí: ' + (error.response?.data?.error || error.message));
@@ -1652,6 +1655,11 @@ function RemoveClassModal({
     setLoading(true);
     try {
       await removeStudentClass(studentId, classId, refundAmount > 0);
+      if (refundAmount > 0) {
+        window.dispatchEvent(new CustomEvent('wallet-transaction-created', {
+          detail: { type: 'refund', amount: refundAmount, date: new Date().toISOString().split('T')[0] },
+        }));
+      }
       onSuccess();
     } catch (error: any) {
       alert('Không thể xóa lớp khỏi học sinh: ' + (error.response?.data?.error || error.message));
@@ -1719,6 +1727,7 @@ function TopUpModal({
   onSuccess: () => void;
   onClose: () => void;
 }) {
+  const [note, setNote] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [amount, setAmount] = useState<number>(0);
 
@@ -1736,7 +1745,7 @@ function TopUpModal({
         studentId,
         type: 'topup',
         amount: amount,
-        note: '',
+        note: note.trim() || '',
         date: new Date().toISOString().split('T')[0],
       });
       
@@ -1778,6 +1787,24 @@ function TopUpModal({
         <div style={{ marginTop: 'var(--spacing-1)', fontSize: '0.875rem', color: 'var(--muted)' }}>
           Có thể nhập số dương (nạp tiền) hoặc số âm (trừ tiền).
         </div>
+      </div>
+      <div style={{ marginBottom: 'var(--spacing-4)' }}>
+        <label style={{ display: 'block', marginBottom: 'var(--spacing-2)', fontWeight: '500' }}>
+          Ghi chú
+        </label>
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Ghi chú về giao dịch (tuỳ chọn)"
+          rows={3}
+          style={{
+            width: '100%',
+            padding: 'var(--spacing-2)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius)',
+            resize: 'vertical',
+          }}
+        />
       </div>
       <div style={{ display: 'flex', gap: 'var(--spacing-2)', justifyContent: 'flex-end' }}>
         <button type="button" className="btn" onClick={onClose} disabled={loading}>

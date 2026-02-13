@@ -83,24 +83,17 @@ export async function cleanupExpiredCache(): Promise<void> {
 
 /**
  * Invalidate dashboard cache for a specific date range
- * Used when wallet transactions are created/updated
+ * Used when wallet transactions are created/updated (revenue)
  */
 export async function invalidateDashboardCache(date: string): Promise<void> {
   try {
-    // Parse date to get month, quarter, and year
     const transactionDate = new Date(date);
     const year = transactionDate.getFullYear();
     const month = transactionDate.getMonth() + 1;
     const quarter = Math.floor((month - 1) / 3) + 1;
-    
-    // Invalidate cache for month
     const monthKey = `dashboard:month:${year}-${String(month).padStart(2, '0')}`;
-    // Invalidate cache for quarter
     const quarterKey = `dashboard:quarter:${year}-Q${quarter}`;
-    // Invalidate cache for year
     const yearKey = `dashboard:year:${year}`;
-    
-    // Delete all matching cache entries
     await Promise.all([
       supabase.from('dashboard_cache').delete().eq('cache_key', monthKey),
       supabase.from('dashboard_cache').delete().eq('cache_key', quarterKey),
@@ -108,6 +101,23 @@ export async function invalidateDashboardCache(date: string): Promise<void> {
     ]);
   } catch (error) {
     console.error('[Dashboard Cache] Error invalidating cache:', error);
+  }
+}
+
+/**
+ * Invalidate all dashboard cache entries (e.g. khi số dư học sinh thay đổi → bảng gia hạn cần refetch)
+ */
+export async function invalidateAllDashboardCache(): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('dashboard_cache')
+      .delete()
+      .like('cache_key', 'dashboard:%');
+    if (error) {
+      console.error('[Dashboard Cache] Error invalidating all:', error);
+    }
+  } catch (error) {
+    console.error('[Dashboard Cache] Error invalidating all cache:', error);
   }
 }
 
@@ -384,28 +394,47 @@ export async function getDashboardData(params: DashboardParams) {
   const totalPendingAllowance = pendingTeacherAllowance + pendingLessonPlanAllowance + pendingCskhAllowance + pendingBonusAllowance;
 
   // Calculate alerts
-  // 1. Students need renewal (students with remainingSessions = 0 or 1)
-  // remainingSessions = 0: màu đỏ, remainingSessions = 1: màu vàng
+  // 1. Students need renewal: chỉ cảnh báo học sinh có số dư = 0 (màu đỏ)
   const studentsNeedRenewal = studentClasses
     .filter((sc: any) => (sc.status || 'active') !== 'inactive')
     .map((sc: any) => {
       const student = students.find((s: any) => s.id === sc.student_id);
       const classItem = classes.find((c: any) => c.id === sc.class_id);
-      // Get remaining sessions from student_classes table
-      const remaining = Number(sc.remaining_sessions || sc.remainingSessions || 0);
+      const walletBalance = Number(student?.wallet_balance ?? student?.walletBalance ?? 0);
       return {
         id: sc.id,
         studentId: sc.student_id,
         studentName: student?.full_name || student?.fullName || student?.id || '',
         className: classItem?.name || sc.class_id || '',
-        remaining: remaining,
+        walletBalance,
       };
     })
-    .filter((item: any) => item.remaining <= 1) // Chỉ lấy học sinh có số buổi <= 1
-    .sort((a: any, b: any) => a.remaining - b.remaining) // Sắp xếp: 0 trước, 1 sau
-    .slice(0, 10); // Limit to 10 for display
+    .filter((item: any) => item.walletBalance <= 0) // Chỉ lấy học sinh có số dư <= 0
+    .filter((item: any, idx: number, arr: any[]) => arr.findIndex((x) => x.studentId === item.studentId) === idx) // Mỗi học sinh chỉ 1 dòng
+    .slice(0, 20); // Limit for display
 
-  // 2. Pending staff payouts - Group by staff and aggregate from 3 tables
+  // 2. Students with lowest balance under 200k (màu vàng) - top 5, hiển thị "Còn A đồng"
+  const LOW_BALANCE_THRESHOLD = 200000;
+  const studentsLowBalance = studentClasses
+    .filter((sc: any) => (sc.status || 'active') !== 'inactive')
+    .map((sc: any) => {
+      const student = students.find((s: any) => s.id === sc.student_id);
+      const classItem = classes.find((c: any) => c.id === sc.class_id);
+      const walletBalance = Number(student?.wallet_balance ?? student?.walletBalance ?? 0);
+      return {
+        id: sc.id,
+        studentId: sc.student_id,
+        studentName: student?.full_name || student?.fullName || student?.id || '',
+        className: classItem?.name || sc.class_id || '',
+        walletBalance,
+      };
+    })
+    .filter((item: any) => item.walletBalance > 0 && item.walletBalance < LOW_BALANCE_THRESHOLD)
+    .filter((item: any, idx: number, arr: any[]) => arr.findIndex((x) => x.studentId === item.studentId) === idx) // Mỗi học sinh chỉ 1 dòng
+    .sort((a: any, b: any) => a.walletBalance - b.walletBalance)
+    .slice(0, 5);
+
+  // 3. Pending staff payouts - Group by staff and aggregate from 3 tables
   // Gia sư (màu vàng) + Công việc/Giáo án (màu đỏ) + Bonus (màu xanh)
   const pendingStaffMap = new Map<string, any>();
 
@@ -626,6 +655,7 @@ export async function getDashboardData(params: DashboardParams) {
     },
     alerts: {
       studentsNeedRenewal,
+      studentsLowBalance,
       pendingStaffPayouts,
       classesWithoutSurvey: {
         maxTestNumber,
