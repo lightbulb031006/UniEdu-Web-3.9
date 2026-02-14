@@ -1,6 +1,6 @@
 {
   "name": "uniedu-backend",
-  "version": "4.3.1",
+  "version": "4.3.2",
   "description": "UniEdu Backend API - Secure REST API for education management",
   "main": "dist/app.js",
   "scripts": {
@@ -38,4 +38,3 @@
     "nodemon": "^3.0.2"
   }
 }
-
