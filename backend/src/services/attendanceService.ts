@@ -526,7 +526,7 @@ export async function processAttendanceFinancials(
               type: 'loan',
               amount: debtAmount,
               date: new Date().toISOString().split('T')[0],
-              note: `Ứng tiền [${sessionId}]: +${formatAmount(debtAmount)}đ. SD: ${formatAmount(0)}đ → ${formatAmount(0)}đ`,
+              note: `Ứng tiền [${sessionId}]: +${formatAmount(debtAmount)}đ. Nợ: ${formatAmount(loanBalance)}đ → ${formatAmount(newLoanBalance)}đ`,
             });
           }
         }

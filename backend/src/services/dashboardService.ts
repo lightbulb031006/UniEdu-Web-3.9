@@ -251,9 +251,22 @@ export async function getDashboardData(params: DashboardParams) {
     return sum + loanBalance;
   }, 0);
 
+  // Tổng số dư hiện tại của tất cả học sinh (Nợ học phí chưa dạy = tiền còn trong ví, chưa trừ cho buổi đã học)
+  const totalWalletBalance = students.reduce((sum: number, student: any) => {
+    const balance = Number(student.wallet_balance ?? student.walletBalance ?? 0);
+    return sum + balance;
+  }, 0);
+
+  // Buổi đã dạy trong kỳ
+  const sessionsInRange = sessions.filter((session: any) => isWithinRange(session.date, range));
+  // Học phí đã học: Tổng học phí của tất cả buổi đã học trong kỳ (theo tuition_fee từng buổi)
+  const tuitionTaught = sessionsInRange.reduce((sum: number, session: any) => {
+    const fee = Number(session.tuition_fee ?? session.tuitionFee ?? 0) || 0;
+    return sum + fee;
+  }, 0);
+
   // Calculate staff costs (giống backup)
   // - Gia sư: Tổng số tiền của tất cả các buổi dạy trong tháng
-  const sessionsInRange = sessions.filter((session: any) => isWithinRange(session.date, range));
   const tutorCost = sessionsInRange.reduce((sum: number, session: any) => {
     const allowance = Number(session.allowance_amount || session.allowanceAmount || 0);
     return sum + allowance;
@@ -558,7 +571,23 @@ export async function getDashboardData(params: DashboardParams) {
       };
     });
 
-  // 4. Finance requests (loans and refunds)
+  // 4. Chưa thu học phí: học sinh có số nợ (loan_balance) > 0, format giống studentsLowBalance
+  const studentsWithDebt = students
+    .filter((s: any) => Number(s.loan_balance || s.loanBalance || 0) > 0)
+    .map((s: any) => {
+      const sc = studentClasses.find((sc: any) => sc.student_id === s.id && (sc.status || 'active') !== 'inactive');
+      const classItem = classes.find((c: any) => c.id === sc?.class_id);
+      return {
+        id: s.id,
+        studentId: s.id,
+        studentName: s.full_name || s.fullName || s.id || '',
+        className: classItem?.name || sc?.class_id || '-',
+        loanBalance: Number(s.loan_balance || s.loanBalance || 0),
+      };
+    })
+    .sort((a: any, b: any) => b.loanBalance - a.loanBalance)
+    .slice(0, 25);
+
   const loanRequests = students
     .filter((s: any) => Number(s.loan_balance || s.loanBalance || 0) > 0)
     .map((s: any) => ({
@@ -574,8 +603,10 @@ export async function getDashboardData(params: DashboardParams) {
       amount: Number(p.amount || 0),
     }));
 
-  // Lợi nhuận ròng: Doanh Thu - (Chi phí Nhân sự + Chi phí Khác)
-  const netProfit = totalRevenue - (totalStaffCost + costsInRange);
+  // Nợ học phí chưa dạy = tổng số dư hiện tại của tất cả học sinh
+  const tuitionDebtNotTaught = totalWalletBalance;
+  // Lợi nhuận: Học phí đã học - Chi phí Nhân sự - Chi phí Khác
+  const netProfit = tuitionTaught - (totalStaffCost + costsInRange);
 
   // Get unique cost categories for note
   const costCategories = costs
@@ -586,20 +617,32 @@ export async function getDashboardData(params: DashboardParams) {
     .map((cost: any) => cost.category || 'Khác');
   const uniqueCategories = Array.from(new Set(costCategories)).slice(0, 3).join(', ');
 
-  // Build finance report (giống backup)
+  // Build finance report (Version 4: Tổng nạp, Học phí đã học, Nợ học phí chưa dạy, Chưa thu, ...)
   const financeReport = {
     rows: [
       {
         key: 'revenue',
-        label: 'Doanh Thu',
+        label: 'Tổng nạp',
         amount: totalRevenue,
-        note: 'Tổng doanh thu đã thu',
+        note: 'Tổng số tiền học sinh đã nạp',
+      },
+      {
+        key: 'tuitionTaught',
+        label: 'Học phí đã học',
+        amount: tuitionTaught,
+        note: 'Tổng học phí các buổi đã học',
+      },
+      {
+        key: 'tuitionDebtNotTaught',
+        label: 'Nợ học phí chưa dạy',
+        amount: tuitionDebtNotTaught,
+        note: 'Tổng số dư hiện tại của tất cả học sinh',
       },
       {
         key: 'pending',
-        label: 'Chưa Thu',
+        label: 'Chưa thu',
         amount: outstandingTuition,
-        note: 'Tổng số tiền học phí chưa thu',
+        note: 'Tổng nợ học phí của học sinh',
       },
       {
         key: 'pendingAllowances',
@@ -632,9 +675,15 @@ export async function getDashboardData(params: DashboardParams) {
       },
       {
         key: 'netProfit',
-        label: 'Lợi nhuận ròng',
+        label: 'Lợi nhuận',
         amount: netProfit,
-        note: 'Doanh Thu - (Chi phí Nhân sự + Chi phí Khác)',
+        note: 'Học phí đã học - Chi phí Nhân sự - Chi phí Khác',
+      },
+      {
+        key: 'totalReceived',
+        label: 'Tổng nhận',
+        amount: totalRevenue - tuitionDebtNotTaught - totalStaffCost - costsInRange,
+        note: 'Tổng nạp - Nợ học phí chưa dạy - Chi phí nhân sự - Chi phí khác',
       },
     ],
   };
@@ -647,6 +696,10 @@ export async function getDashboardData(params: DashboardParams) {
       activeStudents: students.filter((student: any) => (student.status || 'active') === 'active').length,
       totalTeachers: teachers.length,
       revenue: totalRevenue,
+      totalDeposits: totalRevenue,
+      tuitionTaught,
+      tuitionDebtNotTaught,
+      profit: netProfit,
       uncollected: outstandingTuition,
     },
     financeReport,
@@ -656,6 +709,7 @@ export async function getDashboardData(params: DashboardParams) {
     alerts: {
       studentsNeedRenewal,
       studentsLowBalance,
+      studentsWithDebt,
       pendingStaffPayouts,
       classesWithoutSurvey: {
         maxTestNumber,

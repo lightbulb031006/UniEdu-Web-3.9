@@ -11,6 +11,7 @@ export interface LessonPlan {
   level?: string;
   lesson_name: string;
   original_title?: string;
+  original_link?: string;
   cost?: number;
   date: string;
   status?: 'paid' | 'pending' | 'deposit';
@@ -32,6 +33,7 @@ export interface LessonPlanFilters {
 export interface LessonPlanFormData {
   lesson_name: string;
   original_title?: string;
+  original_link?: string;
   tag?: string;
   level?: string;
   cost?: number;
@@ -53,6 +55,7 @@ function normalizeLessonPlan(plan: any): LessonPlan {
     level: plan.level || undefined,
     lesson_name: plan.lesson_name || '',
     original_title: plan.original_title || undefined,
+    original_link: plan.original_link || undefined,
     cost: plan.cost || 0,
     date: plan.date || '',
     status: plan.status || 'pending',

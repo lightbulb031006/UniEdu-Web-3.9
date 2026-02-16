@@ -355,6 +355,7 @@ function LessonPlans() {
   const [formData, setFormData] = useState<LessonPlanFormData>({
     lesson_name: '',
     original_title: '',
+    original_link: '',
     tag: '',
     level: '',
     cost: 0,
@@ -508,6 +509,7 @@ function LessonPlans() {
       setFormData({
         lesson_name: plan.lesson_name || '',
         original_title: plan.original_title || '',
+        original_link: plan.original_link || '',
         tag: plan.tag || '',
         level: plan.level || '',
         cost: plan.cost || 0,
@@ -522,6 +524,7 @@ function LessonPlans() {
       setFormData({
         lesson_name: '',
         original_title: '',
+        original_link: '',
         tag: '',
         level: '',
         cost: 0,
@@ -997,6 +1000,20 @@ function LessonPlans() {
               value={formData.original_title || ''}
               onChange={(e) => setFormData({ ...formData, original_title: e.target.value })}
               placeholder="Ví dụ: Light - VNOI"
+            />
+          </div>
+
+          <div className="form-group" style={{ marginBottom: 'var(--spacing-4)' }}>
+            <label htmlFor="originalLink" style={{ display: 'block', marginBottom: 'var(--spacing-2)', fontSize: 'var(--font-size-sm)', fontWeight: '500' }}>
+              Link gốc
+            </label>
+            <input
+              id="originalLink"
+              type="url"
+              className="form-control"
+              value={formData.original_link || ''}
+              onChange={(e) => setFormData({ ...formData, original_link: e.target.value })}
+              placeholder="https://..."
             />
           </div>
 
@@ -1749,6 +1766,7 @@ function TasksTab({
   const [addFormData, setAddFormData] = useState<LessonOutputFormData>({
     lesson_name: '',
     original_title: '',
+    original_link: '',
     tag: '',
     level: '',
     date: new Date().toISOString().split('T')[0],
@@ -1934,6 +1952,7 @@ function TasksTab({
       setAddFormData({
         lesson_name: '',
         original_title: '',
+        original_link: '',
         tag: '',
         level: '',
         date: new Date().toISOString().split('T')[0],
@@ -1957,6 +1976,7 @@ function TasksTab({
       setAddFormData({
         lesson_name: editingOutput.lesson_name,
         original_title: editingOutput.original_title || '',
+        original_link: editingOutput.original_link || '',
         tag: editingOutput.tag || '',
         level: editingOutput.level || '',
         date: editingOutput.date,
@@ -2816,6 +2836,17 @@ function TasksTab({
                 )}
               </div>
 
+              <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
+                <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500' }}>Link gốc</label>
+                <input
+                  type="url"
+                  className="form-control"
+                  placeholder="https://..."
+                  value={addFormData.original_link || ''}
+                  onChange={(e) => setAddFormData({ ...addFormData, original_link: e.target.value })}
+                />
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: 'var(--spacing-3)' }}>
                 <div className="form-group">
                   <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500' }}>Tag</label>
@@ -3262,6 +3293,7 @@ function TasksTab({
                     setAddFormData({
                       lesson_name: '',
                       original_title: '',
+                      original_link: '',
                       tag: '',
                       level: '',
                       date: new Date().toISOString().split('T')[0],
@@ -3779,6 +3811,7 @@ function EditOutputModal({
   const [formData, setFormData] = useState<LessonOutputFormData>({
     lesson_name: output?.lesson_name || '',
     original_title: output?.original_title || '',
+    original_link: output?.original_link || '',
     tag: output?.tag || '',
     level: output?.level || '',
     date: output?.date || new Date().toISOString().split('T')[0],
@@ -4053,6 +4086,18 @@ function EditOutputModal({
               ))}
             </div>
           )}
+        </div>
+
+        <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
+          <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500' }}>Link gốc</label>
+          <input
+            type="url"
+            className="form-control"
+            placeholder="https://..."
+            value={formData.original_link || ''}
+            onChange={(e) => setFormData({ ...formData, original_link: e.target.value })}
+            disabled={statusOnlyMode}
+          />
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: 'var(--spacing-3)' }}>

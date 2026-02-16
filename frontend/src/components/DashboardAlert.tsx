@@ -63,6 +63,8 @@ export function DashboardAlert({
         background: 'var(--bg)',
         boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
         minWidth: 0,
+        height: '368px',
+        minHeight: '368px',
       }}
     >
       <div
@@ -111,7 +113,7 @@ export function DashboardAlert({
           </span>
         </div>
       </div>
-      <div className="alert-body" style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)', minHeight: 0, maxHeight: '200px' }}>
+      <div className="alert-body" style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)', minHeight: 0 }}>
         <ul className="alert-list" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
           {items && items.length > 0 ? (
             items.map((item) => (

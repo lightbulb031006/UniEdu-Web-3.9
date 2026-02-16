@@ -13,6 +13,10 @@ export interface DashboardData {
     activeStudents: number;
     totalTeachers: number;
     revenue: number;
+    totalDeposits?: number;
+    tuitionTaught?: number;
+    tuitionDebtNotTaught?: number;
+    profit?: number;
     uncollected: number;
   };
   financeReport: {
@@ -60,6 +64,13 @@ export interface DashboardData {
       studentName: string;
       className: string;
       walletBalance: number;
+    }>;
+    studentsWithDebt?: Array<{
+      id: string;
+      studentId: string;
+      studentName: string;
+      className: string;
+      loanBalance: number;
     }>;
     pendingStaffPayouts: Array<{
       staffId: string;

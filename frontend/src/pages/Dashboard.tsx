@@ -356,12 +356,19 @@ function Dashboard() {
       totalTeachers: 0,
       revenue: 0,
       uncollected: 0,
+      profit: 0,
+      tuitionDebtNotTaught: 0,
     };
     
-    // Áp dụng optimistic revenue adjustment (chỉ cộng/trừ transaction mới)
+    // Áp dụng optimistic revenue adjustment (Tổng nạp + Nợ học phí chưa dạy cộng thêm khi có nạp mới)
+    const adj = revenueAdjustment;
     return {
       ...baseSummary,
-      revenue: baseSummary.revenue + revenueAdjustment,
+      revenue: baseSummary.revenue + adj,
+      totalDeposits: (baseSummary.totalDeposits ?? baseSummary.revenue) + adj,
+      tuitionTaught: baseSummary.tuitionTaught ?? 0,
+      tuitionDebtNotTaught: (baseSummary.tuitionDebtNotTaught ?? 0) + adj,
+      profit: baseSummary.profit ?? 0,
     };
   }, [data?.summary, revenueAdjustment]);
 
@@ -369,13 +376,14 @@ function Dashboard() {
   const financeReport = useMemo(() => {
     const baseReport = data?.financeReport || { rows: [] };
     
-    // Áp dụng optimistic revenue adjustment cho row "Doanh Thu"
+    // Áp dụng optimistic revenue adjustment cho Tổng nạp và Nợ học phí chưa dạy
+    const adj = revenueAdjustment;
     const adjustedRows = baseReport.rows.map((row: any) => {
       if (row.key === 'revenue') {
-        return {
-          ...row,
-          amount: (row.amount || 0) + revenueAdjustment,
-        };
+        return { ...row, amount: (row.amount || 0) + adj };
+      }
+      if (row.key === 'tuitionDebtNotTaught') {
+        return { ...row, amount: (row.amount || 0) + adj };
       }
       return row;
     });
@@ -532,8 +540,10 @@ function Dashboard() {
                   { Metric: 'Tổng lớp học', Value: summary.totalClasses, 'Ghi chú': `${summary.activeClasses} đang hoạt động` },
                   { Metric: 'Học sinh', Value: summary.totalStudents, 'Ghi chú': `${summary.activeStudents} đang học` },
                   { Metric: 'Giáo viên', Value: summary.totalTeachers, 'Ghi chú': 'Đã liên kết tài khoản' },
-                  { Metric: `Doanh thu (${range.label})`, Value: formatCurrencyVND(summary.revenue), 'Ghi chú': 'Tổng doanh thu đã thu' },
-                  { Metric: 'Chưa thu', Value: formatCurrencyVND(summary.uncollected), 'Ghi chú': 'Tổng số tiền học phí chưa thu' },
+                  { Metric: `Tổng nạp (${range.label})`, Value: formatCurrencyVND(summary.revenue), 'Ghi chú': 'Tổng số tiền học sinh đã nạp' },
+                  { Metric: 'Số tiền lãi', Value: formatCurrencyVND(summary.profit ?? 0), 'Ghi chú': 'Học phí đã học − Chi phí nhân sự − Chi phí khác' },
+                  { Metric: 'Nợ học phí chưa dạy', Value: formatCurrencyVND(summary.tuitionDebtNotTaught ?? 0), 'Ghi chú': 'Tổng số dư hiện tại của tất cả học sinh' },
+                  { Metric: 'Chưa thu', Value: formatCurrencyVND(summary.uncollected), 'Ghi chú': 'Tổng nợ học phí của học sinh' },
                 ];
                 const printable = exportRows.map((row) => `${row.Metric}: ${row.Value} (${row['Ghi chú'] || ''})`).join('\n');
                 const win = window.open('', '_blank');
@@ -558,8 +568,10 @@ function Dashboard() {
                   { Metric: 'Tổng lớp học', Value: summary.totalClasses, 'Ghi chú': `${summary.activeClasses} đang hoạt động` },
                   { Metric: 'Học sinh', Value: summary.totalStudents, 'Ghi chú': `${summary.activeStudents} đang học` },
                   { Metric: 'Giáo viên', Value: summary.totalTeachers, 'Ghi chú': 'Đã liên kết tài khoản' },
-                  { Metric: `Doanh thu (${range.label})`, Value: formatCurrencyVND(summary.revenue), 'Ghi chú': 'Tổng doanh thu đã thu' },
-                  { Metric: 'Chưa thu', Value: formatCurrencyVND(summary.uncollected), 'Ghi chú': 'Tổng số tiền học phí chưa thu' },
+                  { Metric: `Tổng nạp (${range.label})`, Value: formatCurrencyVND(summary.revenue), 'Ghi chú': 'Tổng số tiền học sinh đã nạp' },
+                  { Metric: 'Số tiền lãi', Value: formatCurrencyVND(summary.profit ?? 0), 'Ghi chú': 'Học phí đã học − Chi phí nhân sự − Chi phí khác' },
+                  { Metric: 'Nợ học phí chưa dạy', Value: formatCurrencyVND(summary.tuitionDebtNotTaught ?? 0), 'Ghi chú': 'Tổng số dư hiện tại của tất cả học sinh' },
+                  { Metric: 'Chưa thu', Value: formatCurrencyVND(summary.uncollected), 'Ghi chú': 'Tổng nợ học phí của học sinh' },
                 ];
                 const payload = exportRows.map((row) => ({
                   Metric: row.Metric,
@@ -642,19 +654,37 @@ function Dashboard() {
         </div>
 
         <div className="stat-card">
-          <h3 style={{ fontSize: 'var(--font-size-sm)', fontWeight: '500', color: 'var(--muted)', marginBottom: 'var(--spacing-2)' }}>Doanh thu</h3>
+          <h3 style={{ fontSize: 'var(--font-size-sm)', fontWeight: '500', color: 'var(--muted)', marginBottom: 'var(--spacing-2)' }}>Số tiền lãi</h3>
           <div className="value" style={{ fontSize: 'var(--font-size-2xl)', fontWeight: '700', color: 'var(--text)', marginBottom: 'var(--spacing-1)' }}>
             {isLoading ? (
               <div className="skeleton-loading" style={{ height: '32px', width: '120px', borderRadius: '4px' }} />
             ) : (
-              formatCurrencyVND(summary.revenue)
+              formatCurrencyVND(summary.profit ?? 0)
             )}
           </div>
           <div className="text-muted text-sm" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--muted)' }}>
             {isLoading ? (
               <div className="skeleton-loading" style={{ height: '16px', width: '200px', borderRadius: '4px', marginTop: '4px' }} />
             ) : (
-              'Tổng tiền học sinh nạp vào tài khoản'
+              'Học phí đã học − Chi phí nhân sự − Chi phí khác'
+            )}
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <h3 style={{ fontSize: 'var(--font-size-sm)', fontWeight: '500', color: 'var(--muted)', marginBottom: 'var(--spacing-2)' }}>Nợ học phí chưa dạy</h3>
+          <div className="value" style={{ fontSize: 'var(--font-size-2xl)', fontWeight: '700', color: 'var(--text)', marginBottom: 'var(--spacing-1)' }}>
+            {isLoading ? (
+              <div className="skeleton-loading" style={{ height: '32px', width: '120px', borderRadius: '4px' }} />
+            ) : (
+              formatCurrencyVND(summary.tuitionDebtNotTaught ?? 0)
+            )}
+          </div>
+          <div className="text-muted text-sm" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--muted)' }}>
+            {isLoading ? (
+              <div className="skeleton-loading" style={{ height: '16px', width: '200px', borderRadius: '4px', marginTop: '4px' }} />
+            ) : (
+              'Tổng số dư hiện tại của tất cả học sinh'
             )}
           </div>
         </div>
@@ -672,7 +702,7 @@ function Dashboard() {
             {isLoading ? (
               <div className="skeleton-loading" style={{ height: '16px', width: '200px', borderRadius: '4px', marginTop: '4px' }} />
             ) : (
-              'Tổng số tiền đang nợ hiện tại'
+              'Tổng nợ học phí của học sinh'
             )}
           </div>
         </div>
@@ -741,7 +771,7 @@ function Dashboard() {
             }}
           >
             <h4 style={{ margin: 0, fontSize: 'var(--font-size-lg)', fontWeight: '600' }}>
-              Doanh thu & Lợi nhuận theo tháng
+              Tổng nạp & Lợi nhuận theo tháng
             </h4>
             <button
               className="btn btn-icon btn-panel-close"
@@ -952,6 +982,7 @@ function Dashboard() {
               gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
               gap: 'var(--spacing-3)',
               overflowX: 'auto',
+              alignItems: 'stretch',
             }}
           >
             {/* Students Need Renewal */}
@@ -967,6 +998,8 @@ function Dashboard() {
                 background: 'var(--bg)',
                 boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
                 minWidth: 0,
+                height: '368px',
+                minHeight: '368px',
               }}
             >
               <div
@@ -1020,7 +1053,7 @@ function Dashboard() {
                   </span>
                 </div>
               </div>
-              <div className="alert-body" style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)', minHeight: 0, maxHeight: '320px' }}>
+              <div className="alert-body" style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)', minHeight: 0 }}>
                 <ul className="alert-list" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
                   {alerts.studentsNeedRenewal && alerts.studentsNeedRenewal.length > 0 ? (
                     <>
@@ -1047,24 +1080,26 @@ function Dashboard() {
                               padding: 0,
                               margin: 0,
                               width: '100%',
-                              fontSize: 'var(--font-size-sm)',
+                              fontSize: '12px',
+                              lineHeight: '1.4',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '2px',
                             }}
                           >
-                            {item.studentName}
+                            <span style={{ fontWeight: '600' }}>{item.studentName}</span>
+                            <span style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: '400' }}>{item.className}</span>
                           </button>
-                          <span className="alert-meta" style={{ display: 'block', marginTop: 'var(--spacing-1)', color: 'var(--muted)', fontSize: 'var(--font-size-xs)' }}>
-                            {item.className}
-                          </span>
                         </li>
                       ))}
                       {alerts.studentsNeedRenewal.length > 10 && (
-                        <li style={{ padding: 'var(--spacing-2)', color: 'var(--muted)', fontSize: 'var(--font-size-xs)', borderBottom: '1px solid var(--border)', borderLeft: '3px solid #dc2626' }}>
+                        <li style={{ padding: 'var(--spacing-2)', color: 'var(--muted)', fontSize: '12px', borderBottom: '1px solid var(--border)', borderLeft: '3px solid #dc2626' }}>
                           ... ({alerts.studentsNeedRenewal.length - 10}+)
                         </li>
                       )}
                     </>
                   ) : (
-                    <li className="text-muted" style={{ padding: 'var(--spacing-2)', textAlign: 'center', fontSize: 'var(--font-size-xs)' }}>
+                    <li className="text-muted" style={{ padding: 'var(--spacing-2)', textAlign: 'center', fontSize: '12px' }}>
                       Không có học sinh số dư = 0
                     </li>
                   )}
@@ -1072,7 +1107,7 @@ function Dashboard() {
                 {/* Số dư dưới 200k - bên dưới bảng học sinh cần gia hạn */}
                 {alerts.studentsLowBalance && alerts.studentsLowBalance.length > 0 && (
                   <>
-                    <div style={{ padding: 'var(--spacing-2) var(--spacing-3)', borderTop: '1px solid var(--border)', fontSize: 'var(--font-size-xs)', fontWeight: '600', color: '#92400e', background: 'rgba(251, 191, 36, 0.08)' }}>
+                    <div style={{ padding: 'var(--spacing-2) var(--spacing-3)', borderTop: '1px solid var(--border)', fontSize: '12px', fontWeight: '600', color: '#92400e', background: 'rgba(251, 191, 36, 0.08)' }}>
                       Số dư ít hơn 200.000 đ
                     </div>
                     <ul className="alert-list" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
@@ -1104,22 +1139,24 @@ function Dashboard() {
                                 padding: 0,
                                 margin: 0,
                                 width: '100%',
-                                fontSize: 'var(--font-size-sm)',
+                                fontSize: '12px',
+                                lineHeight: '1.4',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '2px',
                               }}
                             >
-                              {item.studentName}
+                              <span style={{ fontWeight: '600' }}>{item.studentName}</span>
+                              <span style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: '400' }}>{item.className}</span>
                             </button>
-                            <span className="alert-meta" style={{ display: 'block', marginTop: 'var(--spacing-1)', color: 'var(--muted)', fontSize: 'var(--font-size-xs)' }}>
-                              {item.className}
-                            </span>
                           </div>
-                          <span style={{ flexShrink: 0, fontSize: 'var(--font-size-xs)', color: '#92400e', whiteSpace: 'nowrap' }}>
+                          <span style={{ flexShrink: 0, fontSize: '11px', color: '#92400e', whiteSpace: 'nowrap' }}>
                             Còn {typeof item.walletBalance === 'number' ? item.walletBalance.toLocaleString('vi-VN') : '0'} đồng
                           </span>
                         </li>
                       ))}
                       {alerts.studentsLowBalance.length > 10 && (
-                        <li style={{ padding: 'var(--spacing-2)', color: 'var(--muted)', fontSize: 'var(--font-size-xs)', borderBottom: '1px solid var(--border)', borderLeft: '3px solid #f59e0b' }}>
+                        <li style={{ padding: 'var(--spacing-2)', color: 'var(--muted)', fontSize: '12px', borderBottom: '1px solid var(--border)', borderLeft: '3px solid #f59e0b' }}>
                           ... ({alerts.studentsLowBalance.length - 10}+)
                         </li>
                       )}
@@ -1142,6 +1179,8 @@ function Dashboard() {
                 background: 'var(--bg)',
                 boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
                 minWidth: 0,
+                height: '368px',
+                minHeight: '368px',
               }}
             >
               <div
@@ -1193,7 +1232,7 @@ function Dashboard() {
                   </span>
                 </div>
               </div>
-              <div className="alert-body" style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)', minHeight: 0, maxHeight: '200px' }}>
+              <div className="alert-body" style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)', minHeight: 0 }}>
                 <ul className="alert-list" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
                   {alerts.pendingStaffPayouts && alerts.pendingStaffPayouts.length > 0 ? (
                     alerts.pendingStaffPayouts.map((item: any, index: number) => {
@@ -1222,24 +1261,27 @@ function Dashboard() {
                               textAlign: 'left',
                               padding: 0,
                               margin: 0,
-                              fontSize: 'var(--font-size-sm)',
+                              fontSize: '12px',
                               lineHeight: '1.4',
                               width: '100%',
-                            }}
-                          >
-                            {item.staffName}
-                          </button>
-                          <div
-                            className="alert-meta"
-                            style={{
                               display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              marginTop: '4px',
-                              flexWrap: 'wrap',
-                              fontSize: 'var(--font-size-xs)',
+                              flexDirection: 'column',
+                              gap: '2px',
                             }}
                           >
+                            <span style={{ fontWeight: '600' }}>{item.staffName}</span>
+                            <div
+                              className="alert-meta"
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                flexWrap: 'wrap',
+                                fontSize: '11px',
+                                color: 'var(--muted)',
+                                fontWeight: '400',
+                              }}
+                            >
                             {unpaidTeacher > 0 && (
                               <span style={{ color: '#f59e0b', fontWeight: '600', whiteSpace: 'nowrap' }}>
                                 {formatCurrencyVND(unpaidTeacher)}
@@ -1255,7 +1297,8 @@ function Dashboard() {
                                 {formatCurrencyVND(unpaidBonuses)}
                               </span>
                             )}
-                          </div>
+                            </div>
+                          </button>
                         </li>
                       );
                     })
@@ -1290,7 +1333,7 @@ function Dashboard() {
               />
                   )}
 
-            {/* Finance Requests */}
+            {/* Chưa thu học phí */}
             <div
               className="alert-widget"
               data-widget="finance"
@@ -1303,6 +1346,8 @@ function Dashboard() {
                 background: 'var(--bg)',
                 boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
                 minWidth: 0,
+                height: '368px',
+                minHeight: '368px',
               }}
             >
               <div
@@ -1337,7 +1382,7 @@ function Dashboard() {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, minWidth: 0 }}>
                   <span style={{ fontWeight: '600', fontSize: '12px', color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    Yêu cầu tài chính
+                    Chưa thu học phí
                   </span>
                   <span
                     className="badge badge-warning"
@@ -1350,40 +1395,69 @@ function Dashboard() {
                       color: '#92400e',
                     }}
                   >
-                    {(alerts.financeRequests?.loans?.length || 0) + (alerts.financeRequests?.refunds?.length || 0)} mục
+                    {alerts.studentsWithDebt?.length || 0} mục
                   </span>
                 </div>
               </div>
-              <div className="alert-body" style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)', minHeight: 0, maxHeight: '200px' }}>
-                <p
-                  className="alert-note"
-                  style={{
-                    padding: 'var(--spacing-2) var(--spacing-3)',
-                    margin: 0,
-                    color: 'var(--muted)',
-                    fontSize: '11px',
-                    borderBottom: '1px solid var(--border)',
-                    background: 'rgba(251, 191, 36, 0.05)',
-                    lineHeight: '1.4',
-                  }}
-                >
-                  ⚠️ Chức năng tạm thời không khả dụng. Sẽ phát triển trong phiên bản sau.
-                </p>
+              <div className="alert-body" style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)', minHeight: 0 }}>
                 <ul className="alert-list" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                  {(() => {
-                    const loanItems = (alerts.financeRequests?.loans || []).map((entry: any, idx: number) => (
-                      <li key={`loan-${idx}`} style={{ padding: 'var(--spacing-2)', borderBottom: '1px solid var(--border)', fontSize: '12px', lineHeight: '1.4' }}>
-                        Ứng tiền • {entry.name} – {formatCurrencyVND(entry.amount || 0)}
-                      </li>
-                    ));
-                    const refundItems = (alerts.financeRequests?.refunds || []).map((entry: any, idx: number) => (
-                      <li key={`refund-${idx}`} style={{ padding: 'var(--spacing-2)', borderBottom: '1px solid var(--border)', fontSize: '12px', lineHeight: '1.4' }}>
-                        Hoàn tiền • {entry.studentId || entry.id} – {formatCurrencyVND(entry.amount || 0)}
-                      </li>
-                    ));
-                    const all = [...loanItems, ...refundItems];
-                    return all.length > 0 ? all : <li className="text-muted" style={{ padding: 'var(--spacing-2)', textAlign: 'center', fontSize: '12px' }}>Chưa có yêu cầu mới</li>;
-                  })()}
+                  {alerts.studentsWithDebt && alerts.studentsWithDebt.length > 0 ? (
+                    <>
+                      {(alerts.studentsWithDebt.slice(0, 10) as any[]).map((item: any) => (
+                        <li
+                          key={item.id}
+                          style={{
+                            padding: 'var(--spacing-2)',
+                            borderBottom: '1px solid var(--border)',
+                            transition: 'background 0.2s ease',
+                            borderLeft: '3px solid #f59e0b',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 'var(--spacing-2)',
+                          }}
+                        >
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <button
+                              className="alert-link"
+                              onClick={() => item.studentId && navigate(`/students/${item.studentId}`)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#b45309',
+                                cursor: 'pointer',
+                                fontWeight: '500',
+                                textAlign: 'left',
+                                padding: 0,
+                                margin: 0,
+                                width: '100%',
+                                fontSize: '12px',
+                                lineHeight: '1.4',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '2px',
+                              }}
+                            >
+                              <span style={{ fontWeight: '600' }}>{item.studentName}</span>
+                              <span style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: '400' }}>{item.className}</span>
+                            </button>
+                          </div>
+                          <span style={{ flexShrink: 0, fontSize: '11px', color: '#92400e', whiteSpace: 'nowrap' }}>
+                            Nợ {typeof item.loanBalance === 'number' ? item.loanBalance.toLocaleString('vi-VN') : '0'} đồng
+                          </span>
+                        </li>
+                      ))}
+                      {alerts.studentsWithDebt.length > 10 && (
+                        <li style={{ padding: 'var(--spacing-2)', color: 'var(--muted)', fontSize: '12px', borderBottom: '1px solid var(--border)', borderLeft: '3px solid #f59e0b' }}>
+                          ... ({alerts.studentsWithDebt.length - 10}+)
+                        </li>
+                      )}
+                    </>
+                  ) : (
+                    <li className="text-muted" style={{ padding: 'var(--spacing-2)', textAlign: 'center', fontSize: '12px' }}>
+                      Không có học sinh nợ học phí
+                    </li>
+                  )}
                 </ul>
               </div>
             </div>

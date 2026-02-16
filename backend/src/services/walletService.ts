@@ -92,10 +92,16 @@ export async function createWalletTransaction(transactionData: Omit<WalletTransa
   let newLoanBalance = currentLoanBalance;
   
   // Calculate new balances based on transaction type
+  // Khi số dư = 0đ: nạp âm tiền hoặc ứng tiền tính vào nợ học phí (loan_balance)
   switch (transactionData.type) {
     case 'topup':
       if (isPayment) {
-        newWalletBalance = currentWalletBalance - absoluteAmount;
+        if (currentWalletBalance === 0) {
+          newWalletBalance = 0;
+          newLoanBalance = currentLoanBalance + absoluteAmount;
+        } else {
+          newWalletBalance = currentWalletBalance - absoluteAmount;
+        }
       } else {
         newWalletBalance = currentWalletBalance + absoluteAmount;
       }
@@ -106,8 +112,13 @@ export async function createWalletTransaction(transactionData: Omit<WalletTransa
         newWalletBalance = currentWalletBalance - absoluteAmount;
         newLoanBalance = Math.max(0, currentLoanBalance - absoluteAmount);
       } else {
-        newWalletBalance = currentWalletBalance + absoluteAmount;
-        newLoanBalance = currentLoanBalance + absoluteAmount;
+        if (currentWalletBalance === 0) {
+          newWalletBalance = 0;
+          newLoanBalance = currentLoanBalance + absoluteAmount;
+        } else {
+          newWalletBalance = currentWalletBalance + absoluteAmount;
+          newLoanBalance = currentLoanBalance + absoluteAmount;
+        }
       }
       break;
     case 'repayment':
@@ -129,8 +140,8 @@ export async function createWalletTransaction(transactionData: Omit<WalletTransa
   const userNote = (transactionData.note || '').trim();
   const formatAmount = (amt: number) => amt.toLocaleString('vi-VN');
   
-  // Check if note is already formatted (contains "SD:" or "→")
-  const isAlreadyFormatted = userNote.includes('SD:') || userNote.includes('→');
+  // Check if note is already formatted (contains "SD:", "Nợ:" or "→")
+  const isAlreadyFormatted = userNote.includes('SD:') || userNote.includes('Nợ:') || userNote.includes('→');
   
   let formattedNote = '';
   
@@ -171,10 +182,13 @@ export async function createWalletTransaction(transactionData: Omit<WalletTransa
     // Build action part
     const actionPart = `${typeLabel}${sessionIdPart}: ${sign}${amountText}đ`;
     
-    // Build balance part
-    const balancePart = `SD: ${formatAmount(currentWalletBalance)}đ → ${formatAmount(newWalletBalance)}đ`;
+    // Build balance part: khi số dư 0 và chỉ thay đổi nợ thì ghi "Nợ: Ađ → Bđ", còn lại "SD: Ađ → Bđ"
+    const balancePart =
+      currentWalletBalance === 0 && newWalletBalance === 0 && newLoanBalance !== currentLoanBalance
+        ? `Nợ: ${formatAmount(currentLoanBalance)}đ → ${formatAmount(newLoanBalance)}đ`
+        : `SD: ${formatAmount(currentWalletBalance)}đ → ${formatAmount(newWalletBalance)}đ`;
     
-    // Combine: [User note]. Hành động: +/-số tiền. SD: Ađ → Bđ
+    // Combine: [User note]. Hành động: +/-số tiền. SD/Nợ: Ađ → Bđ
     if (cleanUserNote) {
       formattedNote = `${cleanUserNote}. ${actionPart}. ${balancePart}`;
     } else {

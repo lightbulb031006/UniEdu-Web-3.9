@@ -11,6 +11,7 @@ export interface LessonOutput {
   level?: string;
   lesson_name: string;
   original_title?: string;
+  original_link?: string;
   cost?: number;
   date: string;
   status?: 'paid' | 'pending' | 'deposit';
@@ -34,6 +35,7 @@ export interface LessonOutputFilters {
 export interface LessonOutputFormData {
   lesson_name: string;
   original_title?: string;
+  original_link?: string;
   tag?: string;
   level?: string;
   cost?: number;
@@ -123,6 +125,7 @@ export async function createLessonOutput(formData: LessonOutputFormData) {
     id,
     lesson_name: formData.lesson_name,
     original_title: formData.original_title || null,
+    original_link: formData.original_link || null,
     tag: formData.tag || null,
     level: formData.level || null,
     cost: formData.cost || 0,
@@ -155,6 +158,7 @@ export async function updateLessonOutput(id: string, formData: Partial<LessonOut
   
   if (formData.lesson_name !== undefined) payload.lesson_name = formData.lesson_name;
   if (formData.original_title !== undefined) payload.original_title = formData.original_title || null;
+  if (formData.original_link !== undefined) payload.original_link = formData.original_link || null;
   if (formData.tag !== undefined) payload.tag = formData.tag || null;
   if (formData.level !== undefined) payload.level = formData.level || null;
   if (formData.cost !== undefined) payload.cost = formData.cost || 0;

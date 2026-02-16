@@ -11,6 +11,7 @@ export interface LessonPlan {
   level?: string;
   lesson_name: string;
   original_title?: string;
+  original_link?: string;
   cost?: number;
   date: string;
   status?: 'paid' | 'pending' | 'deposit';
@@ -107,6 +108,7 @@ export async function createLessonPlan(planData: Omit<LessonPlan, 'id' | 'create
   if (planData.tag) payload.tag = planData.tag;
   if (planData.level) payload.level = planData.level;
   if (planData.original_title) payload.original_title = planData.original_title;
+  if (planData.original_link) payload.original_link = planData.original_link;
   if (planData.cost !== undefined) payload.cost = planData.cost || 0;
   if (planData.status) payload.status = planData.status;
   if (planData.contest_uploaded) payload.contest_uploaded = planData.contest_uploaded;
@@ -132,6 +134,7 @@ export async function updateLessonPlan(id: string, updates: Partial<Omit<LessonP
   // Trim string fields
   if (payload.lesson_name) payload.lesson_name = payload.lesson_name.trim();
   if (payload.original_title) payload.original_title = payload.original_title.trim();
+  if (payload.original_link) payload.original_link = payload.original_link.trim();
   if (payload.tag) payload.tag = payload.tag.trim();
   if (payload.completed_by) payload.completed_by = payload.completed_by.trim();
 
