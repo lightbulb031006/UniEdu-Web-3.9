@@ -57,6 +57,9 @@ router.get('/', async (req, res, next) => {
 router.get('/:id', async (req, res, next) => {
   try {
     const output = await getLessonOutputById(req.params.id);
+    if (output == null) {
+      return res.status(404).json({ error: 'Lesson output not found' });
+    }
     res.json(output);
   } catch (error) {
     next(error);

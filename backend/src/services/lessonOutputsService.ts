@@ -108,6 +108,10 @@ export async function getLessonOutputById(id: string) {
   const { data, error } = await supabase.from('lesson_outputs').select('*').eq('id', id).single();
 
   if (error) {
+    const code = (error as { code?: string }).code;
+    if (code === 'PGRST116') {
+      return null;
+    }
     throw new Error(formatSupabaseError(error, 'fetch lesson output'));
   }
 
@@ -148,7 +152,12 @@ export async function createLessonOutput(formData: LessonOutputFormData) {
     .single();
 
   if (error) {
-    throw new Error(formatSupabaseError(error, 'create lesson output'));
+    const msg = formatSupabaseError(error, 'create lesson output');
+    const hint =
+      /column|does not exist|doesn't exist/i.test(String(error.message || ''))
+        ? ' Ensure Supabase migrations add_lesson_outputs_original_link.sql and add_lesson_outputs_source.sql have been applied.'
+        : '';
+    throw new Error(msg + hint);
   }
 
   return data as LessonOutput;
@@ -182,7 +191,12 @@ export async function updateLessonOutput(id: string, formData: Partial<LessonOut
     .single();
 
   if (error) {
-    throw new Error(formatSupabaseError(error, 'update lesson output'));
+    const msg = formatSupabaseError(error, 'update lesson output');
+    const hint =
+      /column|does not exist|doesn't exist/i.test(String(error.message || ''))
+        ? ' Ensure Supabase migrations add_lesson_outputs_original_link.sql and add_lesson_outputs_source.sql have been applied.'
+        : '';
+    throw new Error(msg + hint);
   }
 
   return data as LessonOutput;
