@@ -1,6 +1,6 @@
 {
   "name": "uniedu-backend",
-  "version": "4.5.1",
+  "version": "4.5.2",
   "description": "UniEdu Backend API - Secure REST API for education management",
   "main": "dist/app.js",
   "scripts": {
