@@ -4,6 +4,7 @@
  */
 
 import supabase from '../config/database';
+import { formatSupabaseError } from '../utils/supabaseError';
 
 export interface LessonTopic {
   id: string;
@@ -61,7 +62,7 @@ export async function getLessonTopics() {
     .order('name', { ascending: true });
 
   if (error) {
-    throw new Error(`Failed to fetch lesson topics: ${error.message}`);
+    throw new Error(formatSupabaseError(error, 'fetch lesson topics'));
   }
 
   return (data || []) as LessonTopic[];
@@ -78,7 +79,7 @@ export async function getLessonTopicById(id: string) {
     .single();
 
   if (error) {
-    throw new Error(`Failed to fetch lesson topic: ${error.message}`);
+    throw new Error(formatSupabaseError(error, 'fetch lesson topic'));
   }
 
   if (!data) {
@@ -109,7 +110,7 @@ export async function createLessonTopic(formData: LessonTopicFormData, createdBy
     .single();
 
   if (error) {
-    throw new Error(`Failed to create lesson topic: ${error.message}`);
+    throw new Error(formatSupabaseError(error, 'create lesson topic'));
   }
 
   return data as LessonTopic;
@@ -138,7 +139,7 @@ export async function updateLessonTopic(id: string, formData: Partial<LessonTopi
     .single();
 
   if (error) {
-    throw new Error(`Failed to update lesson topic: ${error.message}`);
+    throw new Error(formatSupabaseError(error, 'update lesson topic'));
   }
 
   return data as LessonTopic;
@@ -160,7 +161,7 @@ export async function deleteLessonTopic(id: string) {
     .eq('id', id);
 
   if (error) {
-    throw new Error(`Failed to delete lesson topic: ${error.message}`);
+    throw new Error(formatSupabaseError(error, 'delete lesson topic'));
   }
 
   return { success: true };

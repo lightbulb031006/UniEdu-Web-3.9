@@ -225,6 +225,18 @@ function App() {
           }
         />
         <Route
+          path="/lesson-plans/exercises"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <Suspense fallback={<PageLoader />}>
+                  <LessonPlans />
+                </Suspense>
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/action-history"
           element={
             <ProtectedRoute>

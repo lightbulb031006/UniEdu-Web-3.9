@@ -28,6 +28,12 @@ export interface DashboardData {
       breakdown?: Record<string, number>;
     }>;
   };
+  walletBreakdown?: Array<{
+    studentId: string;
+    studentName: string;
+    className: string;
+    walletBalance: number;
+  }>;
   charts: {
     revenueProfitLine: Array<{
       label: string;
@@ -107,13 +113,17 @@ export interface DashboardData {
 export interface DashboardParams {
   filterType: 'month' | 'quarter' | 'year';
   filterValue: string;
+  /** Gửi refresh=1 để xóa cache dashboard và lấy số liệu mới (sau khi đổi công thức backend) */
+  refresh?: boolean;
 }
 
 /**
  * Fetch dashboard data
  */
 export async function fetchDashboardData(params: DashboardParams): Promise<DashboardData> {
-  const response = await api.get<DashboardData>('/dashboard', { params });
+  const { refresh, ...rest } = params;
+  const requestParams = { ...rest, ...(refresh ? { refresh: 1 } : {}) };
+  const response = await api.get<DashboardData>('/dashboard', { params: requestParams });
   return response.data;
 }
 

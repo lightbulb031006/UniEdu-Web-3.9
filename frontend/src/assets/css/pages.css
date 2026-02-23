@@ -2243,12 +2243,155 @@
     gap: var(--spacing-4);
 }
 
+/* Full-screen exercises page: use full viewport height */
+.exercises-detail-page {
+    max-height: 100vh;
+}
+/* Allow main to shrink so inner flex (header + tab) can use remaining height */
+.main-content:has(.exercises-detail-page) {
+    min-height: 0;
+}
+
 .exercises-sidebar {
     background: var(--surface);
     border-radius: var(--radius-lg);
     border: 1px solid var(--border);
     padding: var(--spacing-4);
     overflow-y: auto;
+}
+
+/* Sticky table header when scrolling exercise list */
+.exercises-table-with-sticky thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--bg);
+    box-shadow: 0 1px 0 var(--border);
+}
+[data-theme="dark"] .exercises-table-with-sticky thead th {
+    background: var(--bg);
+}
+
+/* Exercises Tab Settings Modal */
+.exercises-settings-modal-content .exercises-settings-row:hover {
+    background: var(--bg);
+}
+.exercises-settings-modal-content {
+    width: 100%;
+    min-width: 0;
+}
+.exercises-settings-modal-content .exercises-settings-list {
+    scrollbar-width: thin;
+    width: 100%;
+    min-width: 0;
+}
+.exercises-settings-modal-content .exercises-settings-list ul {
+    width: 100%;
+    min-width: 0;
+}
+.exercises-settings-modal-content .exercises-settings-row {
+    width: 100%;
+    min-width: 0;
+}
+.exercises-settings-modal-content .exercises-settings-row span {
+    min-width: 0;
+}
+/* Grid: cột 2 (tên) luôn chiếm phần còn lại */
+.exercises-settings-modal-content .exercises-settings-row {
+    display: grid;
+    grid-template-columns: auto 1fr;
+}
+.exercises-settings-modal-content .exercises-settings-row input[type="checkbox"] {
+    grid-column: 1;
+}
+.exercises-settings-modal-content .exercises-settings-row > span {
+    grid-column: 2;
+    min-width: 0;
+}
+.exercises-settings-modal-content .exercises-settings-list::-webkit-scrollbar {
+    width: 8px;
+}
+.exercises-settings-modal-content .exercises-settings-list::-webkit-scrollbar-track {
+    background: var(--bg);
+    border-radius: 4px;
+}
+.exercises-settings-modal-content .exercises-settings-list::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+}
+.exercises-settings-modal-content .exercises-settings-list::-webkit-scrollbar-thumb:hover {
+    background: var(--muted);
+}
+.exercises-settings-modal-content .exercises-settings-search-wrap .form-control:focus {
+    border-color: var(--primary);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+/* Form chi tiết bài tập (modal khi bấm vào 1 bài trong tab Bài tập) */
+.exercise-detail-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-5);
+    min-width: 0;
+}
+.exercise-detail-form .exercise-detail-header {
+    margin-bottom: 0;
+}
+.exercise-detail-form .exercise-detail-section {
+    padding: 0;
+}
+.exercise-detail-form .exercise-detail-row {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    gap: var(--spacing-2);
+    align-items: baseline;
+    min-width: 0;
+}
+.exercise-detail-form .exercise-detail-label {
+    font-size: var(--font-size-sm);
+    color: var(--muted);
+    flex-shrink: 0;
+}
+.exercise-detail-form .exercise-detail-value {
+    font-size: var(--font-size-sm);
+    color: var(--text);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.exercise-detail-form .btn-primary:hover,
+.exercise-detail-form .btn-outline:hover {
+    transform: none;
+}
+.exercise-detail-form .exercise-detail-grid {
+    grid-template-columns: repeat(2, 1fr);
+}
+@media (max-width: 640px) {
+    .exercise-detail-form .exercise-detail-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Form thêm bài mới: hàng Tag (ô tìm kiếm thu gọn + ô Tag mới) */
+.add-form-tag-row .tag-input-wrapper {
+    cursor: text;
+}
+.add-form-new-tag-wrap .form-control {
+    width: 100%;
+}
+@media (max-width: 640px) {
+    .add-form-tag-fields {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .add-form-tag-fields > div:first-child {
+        max-width: none;
+    }
+    .add-form-new-tag-wrap {
+        min-width: 0;
+        max-width: none;
+    }
 }
 
 .topic-item {
@@ -2280,6 +2423,49 @@
 
 .exercises-table {
     width: 100%;
+}
+/* Cột Link cố định, Tên Bài chiếm phần còn lại để không bị khuất */
+.exercises-table-with-sticky th:nth-child(3),
+.exercises-table-with-sticky td:nth-child(3) {
+    width: 88px;
+    max-width: 88px;
+    box-sizing: border-box;
+}
+
+/* Form chi tiết bài tập - Bộ lọc & danh sách */
+.exercises-detail-filters .exercises-filters-toggle:hover {
+    color: var(--text);
+}
+.exercises-detail-filters .exercises-filters-fields .form-control:focus,
+.exercises-detail-filters .exercises-filters-fields select.form-control:focus {
+    border-color: var(--primary);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+.exercises-list-header .exercises-add-topic-btn:hover {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: var(--primary);
+}
+.exercises-detail-filters .exercises-filter-label {
+    letter-spacing: 0.01em;
+}
+.exercises-detail-filters .exercises-filters-fields {
+    box-sizing: border-box;
+}
+@media (max-width: 640px) {
+    .exercises-detail-filters .exercises-filters-fields {
+        grid-template-columns: 1fr !important;
+    }
+    .exercises-detail-filters .exercises-filters-fields .form-control {
+        max-width: 100%;
+    }
+}
+.exercises-table-with-sticky td:nth-child(2) {
+    min-width: 0;
+}
+.exercises-table-with-sticky th:nth-child(1),
+.exercises-table-with-sticky td:nth-child(1) {
+    max-width: 22%;
 }
 
 .exercise-row {

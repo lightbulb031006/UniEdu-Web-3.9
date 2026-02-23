@@ -5,20 +5,25 @@
 
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
-import { getDashboardData, getQuickViewData } from '../services/dashboardService';
+import { getDashboardData, getQuickViewData, invalidateAllDashboardCache } from '../services/dashboardService';
 
 const router = Router();
 
 /**
  * GET /api/dashboard
  * Get dashboard data with filters
+ * Query: refresh=1 để bỏ cache và lấy số liệu mới (dùng khi vừa đổi công thức backend)
  */
 router.get('/', authenticate, async (req, res, next) => {
   try {
-    const { filterType = 'month', filterValue } = req.query;
+    const { filterType = 'month', filterValue, refresh } = req.query;
 
     if (!filterValue) {
       return res.status(400).json({ error: 'filterValue is required' });
+    }
+
+    if (refresh === '1') {
+      await invalidateAllDashboardCache();
     }
 
     const data = await getDashboardData({

@@ -4,6 +4,7 @@
  */
 
 import supabase from '../config/database';
+import { formatSupabaseError } from '../utils/supabaseError';
 
 export interface LessonOutput {
   id: string;
@@ -12,6 +13,7 @@ export interface LessonOutput {
   lesson_name: string;
   original_title?: string;
   original_link?: string;
+  source?: string;
   cost?: number;
   date: string;
   status?: 'paid' | 'pending' | 'deposit';
@@ -36,6 +38,7 @@ export interface LessonOutputFormData {
   lesson_name: string;
   original_title?: string;
   original_link?: string;
+  source?: string;
   tag?: string;
   level?: string;
   cost?: number;
@@ -92,7 +95,7 @@ export async function getLessonOutputs(filters: LessonOutputFilters = {}) {
   const { data, error } = await query;
 
   if (error) {
-    throw new Error(`Failed to fetch lesson outputs: ${error.message}`);
+    throw new Error(formatSupabaseError(error, 'fetch lesson outputs'));
   }
 
   return (data || []) as LessonOutput[];
@@ -105,7 +108,7 @@ export async function getLessonOutputById(id: string) {
   const { data, error } = await supabase.from('lesson_outputs').select('*').eq('id', id).single();
 
   if (error) {
-    throw new Error(`Failed to fetch lesson output: ${error.message}`);
+    throw new Error(formatSupabaseError(error, 'fetch lesson output'));
   }
 
   if (!data) {
@@ -126,6 +129,7 @@ export async function createLessonOutput(formData: LessonOutputFormData) {
     lesson_name: formData.lesson_name,
     original_title: formData.original_title || null,
     original_link: formData.original_link || null,
+    source: formData.source || null,
     tag: formData.tag || null,
     level: formData.level || null,
     cost: formData.cost || 0,
@@ -144,7 +148,7 @@ export async function createLessonOutput(formData: LessonOutputFormData) {
     .single();
 
   if (error) {
-    throw new Error(`Failed to create lesson output: ${error.message}`);
+    throw new Error(formatSupabaseError(error, 'create lesson output'));
   }
 
   return data as LessonOutput;
@@ -159,6 +163,7 @@ export async function updateLessonOutput(id: string, formData: Partial<LessonOut
   if (formData.lesson_name !== undefined) payload.lesson_name = formData.lesson_name;
   if (formData.original_title !== undefined) payload.original_title = formData.original_title || null;
   if (formData.original_link !== undefined) payload.original_link = formData.original_link || null;
+  if (formData.source !== undefined) payload.source = formData.source || null;
   if (formData.tag !== undefined) payload.tag = formData.tag || null;
   if (formData.level !== undefined) payload.level = formData.level || null;
   if (formData.cost !== undefined) payload.cost = formData.cost || 0;
@@ -177,7 +182,7 @@ export async function updateLessonOutput(id: string, formData: Partial<LessonOut
     .single();
 
   if (error) {
-    throw new Error(`Failed to update lesson output: ${error.message}`);
+    throw new Error(formatSupabaseError(error, 'update lesson output'));
   }
 
   return data as LessonOutput;
@@ -193,7 +198,7 @@ export async function deleteLessonOutput(id: string) {
     .eq('id', id);
 
   if (error) {
-    throw new Error(`Failed to delete lesson output: ${error.message}`);
+    throw new Error(formatSupabaseError(error, 'delete lesson output'));
   }
 
   return { success: true };
@@ -210,7 +215,7 @@ export async function bulkUpdateLessonOutputStatuses(outputIds: string[], status
     .select();
 
   if (error) {
-    throw new Error(`Failed to bulk update lesson output statuses: ${error.message}`);
+    throw new Error(formatSupabaseError(error, 'bulk update lesson output statuses'));
   }
 
   return data as LessonOutput[];

@@ -12,6 +12,7 @@ export interface LessonOutput {
   lesson_name: string;
   original_title?: string;
   original_link?: string;
+  source?: string;
   cost?: number;
   date: string;
   status?: 'paid' | 'pending' | 'deposit';
@@ -36,6 +37,7 @@ export interface LessonOutputFormData {
   lesson_name: string;
   original_title?: string;
   original_link?: string;
+  source?: string;
   tag?: string;
   level?: string;
   cost?: number;

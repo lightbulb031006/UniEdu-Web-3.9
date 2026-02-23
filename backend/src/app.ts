@@ -218,11 +218,17 @@ setInterval(async () => {
 
 // Try to start server
 function startServer() {
-  const server = app.listen(PORT, () => {
+  const server = app.listen(PORT, async () => {
     logger.info(`🚀 Backend server running on port ${PORT}`);
     logger.info(`📝 Environment: ${env.NODE_ENV}`);
     logger.info(`🌐 Frontend URL: ${env.FRONTEND_URL}`);
     logger.info(`🔐 JWT expires in: ${env.JWT_EXPIRES_IN}`);
+    try {
+      const { checkSupabaseConnection } = await import('./config/database');
+      await checkSupabaseConnection();
+    } catch {
+      // ignore
+    }
   });
 
   server.on('error', (err: NodeJS.ErrnoException) => {

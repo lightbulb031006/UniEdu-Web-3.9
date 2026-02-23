@@ -257,6 +257,22 @@ export async function getDashboardData(params: DashboardParams) {
     return sum + balance;
   }, 0);
 
+  // Chi tiết số dư từng học sinh (để popup khi bấm ô "Nợ học phí chưa dạy")
+  const walletBreakdown = students
+    .map((student: any) => {
+      const sc = studentClasses.find((sc: any) => sc.student_id === student.id && (sc.status || 'active') !== 'inactive');
+      const classItem = classes.find((c: any) => c.id === sc?.class_id);
+      const walletBalance = Number(student.wallet_balance ?? student.walletBalance ?? 0);
+      return {
+        studentId: student.id,
+        studentName: student.full_name || student.fullName || student.id || '',
+        className: classItem?.name || sc?.class_id || '-',
+        walletBalance,
+      };
+    })
+    .filter((item: any) => item.walletBalance > 0)
+    .sort((a: any, b: any) => b.walletBalance - a.walletBalance);
+
   // Buổi đã dạy trong kỳ
   const sessionsInRange = sessions.filter((session: any) => isWithinRange(session.date, range));
   // Học phí đã học: Tổng học phí của tất cả buổi đã học trong kỳ (theo tuition_fee từng buổi)
@@ -682,8 +698,8 @@ export async function getDashboardData(params: DashboardParams) {
       {
         key: 'totalReceived',
         label: 'Tổng nhận',
-        amount: totalRevenue - tuitionDebtNotTaught - totalStaffCost - costsInRange,
-        note: 'Tổng nạp - Nợ học phí chưa dạy - Chi phí nhân sự - Chi phí khác',
+        amount: totalRevenue - totalStaffCost - costsInRange,
+        note: 'Tổng nạp - Chi phí nhân sự - Chi phí khác',
       },
     ],
   };
@@ -703,6 +719,7 @@ export async function getDashboardData(params: DashboardParams) {
       uncollected: outstandingTuition,
     },
     financeReport,
+    walletBreakdown,
     charts: {
       revenueProfitLine: [], // TODO: Implement chart data
     },
@@ -767,20 +784,17 @@ export async function getQuickViewData(year: string) {
 
   // Filter by year
   const walletTxYear = walletTransactions.filter((tx: any) => (tx.date || '').startsWith(yearStr));
-  // Chỉ tính tiền nạp, không tính tiền ứng
-  // Số dương = tăng doanh thu, số âm = giảm doanh thu
-  const revenueYear = walletTxYear
-    .filter((tx: any) => {
-      if (tx.type !== 'topup') return false; // Chỉ tính tiền nạp, không tính tiền ứng
-      const amount = Number(tx.amount) || 0;
-      return amount !== 0; // Tính cả số dương (nạp) và số âm (trừ)
-    })
-    .reduce((sum: number, tx: any) => sum + (Number(tx.amount) || 0), 0);
   const advanceCount = walletTxYear.filter((tx: any) => tx.type === 'advance' || tx.type === 'loan').length;
 
   const sessionsYear = sessions.filter((session: any) => (session.date || '').startsWith(yearStr));
   const classesOpened = new Set(sessionsYear.map((s: any) => s.class_id).filter(Boolean));
   const teachersInvolved = new Set(sessionsYear.map((s: any) => s.teacher_id).filter(Boolean));
+
+  // Tổng doanh thu = Tổng học phí đã học các tháng trong năm
+  const tuitionTaughtYear = sessionsYear.reduce((sum: number, session: any) => {
+    const fee = Number(session.tuition_fee ?? session.tuitionFee ?? 0) || 0;
+    return sum + fee;
+  }, 0);
 
   // Calculate tutor cost (simplified - should use payroll if available)
   const tutorCostYear = sessionsYear.reduce((sum: number, session: any) => {
@@ -795,7 +809,7 @@ export async function getQuickViewData(year: string) {
   });
   const otherCostYear = costsYear.reduce((sum: number, cost: any) => sum + (Number(cost.amount) || 0), 0);
 
-  const netProfitYear = revenueYear - (tutorCostYear + otherCostYear);
+  const netProfitYear = tuitionTaughtYear - (tutorCostYear + otherCostYear);
 
   const studentRegistrations = studentClasses.filter((sc: any) => (sc.start_date || '').startsWith(yearStr));
   const avgSessionsPerStudent = studentRegistrations.length > 0 ? sessionsYear.length / studentRegistrations.length : 0;
@@ -812,7 +826,7 @@ export async function getQuickViewData(year: string) {
 
   const result = {
     finance: [
-      { label: 'Tổng doanh thu', value: formatCurrencyVND(revenueYear), hint: `Năm ${yearStr}` },
+      { label: 'Tổng doanh thu', value: formatCurrencyVND(tuitionTaughtYear), hint: 'Tổng học phí đã học các tháng trong năm' },
       { label: 'Chi phí gia sư', value: formatCurrencyVND(tutorCostYear), hint: 'Payroll theo năm' },
       { label: 'Chi phí khác', value: formatCurrencyVND(otherCostYear), hint: 'Marketing, vận hành...' },
       { label: 'Lợi nhuận ròng', value: formatCurrencyVND(netProfitYear), hint: 'Doanh thu - Chi phí' },

@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useDataLoading } from '../hooks/useDataLoading';
 import { formatCurrencyVND, formatDate, formatMonthLabel } from '../utils/formatters';
 import {
@@ -306,7 +307,12 @@ const STATUS_META = {
   },
 };
 
+const EXERCISES_TAB_STAFF_IDS_KEY = 'exercises_tab_allowed_staff_ids';
+
 function LessonPlans() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isExercisesDetailPage = location.pathname === '/lesson-plans/exercises';
   const user = useAuthStore((state) => state.user);
   const [activeTab, setActiveTab] = useState<'overview' | 'tasks' | 'exercises'>(() => {
     const saved = localStorage.getItem('lessonPlansActiveTab');
@@ -350,6 +356,9 @@ function LessonPlans() {
   const [editingResource, setEditingResource] = useState<LessonResource | null>(null);
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<LessonTask | null>(null);
+
+  // Exercises tab: settings modal
+  const [exercisesSettingsOpen, setExercisesSettingsOpen] = useState(false);
   
   
   const [formData, setFormData] = useState<LessonPlanFormData>({
@@ -465,6 +474,28 @@ function LessonPlans() {
     
     return null;
   }, [hasLessonPlanRole, user, teachers]);
+
+  // Exercises tab access: if allowed list is empty = all; if set = only those staff (admin always)
+  const canAccessExercisesTab = useMemo(() => {
+    if (isAdminUser) return true;
+    if (!hasLessonPlanRole) return false;
+    try {
+      const stored = localStorage.getItem(EXERCISES_TAB_STAFF_IDS_KEY);
+      const ids: string[] = stored ? JSON.parse(stored) : [];
+      if (ids.length === 0) return true;
+      const staffId = currentUserStaffId ?? assistantId;
+      return staffId ? ids.includes(staffId) : false;
+    } catch {
+      return true;
+    }
+  }, [isAdminUser, hasLessonPlanRole, currentUserStaffId, assistantId]);
+
+  // Reset to overview if exercises tab is selected but user can't access
+  useEffect(() => {
+    if (!canAccessExercisesTab && activeTab === 'exercises') {
+      setActiveTab('overview');
+    }
+  }, [canAccessExercisesTab, activeTab]);
 
   // Filter tasks and outputs by month and assistant (for Overview tab)
   const filterByMonth = useCallback((item: LessonTask | LessonOutput, month: string) => {
@@ -685,6 +716,89 @@ function LessonPlans() {
     return Array.from(uniqueTags).sort();
   }, [allLessonOutputs, isAssistant, assistantId]);
 
+  // Full-screen Exercises detail page (from /lesson-plans/exercises)
+  if (isExercisesDetailPage) {
+    if (!canAccessExercisesTab) {
+      navigate('/lesson-plans');
+      return null;
+    }
+    return (
+      <div
+        className="page-container exercises-detail-page"
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%',
+          minHeight: 0,
+          padding: 'var(--spacing-4)',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            flexShrink: 0,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 'var(--spacing-3)',
+          }}
+        >
+          <h2 style={{ margin: 0, fontSize: 'var(--font-size-xl)', fontWeight: '600' }}>Quản lý chi tiết bài tập</h2>
+          <div style={{ display: 'flex', gap: 'var(--spacing-2)' }}>
+            <button
+              type="button"
+              className="btn btn-icon"
+              onClick={() => setExercisesSettingsOpen(true)}
+              title="Cài đặt"
+              style={{ padding: 'var(--spacing-2)', borderRadius: 'var(--radius)', color: 'var(--muted)', background: 'transparent', border: '1px solid var(--border)', cursor: 'pointer' }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className="btn btn-icon"
+              onClick={() => {
+                localStorage.setItem('lessonPlansActiveTab', 'exercises');
+                navigate('/lesson-plans');
+              }}
+              title="Thu nhỏ - Quay về"
+              style={{ padding: 'var(--spacing-2)', borderRadius: 'var(--radius)', color: 'var(--muted)', background: 'transparent', border: '1px solid var(--border)', cursor: 'pointer' }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M4 14h6v6" />
+                <path d="M20 10h-6V4" />
+                <path d="M14 10l7-7" />
+                <path d="M3 21l7-7" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <ExercisesTab
+            topics={lessonTopics}
+            topicLinks={lessonTopicLinks}
+            outputs={allLessonOutputs}
+            uniqueTags={exercisesUniqueTags}
+            isAdmin={isAdminUser}
+            isAssistant={isAssistant}
+            assistantId={assistantId}
+            lessonPlanStaff={lessonPlanStaff}
+            onRefetchTopics={refetchTopics}
+            onRefetchTopicLinks={refetchTopicLinks}
+            onRefetchOutputs={refetchAllOutputs}
+            isFullScreen={true}
+          />
+        </div>
+        <Modal isOpen={exercisesSettingsOpen} onClose={() => setExercisesSettingsOpen(false)} size="md" title="Cài đặt">
+          <ExercisesSettingsModalContent lessonPlanStaff={lessonPlanStaff} isAdmin={isAdminUser} onClose={() => setExercisesSettingsOpen(false)} />
+        </Modal>
+      </div>
+    );
+  }
+
   return (
     <div className="page-container" style={{ padding: 'var(--spacing-6)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-4)' }}>
@@ -736,29 +850,31 @@ function LessonPlans() {
             </div>
             <span className="lesson-plan-tab-text">Công việc</span>
           </button>
-          <button
-            className={`lesson-plan-tab ${activeTab === 'exercises' ? 'active' : ''}`}
-            onClick={() => setActiveTab('exercises')}
-            data-tab="exercises"
-          >
-            <div className="lesson-plan-tab-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                <polyline points="14 2 14 8 20 8" />
-                <line x1="16" y1="13" x2="8" y2="13" />
-                <line x1="16" y1="17" x2="8" y2="17" />
-                <circle cx="12" cy="10" r="1.5" />
-              </svg>
-            </div>
-            <span className="lesson-plan-tab-text">Bài Tập</span>
-          </button>
+          {canAccessExercisesTab && (
+            <button
+              className={`lesson-plan-tab ${activeTab === 'exercises' ? 'active' : ''}`}
+              onClick={() => setActiveTab('exercises')}
+              data-tab="exercises"
+            >
+              <div className="lesson-plan-tab-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                  <circle cx="12" cy="10" r="1.5" />
+                </svg>
+              </div>
+              <span className="lesson-plan-tab-text">Bài Tập</span>
+            </button>
+          )}
           <div
             className="lesson-plan-tab-indicator"
             style={{
               position: 'absolute',
               bottom: 0,
-              left: activeTab === 'overview' ? '0' : activeTab === 'tasks' ? '33.33%' : '66.66%',
-              width: '33.33%',
+              left: activeTab === 'overview' ? '0' : activeTab === 'tasks' ? (canAccessExercisesTab ? '33.33%' : '50%') : '66.66%',
+              width: canAccessExercisesTab ? '33.33%' : '50%',
               height: '3px',
               background: 'linear-gradient(90deg, var(--primary) 0%, rgba(59, 130, 246, 0.8) 100%)',
               transition: 'left 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -875,6 +991,7 @@ function LessonPlans() {
           {activeTab === 'tasks' && (
             <TasksTab
               outputs={filteredTasksOutputs}
+              allOutputsForDuplicateCheck={allLessonOutputs}
               uniqueTags={uniqueTags}
               selectedMonth={tasksSelectedMonth}
               monthLabel={tasksMonthLabel}
@@ -900,19 +1017,46 @@ function LessonPlans() {
           )}
 
           {activeTab === 'exercises' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)', height: '100%' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 'var(--spacing-2)' }}>
+                <button
+                  type="button"
+                  className="btn btn-icon"
+                  onClick={() => setExercisesSettingsOpen(true)}
+                  title="Cài đặt"
+                  style={{ padding: 'var(--spacing-2)', borderRadius: 'var(--radius)', color: 'var(--muted)', background: 'transparent', border: '1px solid var(--border)', cursor: 'pointer' }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-icon"
+                  onClick={() => navigate('/lesson-plans/exercises')}
+                  title="Phóng to màn hình - Quản lý chi tiết bài tập"
+                  style={{ padding: 'var(--spacing-2)', borderRadius: 'var(--radius)', color: 'var(--muted)', background: 'transparent', border: '1px solid var(--border)', cursor: 'pointer' }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+                  </svg>
+                </button>
+              </div>
               <ExercisesTab
-              topics={lessonTopics}
-              topicLinks={lessonTopicLinks}
-              outputs={allLessonOutputs}
-              uniqueTags={exercisesUniqueTags}
-              isAdmin={isAdminUser}
-              isAssistant={isAssistant}
-              assistantId={assistantId}
-              lessonPlanStaff={lessonPlanStaff}
-              onRefetchTopics={refetchTopics}
-              onRefetchTopicLinks={refetchTopicLinks}
-              onRefetchOutputs={refetchAllOutputs}
-            />
+                topics={lessonTopics}
+                topicLinks={lessonTopicLinks}
+                outputs={allLessonOutputs}
+                uniqueTags={exercisesUniqueTags}
+                isAdmin={isAdminUser}
+                isAssistant={isAssistant}
+                assistantId={assistantId}
+                lessonPlanStaff={lessonPlanStaff}
+                onRefetchTopics={refetchTopics}
+                onRefetchTopicLinks={refetchTopicLinks}
+                onRefetchOutputs={refetchAllOutputs}
+              />
+            </div>
           )}
         </div>
       </div>
@@ -964,6 +1108,20 @@ function LessonPlans() {
             setTaskModalOpen(false);
             setEditingTask(null);
           }}
+        />
+      </Modal>
+
+      {/* Exercises Tab Settings Modal */}
+      <Modal
+        isOpen={exercisesSettingsOpen}
+        onClose={() => setExercisesSettingsOpen(false)}
+        size="md"
+        title="Cài đặt"
+      >
+        <ExercisesSettingsModalContent
+          lessonPlanStaff={lessonPlanStaff}
+          isAdmin={isAdminUser}
+          onClose={() => setExercisesSettingsOpen(false)}
         />
       </Modal>
 
@@ -1715,6 +1873,7 @@ function OverviewTab({
 // Tasks Tab Component
 function TasksTab({
   outputs,
+  allOutputsForDuplicateCheck,
   uniqueTags,
   selectedMonth,
   monthLabel,
@@ -1738,6 +1897,7 @@ function TasksTab({
   onRefetch,
 }: {
   outputs: LessonOutput[];
+  allOutputsForDuplicateCheck: LessonOutput[];
   uniqueTags: string[];
   selectedMonth: string;
   monthLabel: string;
@@ -1767,6 +1927,7 @@ function TasksTab({
     lesson_name: '',
     original_title: '',
     original_link: '',
+    source: '',
     tag: '',
     level: '',
     date: new Date().toISOString().split('T')[0],
@@ -1776,6 +1937,8 @@ function TasksTab({
     link: '',
     assistant_id: currentUserStaffId || undefined,
   });
+  const [hasChecker, setHasChecker] = useState(false);
+  const [hasCode, setHasCode] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagSearchInput, setTagSearchInput] = useState('');
   const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
@@ -1783,30 +1946,38 @@ function TasksTab({
   const [duplicateTitleMatches, setDuplicateTitleMatches] = useState<Array<{
     title: string;
     originalTitle: string;
-    level: string;
+    source: string;
     tag: string;
     createdAt: string;
   }>>([]);
   const [duplicateOriginalTitleMatches, setDuplicateOriginalTitleMatches] = useState<Array<{
     title: string;
     originalTitle: string;
-    level: string;
+    source: string;
     tag: string;
     createdAt: string;
   }>>([]);
 
+  const [customTagsForAddForm, setCustomTagsForAddForm] = useState<string[]>([]);
+  const [newTagInput, setNewTagInput] = useState('');
+  const addFormTagSearchInputRef = useRef<HTMLInputElement>(null);
+  const addFormDateInputRef = useRef<HTMLInputElement>(null);
+
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  // Tags available in add form: predefined + custom (tag mới) → hiển thị trong Khác dưới Level 5
+  const availableTagsAddForm = useMemo(() => Array.from(new Set([...PREDEFINED_TAGS, ...customTagsForAddForm])), [customTagsForAddForm]);
 
   // Filter tags with prefix matching
   const filteredTags = useMemo(() => {
-    return filterTagsWithPrefixMatching(tagSearchInput, PREDEFINED_TAGS, selectedTags);
-  }, [tagSearchInput, selectedTags]);
+    return filterTagsWithPrefixMatching(tagSearchInput, availableTagsAddForm, selectedTags);
+  }, [tagSearchInput, selectedTags, availableTagsAddForm]);
 
   // Popular tags for empty search
   const popularTags = useMemo(() => {
     const popular = ['DFS', 'BFS', 'DP', 'Segment Tree', 'Greedy', 'Binary Search', 'Graph', 'Tree'];
-    return popular.filter(t => !selectedTags.includes(t) && PREDEFINED_TAGS.includes(t)).slice(0, 6);
-  }, [selectedTags]);
+    return popular.filter(t => !selectedTags.includes(t) && availableTagsAddForm.includes(t)).slice(0, 6);
+  }, [selectedTags, availableTagsAddForm]);
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
@@ -1889,10 +2060,25 @@ function TasksTab({
 
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!addFormData.original_title?.trim()) {
+      toast.error('Tên gốc không được để trống');
+      return;
+    }
+    if (!addFormData.source?.trim()) {
+      toast.error('Nguồn không được để trống');
+      return;
+    }
+    if (!addFormData.original_link?.trim()) {
+      toast.error('Link gốc không được để trống');
+      return;
+    }
     try {
+      const tagParts = [...selectedTags];
+      if (hasChecker && !tagParts.includes('Checker')) tagParts.push('Checker');
+      if (hasCode && !tagParts.includes('Code')) tagParts.push('Code');
       const submitData = {
         ...addFormData,
-        tag: selectedTags.join(','),
+        tag: tagParts.join(','),
       };
       if (editingOutput) {
         const oldOutput = { ...editingOutput };
@@ -1953,6 +2139,7 @@ function TasksTab({
         lesson_name: '',
         original_title: '',
         original_link: '',
+        source: '',
         tag: '',
         level: '',
         date: new Date().toISOString().split('T')[0],
@@ -1962,6 +2149,8 @@ function TasksTab({
         link: '',
         assistant_id: currentUserStaffId || undefined,
       });
+      setHasChecker(false);
+      setHasCode(false);
       setCostPreview({ formatted: '0 đ', words: 'Không đồng' });
       setDuplicateTitleMatches([]);
       setDuplicateOriginalTitleMatches([]);
@@ -1973,10 +2162,18 @@ function TasksTab({
 
   useEffect(() => {
     if (editingOutput) {
+      let originalTitle = editingOutput.original_title || '';
+      let source = (editingOutput as any).source || '';
+      if (!source && originalTitle.includes(' - ')) {
+        const parts = originalTitle.split(' - ');
+        originalTitle = parts[0]?.trim() || originalTitle;
+        source = parts.slice(1).join(' - ').trim() || '';
+      }
       setAddFormData({
         lesson_name: editingOutput.lesson_name,
-        original_title: editingOutput.original_title || '',
+        original_title: originalTitle,
         original_link: editingOutput.original_link || '',
+        source,
         tag: editingOutput.tag || '',
         level: editingOutput.level || '',
         date: editingOutput.date,
@@ -1987,7 +2184,14 @@ function TasksTab({
         assistant_id: editingOutput.assistant_id || undefined,
       });
       if (editingOutput.tag) {
-        setSelectedTags(editingOutput.tag.split(',').map((t) => t.trim()).filter(Boolean));
+        const tags = editingOutput.tag.split(',').map((t) => t.trim()).filter(Boolean);
+        setSelectedTags(tags);
+        setHasChecker(tags.includes('Checker'));
+        setHasCode(tags.includes('Code'));
+      } else {
+        setSelectedTags([]);
+        setHasChecker(false);
+        setHasCode(false);
       }
       setIsAddFormOpen(true);
     } else if (isAddFormOpen && !editingOutput && currentUserStaffId && !addFormData.assistant_id) {
@@ -2011,7 +2215,7 @@ function TasksTab({
       return;
     }
     const normalizedInput = addFormData.lesson_name.trim().toLowerCase();
-    const matches = outputs
+    const matches = allOutputsForDuplicateCheck
       .filter((o) => {
         if (editingOutput && o.id === editingOutput.id) return false;
         const name = (o.lesson_name || '').trim().toLowerCase();
@@ -2021,20 +2225,20 @@ function TasksTab({
       .map((o) => ({
         title: o.lesson_name || '-',
         originalTitle: o.original_title || '-',
-        level: getDisplayLevel(o.level),
+        source: (o as any).source || (o.original_title?.includes(' - ') ? o.original_title.split(' - ').slice(1).join(' - ').trim() : '') || '-',
         tag: o.tag || '-',
         createdAt: o.created_at || o.date || '-',
       }));
     setDuplicateTitleMatches(matches);
-  }, [addFormData.lesson_name, outputs, editingOutput]);
+  }, [addFormData.lesson_name, allOutputsForDuplicateCheck, editingOutput]);
 
   useEffect(() => {
-    if (!addFormData.original_title.trim()) {
+    if (!addFormData.original_title?.trim()) {
       setDuplicateOriginalTitleMatches([]);
       return;
     }
     const normalizedInput = addFormData.original_title.trim().toLowerCase();
-    const matches = outputs
+    const matches = allOutputsForDuplicateCheck
       .filter((o) => {
         if (editingOutput && o.id === editingOutput.id) return false;
         const name = (o.lesson_name || '').trim().toLowerCase();
@@ -2044,12 +2248,12 @@ function TasksTab({
       .map((o) => ({
         title: o.lesson_name || '-',
         originalTitle: o.original_title || '-',
-        level: getDisplayLevel(o.level),
+        source: (o as any).source || (o.original_title?.includes(' - ') ? o.original_title.split(' - ').slice(1).join(' - ').trim() : '') || '-',
         tag: o.tag || '-',
         createdAt: o.created_at || o.date || '-',
       }));
     setDuplicateOriginalTitleMatches(matches);
-  }, [addFormData.original_title, outputs, editingOutput]);
+  }, [addFormData.original_title, allOutputsForDuplicateCheck, editingOutput]);
 
   const canManage = isAdmin || isAssistant || hasLessonPlanRole;
   // Chỉ admin, assistant và accountant mới có thể bulk update status - lesson_plan role không được phép
@@ -2614,26 +2818,37 @@ function TasksTab({
               </div>
             )}
 
-            {/* Date Range */}
-            <div style={{ flex: '1 1 240px' }}>
-              <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontSize: 'var(--font-size-sm)', color: 'var(--muted)', fontWeight: '500' }}>
-                Khoảng ngày
-              </label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-2)' }}>
-                <input
-                  type="date"
-                  className="form-control"
-                  placeholder="Từ ngày"
-                  value={dateFromFilter}
-                  onChange={(e) => setDateFromFilter(e.target.value)}
-                />
-                <input
-                  type="date"
-                  className="form-control"
-                  placeholder="Đến ngày"
-                  value={dateToFilter}
-                  onChange={(e) => setDateToFilter(e.target.value)}
-                />
+            {/* Date Range - 2 ô Từ ngày / Đến ngày, bấm bất kỳ đâu trong ô là mở date picker */}
+            <div style={{ flex: '1 1 240px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-2)' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontSize: 'var(--font-size-sm)', color: 'var(--muted)', fontWeight: '500' }}>Từ ngày</label>
+                <div
+                  onClick={(e) => { const el = e.currentTarget.querySelector('input'); if (el && 'showPicker' in el) (el as HTMLInputElement).showPicker?.(); }}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <input
+                    type="date"
+                    className="form-control"
+                    value={dateFromFilter}
+                    onChange={(e) => setDateFromFilter(e.target.value)}
+                    style={{ width: '100%', cursor: 'pointer' }}
+                  />
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontSize: 'var(--font-size-sm)', color: 'var(--muted)', fontWeight: '500' }}>Đến ngày</label>
+                <div
+                  onClick={(e) => { const el = e.currentTarget.querySelector('input'); if (el && 'showPicker' in el) (el as HTMLInputElement).showPicker?.(); }}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <input
+                    type="date"
+                    className="form-control"
+                    value={dateToFilter}
+                    onChange={(e) => setDateToFilter(e.target.value)}
+                    style={{ width: '100%', cursor: 'pointer' }}
+                  />
+                </div>
               </div>
             </div>
 
@@ -2707,21 +2922,28 @@ function TasksTab({
           </div>
 
           {isAddFormOpen && (
-            <form onSubmit={handleAddSubmit}>
-              <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
-                <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500' }}>
-                  Tên bài <span className="text-danger">*</span>
-                </label>
-                <input
-                  type="text"
-                  className="form-control"
-                  required
-                  placeholder="Tên bài giáo án"
-                  value={addFormData.lesson_name}
-                  onChange={(e) => setAddFormData({ ...addFormData, lesson_name: e.target.value })}
-                />
+            <form onSubmit={handleAddSubmit} style={{ width: '100%', paddingTop: 'var(--spacing-3)' }}>
+              {/* Section: Thông tin bài */}
+              <div style={{ marginBottom: 'var(--spacing-4)' }}>
+                <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: '600', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 'var(--spacing-2)' }}>
+                  Thông tin bài
+                </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-3)', marginBottom: 'var(--spacing-3)' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500', fontSize: 'var(--font-size-sm)' }}>
+                    Tên bài <span className="text-danger">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    required
+                    placeholder="Tên bài giáo án"
+                    value={addFormData.lesson_name}
+                    onChange={(e) => setAddFormData({ ...addFormData, lesson_name: e.target.value })}
+                  />
+                </div>
                 {duplicateTitleMatches.length > 0 && (
-                  <div style={{ marginTop: 'var(--spacing-2)' }}>
+                  <div style={{ gridColumn: '1 / -1' }}>
                     <div style={{ color: '#d97706', fontSize: 'var(--font-size-sm)', fontWeight: '500', marginBottom: 'var(--spacing-1)' }}>
                       ⚠️ Có bài trùng tiền tố tên bài hoặc tên gốc
                     </div>
@@ -2757,8 +2979,8 @@ function TasksTab({
                             <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 'var(--spacing-1) var(--spacing-2)', fontSize: '0.8125rem' }}>
                               <span style={{ color: '#6b7280' }}>Tên gốc:</span>
                               <span>{match.originalTitle}</span>
-                              <span style={{ color: '#6b7280' }}>Level:</span>
-                              <span>{match.level}</span>
+                              <span style={{ color: '#6b7280' }}>Nguồn:</span>
+                              <span>{match.source}</span>
                               <span style={{ color: '#6b7280' }}>Tag:</span>
                               <span>{match.tag}</span>
                               <span style={{ color: '#6b7280' }}>Ngày tạo:</span>
@@ -2770,88 +2992,129 @@ function TasksTab({
                     ))}
                   </div>
                 )}
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500', fontSize: 'var(--font-size-sm)' }}>
+                    Link gốc <span className="text-danger">*</span>
+                  </label>
+                  <input
+                    type="url"
+                    className="form-control"
+                    required
+                    placeholder="https://..."
+                    value={addFormData.original_link || ''}
+                    onChange={(e) => setAddFormData({ ...addFormData, original_link: e.target.value })}
+                  />
+                </div>
               </div>
-
-              <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
-                <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500' }}>Tên gốc</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="VD: Light - VNOI, DOSI - Sưu tầm, DOIDAU - Unicorns"
-                  value={addFormData.original_title}
-                  onChange={(e) => setAddFormData({ ...addFormData, original_title: e.target.value })}
-                />
-                <small className="text-muted" style={{ display: 'block', marginTop: 'var(--spacing-1)', fontSize: '0.875rem' }}>
-                  Quy tắc ghi tên gốc: Tên bài gốc + nguồn
-                </small>
-                {duplicateOriginalTitleMatches.length > 0 && (
-                  <div style={{ marginTop: 'var(--spacing-2)' }}>
-                    <div style={{ color: '#d97706', fontSize: 'var(--font-size-sm)', fontWeight: '500', marginBottom: 'var(--spacing-1)' }}>
-                      ⚠️ Có bài trùng tiền tố tên bài hoặc tên gốc
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--spacing-3)' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500', fontSize: 'var(--font-size-sm)' }}>
+                    Tên gốc <span className="text-danger">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    required
+                    placeholder="LIGHT, DOSI, ..."
+                    value={addFormData.original_title}
+                    onChange={(e) => setAddFormData({ ...addFormData, original_title: e.target.value })}
+                  />
+                  {duplicateOriginalTitleMatches.length > 0 && (
+                    <div style={{ marginTop: 'var(--spacing-2)' }}>
+                      <div style={{ color: '#d97706', fontSize: 'var(--font-size-sm)', fontWeight: '500', marginBottom: 'var(--spacing-1)' }}>
+                        ⚠️ Có bài trùng tiền tố tên bài hoặc tên gốc
+                      </div>
+                      {duplicateOriginalTitleMatches.map((match, idx) => (
+                        <div
+                          key={idx}
+                          style={{
+                            border: '1px solid #fcd34d',
+                            backgroundColor: '#fef9c3',
+                            padding: 'var(--spacing-2)',
+                            borderRadius: 'var(--radius)',
+                            marginTop: 'var(--spacing-2)',
+                            fontSize: '0.875rem',
+                            color: '#374151',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'start', gap: 'var(--spacing-2)' }}>
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              style={{ flexShrink: 0, marginTop: '2px', color: '#f59e0b' }}
+                            >
+                              <circle cx="12" cy="12" r="10" />
+                              <line x1="12" y1="8" x2="12" y2="12" />
+                              <line x1="12" y1="16" x2="12.01" y2="16" />
+                            </svg>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: '500', marginBottom: 'var(--spacing-1)' }}>{match.title}</div>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 'var(--spacing-1) var(--spacing-2)', fontSize: '0.8125rem' }}>
+                                <span style={{ color: '#6b7280' }}>Tên gốc:</span>
+                                <span>{match.originalTitle}</span>
+                                <span style={{ color: '#6b7280' }}>Nguồn:</span>
+                                <span>{match.source}</span>
+                                <span style={{ color: '#6b7280' }}>Tag:</span>
+                                <span>{match.tag}</span>
+                                <span style={{ color: '#6b7280' }}>Ngày tạo:</span>
+                                <span>{formatDate(match.createdAt)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    {duplicateOriginalTitleMatches.map((match, idx) => (
-                      <div
-                        key={idx}
-                        style={{
-                          border: '1px solid #fcd34d',
-                          backgroundColor: '#fef9c3',
-                          padding: 'var(--spacing-2)',
-                          borderRadius: 'var(--radius)',
-                          marginTop: 'var(--spacing-2)',
-                          fontSize: '0.875rem',
-                          color: '#374151',
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'start', gap: 'var(--spacing-2)' }}>
-                          <svg
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            style={{ flexShrink: 0, marginTop: '2px', color: '#f59e0b' }}
-                          >
-                            <circle cx="12" cy="12" r="10" />
-                            <line x1="12" y1="8" x2="12" y2="12" />
-                            <line x1="12" y1="16" x2="12.01" y2="16" />
-                          </svg>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: '500', marginBottom: 'var(--spacing-1)' }}>{match.title}</div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 'var(--spacing-1) var(--spacing-2)', fontSize: '0.8125rem' }}>
-                              <span style={{ color: '#6b7280' }}>Tên gốc:</span>
-                              <span>{match.originalTitle}</span>
-                              <span style={{ color: '#6b7280' }}>Level:</span>
-                              <span>{match.level}</span>
-                              <span style={{ color: '#6b7280' }}>Tag:</span>
-                              <span>{match.tag}</span>
-                              <span style={{ color: '#6b7280' }}>Ngày tạo:</span>
-                              <span>{formatDate(match.createdAt)}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+                  )}
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500', fontSize: 'var(--font-size-sm)' }}>
+                    Nguồn <span className="text-danger">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    required
+                    placeholder="codeforces, Unicorns, ..."
+                    value={addFormData.source || ''}
+                    onChange={(e) => setAddFormData({ ...addFormData, source: e.target.value })}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500', fontSize: 'var(--font-size-sm)' }}>Level</label>
+                  <select
+                    className="form-control"
+                    value={addFormData.level}
+                    onChange={(e) => setAddFormData({ ...addFormData, level: e.target.value })}
+                  >
+                    <option value="">-- Chọn --</option>
+                    {LEVEL_OPTIONS.map((level) => (
+                      <option key={level} value={level}>{level}</option>
                     ))}
-                  </div>
-                )}
+                  </select>
+                </div>
+              </div>
               </div>
 
-              <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
-                <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500' }}>Link gốc</label>
-                <input
-                  type="url"
-                  className="form-control"
-                  placeholder="https://..."
-                  value={addFormData.original_link || ''}
-                  onChange={(e) => setAddFormData({ ...addFormData, original_link: e.target.value })}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: 'var(--spacing-3)' }}>
-                <div className="form-group">
-                  <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500' }}>Tag</label>
-                  <div style={{ position: 'relative' }}>
-                    <div className="tag-input-wrapper" onClick={() => setTagDropdownOpen(true)}>
+              {/* Section: Phân loại */}
+              <div style={{ marginBottom: 'var(--spacing-4)' }}>
+                <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: '600', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 'var(--spacing-2)' }}>
+                  Phân loại
+                </div>
+              <div className="form-group add-form-tag-row" style={{ marginBottom: 0 }}>
+                <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500', fontSize: 'var(--font-size-sm)' }}>Tag</label>
+                <div className="add-form-tag-fields" style={{ display: 'flex', gap: 'var(--spacing-3)', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                  <div style={{ position: 'relative', flex: '1', minWidth: '180px', maxWidth: '320px' }}>
+                    <div
+                      className="tag-input-wrapper"
+                      onClick={() => {
+                        addFormTagSearchInputRef.current?.focus();
+                        setTagDropdownOpen(true);
+                      }}
+                    >
                       <div className="selected-tags-container">
                         {selectedTags.length > 0 && (
                           <span className="tag-count-badge">
@@ -2879,6 +3142,7 @@ function TasksTab({
                         ))}
                       </div>
                       <input
+                        ref={addFormTagSearchInputRef}
                         type="text"
                         className="tag-search-input"
                         placeholder="Tìm kiếm và chọn tag..."
@@ -2889,6 +3153,7 @@ function TasksTab({
                           setTagDropdownOpen(true);
                         }}
                         onFocus={() => setTagDropdownOpen(true)}
+                        onClick={(e) => e.stopPropagation()}
                       />
                     </div>
                     {tagDropdownOpen && (
@@ -3181,91 +3446,136 @@ function TasksTab({
                       </div>
                     )}
                   </div>
-                </div>
-
-                <div className="form-group">
-                  <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500' }}>Level</label>
-                  <select
-                    className="form-control"
-                    value={addFormData.level}
-                    onChange={(e) => setAddFormData({ ...addFormData, level: e.target.value })}
-                  >
-                    <option value="">-- Chọn level --</option>
-                    {LEVEL_OPTIONS.map((level) => (
-                      <option key={level} value={level}>
-                        {level}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="add-form-new-tag-wrap" style={{ flex: '0 0 auto', minWidth: '140px', maxWidth: '200px' }}>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="Tag mới..."
+                      autoComplete="off"
+                      value={newTagInput}
+                      onChange={(e) => setNewTagInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const tag = newTagInput.trim();
+                          if (!tag) return;
+                          const normalized = tag.replace(/\s+/g, ' ').trim();
+                          if (!normalized) return;
+                          if (!customTagsForAddForm.includes(normalized)) {
+                            setCustomTagsForAddForm((prev) => [...prev, normalized]);
+                          }
+                          if (!selectedTags.includes(normalized)) {
+                            setSelectedTags([...selectedTags, normalized]);
+                          }
+                          setNewTagInput('');
+                        }
+                      }}
+                      style={{ fontSize: 'var(--font-size-sm)' }}
+                    />
+                  </div>
                 </div>
               </div>
+              </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: 'var(--spacing-3)' }}>
-                <div className="form-group">
-                  <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500' }}>
+              {/* Section: Thời gian & thanh toán */}
+              <div style={{ marginBottom: 'var(--spacing-4)' }}>
+                <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: '600', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 'var(--spacing-2)' }}>
+                  Thời gian & thanh toán
+                </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--spacing-3)' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500', fontSize: 'var(--font-size-sm)' }}>
                     Ngày <span className="text-danger">*</span>
                   </label>
-                  <input
-                    type="date"
-                    className="form-control"
-                    required
-                    value={addFormData.date}
-                    onChange={(e) => setAddFormData({ ...addFormData, date: e.target.value })}
-                  />
+                  <div
+                    style={{ cursor: 'pointer', position: 'relative' }}
+                    onClick={() => {
+                      addFormDateInputRef.current?.focus();
+                      if (typeof addFormDateInputRef.current?.showPicker === 'function') {
+                        addFormDateInputRef.current.showPicker();
+                      }
+                    }}
+                  >
+                    <input
+                      ref={addFormDateInputRef}
+                      type="date"
+                      className="form-control"
+                      required
+                      value={addFormData.date}
+                      onChange={(e) => setAddFormData({ ...addFormData, date: e.target.value })}
+                      style={{ cursor: 'pointer', width: '100%' }}
+                    />
+                  </div>
                 </div>
-
-                <div className="form-group">
-                  <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500' }}>Chi phí</label>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <div style={{ display: 'flex', gap: 'var(--spacing-2)', marginBottom: 'var(--spacing-1)', alignItems: 'center' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: 'var(--font-size-xs)' }}>
+                      <input type="checkbox" checked={hasChecker} onChange={(e) => setHasChecker(e.target.checked)} />
+                      Checker
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: 'var(--font-size-xs)' }}>
+                      <input type="checkbox" checked={hasCode} onChange={(e) => setHasCode(e.target.checked)} />
+                      Code
+                    </label>
+                  </div>
+                  <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500', fontSize: 'var(--font-size-sm)' }}>Chi phí</label>
                   <CurrencyInput
                     value={addFormData.cost || 0}
                     onChange={(value) => setAddFormData({ ...addFormData, cost: value })}
                     showHint={false}
                   />
-                  <small className="cost-preview text-muted" style={{ display: 'block', marginTop: 'var(--spacing-1)', fontSize: '0.875rem' }}>
-                    <div style={{ fontWeight: '500', color: 'var(--text)' }}>{costPreview.formatted}</div>
-                    <div style={{ color: 'var(--muted)', marginTop: '2px' }}>{costPreview.words}</div>
+                  <small className="cost-preview text-muted" style={{ display: 'block', marginTop: '4px', fontSize: 'var(--font-size-xs)' }}>
+                    <span style={{ fontWeight: '500', color: 'var(--text)' }}>{costPreview.formatted}</span>
+                    <span style={{ color: 'var(--muted)', marginLeft: '6px' }}>{costPreview.words}</span>
                   </small>
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500', fontSize: 'var(--font-size-sm)' }}>Trạng thái</label>
+                  <select
+                    className="form-control"
+                    value={addFormData.status}
+                    onChange={(e) => setAddFormData({ ...addFormData, status: e.target.value as any })}
+                  >
+                    <option value="pending">Chưa thanh toán</option>
+                    <option value="paid">Đã thanh toán</option>
+                    <option value="deposit">Cọc</option>
+                  </select>
+                </div>
+              </div>
+              </div>
+
+              {/* Section: Bổ sung */}
+              <div style={{ marginBottom: 'var(--spacing-4)' }}>
+                <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: '600', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 'var(--spacing-2)' }}>
+                  Bổ sung
+                </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-3)' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500', fontSize: 'var(--font-size-sm)' }}>Link</label>
+                  <input
+                    type="url"
+                    className="form-control"
+                    placeholder="https://example.com/lesson"
+                    value={addFormData.link}
+                    onChange={(e) => setAddFormData({ ...addFormData, link: e.target.value })}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500', fontSize: 'var(--font-size-sm)' }}>Contest</label>
+                  <textarea
+                    className="form-control"
+                    rows={2}
+                    placeholder="VD: Bài đã đưa vào contest ABC..."
+                    value={addFormData.contest_uploaded}
+                    onChange={(e) => setAddFormData({ ...addFormData, contest_uploaded: e.target.value })}
+                    style={{ resize: 'vertical', minHeight: '56px' }}
+                  />
                 </div>
               </div>
 
-              <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
-                <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500' }}>Trạng thái</label>
-                <select
-                  className="form-control"
-                  value={addFormData.status}
-                  onChange={(e) => setAddFormData({ ...addFormData, status: e.target.value as any })}
-                >
-                  <option value="pending">Chưa thanh toán</option>
-                  <option value="paid">Đã thanh toán</option>
-                  <option value="deposit">Cọc</option>
-                </select>
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
-                <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500' }}>Contest</label>
-                <textarea
-                  className="form-control"
-                  rows={3}
-                  placeholder="VD: Bài này đã được đưa vào contest ABC ngày 12/11..."
-                  value={addFormData.contest_uploaded}
-                  onChange={(e) => setAddFormData({ ...addFormData, contest_uploaded: e.target.value })}
-                />
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
-                <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500' }}>Link</label>
-                <input
-                  type="url"
-                  className="form-control"
-                  placeholder="https://example.com/lesson"
-                  value={addFormData.link}
-                  onChange={(e) => setAddFormData({ ...addFormData, link: e.target.value })}
-                />
-              </div>
-
               {isAdmin && lessonPlanStaff && lessonPlanStaff.length > 0 && (
-                <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
-                  <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500' }}>Người phụ trách</label>
+                <div className="form-group" style={{ marginTop: 'var(--spacing-3)', marginBottom: 0 }}>
+                  <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500', fontSize: 'var(--font-size-sm)' }}>Người phụ trách</label>
                   <select
                     className="form-control"
                     value={addFormData.assistant_id || ''}
@@ -3280,8 +3590,9 @@ function TasksTab({
                   </select>
                 </div>
               )}
+              </div>
 
-              <div style={{ display: 'flex', gap: 'var(--spacing-2)', justifyContent: 'flex-end' }}>
+              <div style={{ display: 'flex', gap: 'var(--spacing-2)', justifyContent: 'flex-end', marginTop: 'var(--spacing-4)', paddingTop: 'var(--spacing-3)', borderTop: '1px solid var(--border)' }}>
                 <button
                   type="button"
                   className="btn"
@@ -3290,10 +3601,13 @@ function TasksTab({
                     setEditingOutput(null);
                     setSelectedTags([]);
                     setTagSearchInput('');
+                    setHasChecker(false);
+                    setHasCode(false);
                     setAddFormData({
                       lesson_name: '',
                       original_title: '',
                       original_link: '',
+                      source: '',
                       tag: '',
                       level: '',
                       date: new Date().toISOString().split('T')[0],
@@ -3304,8 +3618,8 @@ function TasksTab({
                       assistant_id: undefined,
                     });
                     setCostPreview({ formatted: '0 đ', words: 'Không đồng' });
-                    setDuplicateTitleWarning('');
-                    setDuplicateOriginalTitleWarning('');
+                    setDuplicateTitleMatches([]);
+                    setDuplicateOriginalTitleMatches([]);
                   }}
                 >
                   Hủy
@@ -3769,6 +4083,7 @@ function TasksTab({
         <EditOutputModal
           outputId={editingOutputId}
           outputs={outputs}
+          allOutputsForDuplicateCheck={allOutputsForDuplicateCheck}
           lessonPlanStaff={lessonPlanStaff}
           isAdmin={isAdmin}
           isAssistant={isAssistant}
@@ -3789,6 +4104,7 @@ function TasksTab({
 function EditOutputModal({
   outputId,
   outputs,
+  allOutputsForDuplicateCheck,
   lessonPlanStaff,
   isAdmin,
   isAssistant,
@@ -3799,6 +4115,7 @@ function EditOutputModal({
 }: {
   outputId: string;
   outputs: LessonOutput[];
+  allOutputsForDuplicateCheck: LessonOutput[];
   lessonPlanStaff: any[];
   isAdmin: boolean;
   isAssistant: boolean;
@@ -3807,11 +4124,24 @@ function EditOutputModal({
   onClose: () => void;
   onRefetch: () => Promise<void>;
 }) {
-  const output = outputs.find((o) => o.id === outputId);
+  const output = outputs.find((o) => o.id === outputId) || allOutputsForDuplicateCheck.find((o) => o.id === outputId);
+  const parseOutputForForm = (o: LessonOutput | undefined) => {
+    if (!o) return { original_title: '', source: '' };
+    let originalTitle = o.original_title || '';
+    let source = (o as any).source || '';
+    if (!source && originalTitle.includes(' - ')) {
+      const parts = originalTitle.split(' - ');
+      originalTitle = parts[0]?.trim() || originalTitle;
+      source = parts.slice(1).join(' - ').trim() || '';
+    }
+    return { original_title: originalTitle, source };
+  };
+  const parsed = parseOutputForForm(output);
   const [formData, setFormData] = useState<LessonOutputFormData>({
     lesson_name: output?.lesson_name || '',
-    original_title: output?.original_title || '',
+    original_title: parsed.original_title,
     original_link: output?.original_link || '',
+    source: parsed.source,
     tag: output?.tag || '',
     level: output?.level || '',
     date: output?.date || new Date().toISOString().split('T')[0],
@@ -3822,24 +4152,27 @@ function EditOutputModal({
     assistant_id: output?.assistant_id || undefined,
   });
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [hasChecker, setHasChecker] = useState(false);
+  const [hasCode, setHasCode] = useState(false);
   const [tagSearchInput, setTagSearchInput] = useState('');
   const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
   const [costPreview, setCostPreview] = useState({ formatted: '0 đ', words: 'Không đồng' });
   const [duplicateTitleMatches, setDuplicateTitleMatches] = useState<Array<{
     title: string;
     originalTitle: string;
-    level: string;
+    source: string;
     tag: string;
     createdAt: string;
   }>>([]);
   const [duplicateOriginalTitleMatches, setDuplicateOriginalTitleMatches] = useState<Array<{
     title: string;
     originalTitle: string;
-    level: string;
+    source: string;
     tag: string;
     createdAt: string;
   }>>([]);
   const tagDropdownRef = useRef<HTMLDivElement>(null);
+  const editFormDateInputRef = useRef<HTMLInputElement>(null);
 
   // Filter tags with prefix matching
   const filteredTags = useMemo(() => {
@@ -3852,12 +4185,36 @@ function EditOutputModal({
     return popular.filter(t => !selectedTags.includes(t) && PREDEFINED_TAGS.includes(t)).slice(0, 6);
   }, [selectedTags]);
 
-  // Initialize selected tags from output.tag
+  // Initialize form from output when modal opens (outputId changes)
   useEffect(() => {
-    if (output?.tag) {
-      setSelectedTags(output.tag.split(',').map((t) => t.trim()).filter(Boolean));
+    const o = outputs.find((x) => x.id === outputId);
+    if (!o) return;
+    const p = parseOutputForForm(o);
+    setFormData({
+      lesson_name: o.lesson_name || '',
+      original_title: p.original_title,
+      original_link: o.original_link || '',
+      source: p.source,
+      tag: o.tag || '',
+      level: o.level || '',
+      date: o.date || new Date().toISOString().split('T')[0],
+      cost: o.cost || 0,
+      status: o.status || 'pending',
+      contest_uploaded: o.contest_uploaded || '',
+      link: o.link || '',
+      assistant_id: o.assistant_id || undefined,
+    });
+    if (o.tag) {
+      const tags = o.tag.split(',').map((t) => t.trim()).filter(Boolean);
+      setSelectedTags(tags);
+      setHasChecker(tags.includes('Checker'));
+      setHasCode(tags.includes('Code'));
+    } else {
+      setSelectedTags([]);
+      setHasChecker(false);
+      setHasCode(false);
     }
-  }, [output]);
+  }, [outputId, outputs]);
 
   // Update cost preview when cost changes
   useEffect(() => {
@@ -3874,7 +4231,7 @@ function EditOutputModal({
       return;
     }
     const normalizedInput = formData.lesson_name.trim().toLowerCase();
-    const matches = outputs
+    const matches = allOutputsForDuplicateCheck
       .filter((o) => {
         if (o.id === outputId) return false;
         const name = (o.lesson_name || '').trim().toLowerCase();
@@ -3884,20 +4241,20 @@ function EditOutputModal({
       .map((o) => ({
         title: o.lesson_name || '-',
         originalTitle: o.original_title || '-',
-        level: getDisplayLevel(o.level),
+        source: (o as any).source || (o.original_title?.includes(' - ') ? o.original_title.split(' - ').slice(1).join(' - ').trim() : '') || '-',
         tag: o.tag || '-',
         createdAt: o.created_at || o.date || '-',
       }));
     setDuplicateTitleMatches(matches);
-  }, [formData.lesson_name, outputs, outputId]);
+  }, [formData.lesson_name, allOutputsForDuplicateCheck, outputId]);
 
   useEffect(() => {
-    if (!formData.original_title.trim()) {
+    if (!formData.original_title?.trim()) {
       setDuplicateOriginalTitleMatches([]);
       return;
     }
     const normalizedInput = formData.original_title.trim().toLowerCase();
-    const matches = outputs
+    const matches = allOutputsForDuplicateCheck
       .filter((o) => {
         if (o.id === outputId) return false;
         const name = (o.lesson_name || '').trim().toLowerCase();
@@ -3907,12 +4264,12 @@ function EditOutputModal({
       .map((o) => ({
         title: o.lesson_name || '-',
         originalTitle: o.original_title || '-',
-        level: getDisplayLevel(o.level),
+        source: (o as any).source || (o.original_title?.includes(' - ') ? o.original_title.split(' - ').slice(1).join(' - ').trim() : '') || '-',
         tag: o.tag || '-',
         createdAt: o.created_at || o.date || '-',
       }));
     setDuplicateOriginalTitleMatches(matches);
-  }, [formData.original_title, outputs, outputId]);
+  }, [formData.original_title, allOutputsForDuplicateCheck, outputId]);
 
 
   // Close tag dropdown when clicking outside
@@ -3936,11 +4293,25 @@ function EditOutputModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!output) return;
-
+    if (!formData.original_title?.trim()) {
+      toast.error('Tên gốc không được để trống');
+      return;
+    }
+    if (!formData.source?.trim()) {
+      toast.error('Nguồn không được để trống');
+      return;
+    }
+    if (!formData.original_link?.trim()) {
+      toast.error('Link gốc không được để trống');
+      return;
+    }
     try {
+      const tagParts = [...selectedTags];
+      if (hasChecker && !tagParts.includes('Checker')) tagParts.push('Checker');
+      if (hasCode && !tagParts.includes('Code')) tagParts.push('Code');
       const submitData = {
         ...formData,
-        tag: selectedTags.join(','),
+        tag: tagParts.join(','),
       };
       await updateLessonOutput(outputId, submitData);
       toast.success('Đã cập nhật bài đã làm');
@@ -4008,8 +4379,8 @@ function EditOutputModal({
                       <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 'var(--spacing-1) var(--spacing-2)', fontSize: '0.8125rem' }}>
                         <span style={{ color: '#6b7280' }}>Tên gốc:</span>
                         <span>{match.originalTitle}</span>
-                        <span style={{ color: '#6b7280' }}>Level:</span>
-                        <span>{match.level}</span>
+                        <span style={{ color: '#6b7280' }}>Nguồn:</span>
+                        <span>{match.source}</span>
                         <span style={{ color: '#6b7280' }}>Tag:</span>
                         <span>{match.tag}</span>
                         <span style={{ color: '#6b7280' }}>Ngày tạo:</span>
@@ -4024,80 +4395,105 @@ function EditOutputModal({
         </div>
 
         <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
-          <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500' }}>Tên gốc</label>
-          <input
-            type="text"
-            className="form-control"
-            placeholder="VD: Light - VNOI, DOSI - Sưu tầm, DOIDAU - Unicorns"
-            value={formData.original_title}
-            onChange={(e) => setFormData({ ...formData, original_title: e.target.value })}
-            disabled={statusOnlyMode}
-          />
-          <small style={{ display: 'block', marginTop: 'var(--spacing-1)', fontSize: '0.875rem', color: 'var(--muted)' }}>
-            Quy tắc ghi tên gốc: Tên bài gốc + nguồn
-          </small>
-          {duplicateOriginalTitleMatches.length > 0 && (
-            <div style={{ marginTop: 'var(--spacing-2)' }}>
-              <div style={{ color: '#d97706', fontSize: 'var(--font-size-sm)', fontWeight: '500', marginBottom: 'var(--spacing-1)' }}>
-                ⚠️ Có bài trùng tiền tố tên bài hoặc tên gốc
-              </div>
-              {duplicateOriginalTitleMatches.map((match, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    border: '1px solid #fcd34d',
-                    backgroundColor: '#fef9c3',
-                    padding: 'var(--spacing-2)',
-                    borderRadius: 'var(--radius)',
-                    marginTop: 'var(--spacing-2)',
-                    fontSize: '0.875rem',
-                    color: '#374151',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'start', gap: 'var(--spacing-2)' }}>
-                    <svg
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      style={{ flexShrink: 0, marginTop: '2px', color: '#f59e0b' }}
-                    >
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="12" y1="8" x2="12" y2="12" />
-                      <line x1="12" y1="16" x2="12.01" y2="16" />
-                    </svg>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: '500', marginBottom: 'var(--spacing-1)' }}>{match.title}</div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 'var(--spacing-1) var(--spacing-2)', fontSize: '0.8125rem' }}>
-                        <span style={{ color: '#6b7280' }}>Tên gốc:</span>
-                        <span>{match.originalTitle}</span>
-                        <span style={{ color: '#6b7280' }}>Level:</span>
-                        <span>{match.level}</span>
-                        <span style={{ color: '#6b7280' }}>Tag:</span>
-                        <span>{match.tag}</span>
-                        <span style={{ color: '#6b7280' }}>Ngày tạo:</span>
-                        <span>{formatDate(match.createdAt)}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
-          <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500' }}>Link gốc</label>
+          <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500' }}>
+            Link gốc <span style={{ color: 'var(--danger)' }}>*</span>
+          </label>
           <input
             type="url"
             className="form-control"
+            required
             placeholder="https://..."
             value={formData.original_link || ''}
             onChange={(e) => setFormData({ ...formData, original_link: e.target.value })}
             disabled={statusOnlyMode}
           />
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: 'var(--spacing-3)' }}>
+          <div className="form-group">
+            <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500' }}>
+              Tên gốc <span style={{ color: 'var(--danger)' }}>*</span>
+            </label>
+            <input
+              type="text"
+              className="form-control"
+              required
+              placeholder="VD: LIGHT, DOSI, DOIDAU, ..."
+              value={formData.original_title}
+              onChange={(e) => setFormData({ ...formData, original_title: e.target.value })}
+              disabled={statusOnlyMode}
+            />
+            <small style={{ display: 'block', marginTop: 'var(--spacing-1)', fontSize: '0.875rem', color: 'var(--muted)' }}>
+              Tên bài gốc (áp dụng tìm kiếm trùng)
+            </small>
+            {duplicateOriginalTitleMatches.length > 0 && (
+              <div style={{ marginTop: 'var(--spacing-2)' }}>
+                <div style={{ color: '#d97706', fontSize: 'var(--font-size-sm)', fontWeight: '500', marginBottom: 'var(--spacing-1)' }}>
+                  ⚠️ Có bài trùng tiền tố tên bài hoặc tên gốc
+                </div>
+                {duplicateOriginalTitleMatches.map((match, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      border: '1px solid #fcd34d',
+                      backgroundColor: '#fef9c3',
+                      padding: 'var(--spacing-2)',
+                      borderRadius: 'var(--radius)',
+                      marginTop: 'var(--spacing-2)',
+                      fontSize: '0.875rem',
+                      color: '#374151',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'start', gap: 'var(--spacing-2)' }}>
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        style={{ flexShrink: 0, marginTop: '2px', color: '#f59e0b' }}
+                      >
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="12" />
+                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                      </svg>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: '500', marginBottom: 'var(--spacing-1)' }}>{match.title}</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 'var(--spacing-1) var(--spacing-2)', fontSize: '0.8125rem' }}>
+                          <span style={{ color: '#6b7280' }}>Tên gốc:</span>
+                          <span>{match.originalTitle}</span>
+                          <span style={{ color: '#6b7280' }}>Nguồn:</span>
+                          <span>{match.source}</span>
+                          <span style={{ color: '#6b7280' }}>Tag:</span>
+                          <span>{match.tag}</span>
+                          <span style={{ color: '#6b7280' }}>Ngày tạo:</span>
+                          <span>{formatDate(match.createdAt)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="form-group">
+            <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500' }}>
+              Nguồn <span style={{ color: 'var(--danger)' }}>*</span>
+            </label>
+            <input
+              type="text"
+              className="form-control"
+              required
+              placeholder="VD: codeforces, Unicorns, LQDOJ, ..."
+              value={formData.source || ''}
+              onChange={(e) => setFormData({ ...formData, source: e.target.value })}
+              disabled={statusOnlyMode}
+            />
+            <small style={{ display: 'block', marginTop: 'var(--spacing-1)', fontSize: '0.875rem', color: 'var(--muted)' }}>
+              Nguồn bài (không áp dụng tìm kiếm trùng)
+            </small>
+          </div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: 'var(--spacing-3)' }}>
@@ -4460,17 +4856,50 @@ function EditOutputModal({
             <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500' }}>
               Ngày <span style={{ color: 'var(--danger)' }}>*</span>
             </label>
-            <input
-              type="date"
-              className="form-control"
-              required
-              value={formData.date}
-              onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-              disabled={statusOnlyMode}
-            />
+            <div
+              style={{ cursor: statusOnlyMode ? 'default' : 'pointer', position: 'relative' }}
+              onClick={() => {
+                if (statusOnlyMode) return;
+                editFormDateInputRef.current?.focus();
+                if (typeof editFormDateInputRef.current?.showPicker === 'function') {
+                  editFormDateInputRef.current.showPicker();
+                }
+              }}
+            >
+              <input
+                ref={editFormDateInputRef}
+                type="date"
+                className="form-control"
+                required
+                value={formData.date}
+                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                disabled={statusOnlyMode}
+                style={{ cursor: statusOnlyMode ? 'default' : 'pointer', width: '100%' }}
+              />
+            </div>
           </div>
 
           <div className="form-group">
+            <div style={{ display: 'flex', gap: 'var(--spacing-4)', marginBottom: 'var(--spacing-2)', alignItems: 'center' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)', cursor: 'pointer', fontSize: 'var(--font-size-sm)' }}>
+                <input
+                  type="checkbox"
+                  checked={hasChecker}
+                  onChange={(e) => setHasChecker(e.target.checked)}
+                  disabled={statusOnlyMode}
+                />
+                Checker
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)', cursor: 'pointer', fontSize: 'var(--font-size-sm)' }}>
+                <input
+                  type="checkbox"
+                  checked={hasCode}
+                  onChange={(e) => setHasCode(e.target.checked)}
+                  disabled={statusOnlyMode}
+                />
+                Code
+              </label>
+            </div>
             <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontWeight: '500' }}>Chi phí</label>
             <CurrencyInput
               value={formData.cost || 0}
@@ -4573,6 +5002,7 @@ function ExercisesTab({
   onRefetchTopics,
   onRefetchTopicLinks,
   onRefetchOutputs,
+  isFullScreen = false,
 }: {
   topics: LessonTopic[];
   topicLinks: LessonTopicLink[];
@@ -4585,6 +5015,7 @@ function ExercisesTab({
   onRefetchTopics: () => Promise<void>;
   onRefetchTopicLinks: () => Promise<void>;
   onRefetchOutputs: () => Promise<void>;
+  isFullScreen?: boolean;
 }) {
   const [selectedTopicId, setSelectedTopicId] = useState<string>('all');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -4993,16 +5424,27 @@ function ExercisesTab({
   };
 
   return (
-    <div style={{ display: 'flex', gap: 'var(--spacing-4)', height: 'calc(100vh - 300px)', minHeight: '500px' }}>
+    <div
+      className={isFullScreen ? 'exercises-tab-fullscreen' : ''}
+      style={{
+        display: 'flex',
+        gap: 'var(--spacing-4)',
+        flex: isFullScreen ? 1 : undefined,
+        minHeight: isFullScreen ? 0 : '500px',
+        overflow: 'hidden',
+        height: isFullScreen ? undefined : 'calc(100vh - 300px)',
+      }}
+    >
       {/* Sidebar chuyên đề */}
       <div
+        className="exercises-sidebar"
         style={{
-          width: '260px',
+          width: isFullScreen ? '240px' : '260px',
           flexShrink: 0,
           background: 'var(--surface)',
           borderRadius: 'var(--radius-lg)',
           border: '1px solid var(--border)',
-          padding: 'var(--spacing-4)',
+          padding: isFullScreen ? 'var(--spacing-3)' : 'var(--spacing-4)',
           overflowY: 'auto',
         }}
       >
@@ -5129,19 +5571,21 @@ function ExercisesTab({
       </div>
 
       {/* Danh sách bài */}
-      <div className="exercises-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div className="exercises-content" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {/* Filter Controls */}
         <div
-          className="card"
+          className="card exercises-filters-card exercises-detail-filters"
           style={{
             background: 'var(--surface)',
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-lg)',
             padding: 'var(--spacing-4)',
-            marginBottom: 'var(--spacing-4)',
+            marginBottom: isFullScreen ? 'var(--spacing-3)' : 'var(--spacing-4)',
+            flexShrink: 0,
           }}
         >
           <div
+            className="exercises-filters-toggle"
             onClick={() => setFiltersOpen(!filtersOpen)}
             style={{
               display: 'flex',
@@ -5149,10 +5593,18 @@ function ExercisesTab({
               alignItems: 'center',
               cursor: 'pointer',
               userSelect: 'none',
+              padding: 'var(--spacing-1) 0',
             }}
           >
-            <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)', fontWeight: '600' }}>Bộ lọc nhanh</h3>
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
+              <span style={{ color: 'var(--primary)' }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+                </svg>
+              </span>
+              <h3 style={{ margin: 0, fontSize: isFullScreen ? 'var(--font-size-base)' : 'var(--font-size-lg)', fontWeight: '600', color: 'var(--text)' }}>Bộ lọc nhanh</h3>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)', fontSize: 'var(--font-size-sm)', color: 'var(--muted)' }}>
               <svg
                 width="16"
                 height="16"
@@ -5164,18 +5616,18 @@ function ExercisesTab({
               >
                 <polyline points="6 9 12 15 18 9" />
               </svg>
-              <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--muted)' }}>{filtersOpen ? 'Thu gọn' : 'Mở bộ lọc'}</span>
+              <span>{filtersOpen ? 'Thu gọn' : 'Mở bộ lọc'}</span>
             </div>
           </div>
 
           {filtersOpen && (
-            <div style={{ marginTop: 'var(--spacing-3)', display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-3)' }}>
-              {/* Search */}
-              <div style={{ flex: '1 1 220px' }}>
-                <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontSize: 'var(--font-size-sm)', color: 'var(--muted)', fontWeight: '500' }}>
+            <div className="exercises-filters-fields" style={{ marginTop: 'var(--spacing-4)', paddingBottom: 'var(--spacing-4)', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 'var(--spacing-4)' }}>
+              {/* Search - full width */}
+              <div style={{ gridColumn: '1 / -1', maxWidth: '100%' }}>
+                <label className="exercises-filter-label" style={{ display: 'block', marginBottom: 'var(--spacing-2)', fontSize: 'var(--font-size-sm)', color: 'var(--muted)', fontWeight: '500' }}>
                   Tìm kiếm
                 </label>
-                <div style={{ position: 'relative' }}>
+                <div style={{ position: 'relative', maxWidth: '560px' }}>
                   <span
                     style={{
                       position: 'absolute',
@@ -5203,8 +5655,8 @@ function ExercisesTab({
               </div>
 
               {/* Tag Filter */}
-              <div className="filter-item" style={{ flex: '1 1 280px' }}>
-                <label className="text-sm text-muted mb-1 block" style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontSize: 'var(--font-size-sm)', color: 'var(--muted)', fontWeight: '500' }}>
+              <div className="filter-item exercises-filter-item">
+                <label className="exercises-filter-label" style={{ display: 'block', marginBottom: 'var(--spacing-2)', fontSize: 'var(--font-size-sm)', color: 'var(--muted)', fontWeight: '500' }}>
                   Tag
                 </label>
                 <div className="tag-select-container" ref={tagDropdownRef} style={{ position: 'relative' }}>
@@ -5574,8 +6026,8 @@ function ExercisesTab({
               </div>
 
               {/* Status Filter */}
-              <div style={{ flex: '1 1 180px' }}>
-                <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontSize: 'var(--font-size-sm)', color: 'var(--muted)', fontWeight: '500' }}>
+              <div className="exercises-filter-item">
+                <label className="exercises-filter-label" style={{ display: 'block', marginBottom: 'var(--spacing-2)', fontSize: 'var(--font-size-sm)', color: 'var(--muted)', fontWeight: '500' }}>
                   Trạng thái
                 </label>
                 <select className="form-control" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
@@ -5588,8 +6040,8 @@ function ExercisesTab({
 
               {/* Staff Filter */}
               {lessonPlanStaff && lessonPlanStaff.length > 0 && (
-                <div style={{ flex: '1 1 200px' }}>
-                  <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontSize: 'var(--font-size-sm)', color: 'var(--muted)', fontWeight: '500' }}>
+                <div className="exercises-filter-item">
+                  <label className="exercises-filter-label" style={{ display: 'block', marginBottom: 'var(--spacing-2)', fontSize: 'var(--font-size-sm)', color: 'var(--muted)', fontWeight: '500' }}>
                     Nhân sự
                   </label>
                   <select className="form-control" value={staffFilter} onChange={(e) => setStaffFilter(e.target.value)}>
@@ -5603,66 +6055,88 @@ function ExercisesTab({
                 </div>
               )}
 
-              {/* Date Range */}
-              <div style={{ flex: '1 1 240px' }}>
-                <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontSize: 'var(--font-size-sm)', color: 'var(--muted)', fontWeight: '500' }}>
-                  Khoảng ngày
-                </label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-2)' }}>
-                  <input
-                    type="date"
-                    className="form-control"
-                    placeholder="Từ ngày"
-                    value={dateFromFilter}
-                    onChange={(e) => setDateFromFilter(e.target.value)}
-                  />
-                  <input
-                    type="date"
-                    className="form-control"
-                    placeholder="Đến ngày"
-                    value={dateToFilter}
-                    onChange={(e) => setDateToFilter(e.target.value)}
-                  />
+              {/* Date range + Xóa lọc - hàng riêng, có khoảng cách với viền */}
+              <div style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: 'minmax(120px, 1fr) minmax(120px, 1fr) auto', gap: 'var(--spacing-3)', alignItems: 'end', maxWidth: '420px' }}>
+                <div>
+                  <label className="exercises-filter-label" style={{ display: 'block', marginBottom: 'var(--spacing-2)', fontSize: 'var(--font-size-sm)', color: 'var(--muted)', fontWeight: '500' }}>Từ ngày</label>
+                  <div
+                    onClick={(e) => { const el = e.currentTarget.querySelector('input'); if (el && 'showPicker' in el) (el as HTMLInputElement).showPicker?.(); }}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <input
+                      type="date"
+                      className="form-control"
+                      value={dateFromFilter}
+                      onChange={(e) => setDateFromFilter(e.target.value)}
+                      style={{ width: '100%', cursor: 'pointer' }}
+                    />
+                  </div>
                 </div>
-              </div>
-
-              {/* Clear Filters Button */}
-              <div style={{ flex: '0 0 140px' }}>
-                <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontSize: 'var(--font-size-sm)', color: 'var(--muted)', fontWeight: '500' }}>
-                  &nbsp;
-                </label>
-                <button
-                  type="button"
-                  className="btn btn-outline"
-                  onClick={() => {
-                    setSearchFilter('');
-                    setSelectedTags([]);
-                    setTagSearchInput('');
-                    setStatusFilter('');
-                    setStaffFilter('');
-                    setDateFromFilter('');
-                    setDateToFilter('');
-                  }}
-                  style={{ width: '100%' }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px' }}>
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                  Xóa lọc
-                </button>
+                <div>
+                  <label className="exercises-filter-label" style={{ display: 'block', marginBottom: 'var(--spacing-2)', fontSize: 'var(--font-size-sm)', color: 'var(--muted)', fontWeight: '500' }}>Đến ngày</label>
+                  <div
+                    onClick={(e) => { const el = e.currentTarget.querySelector('input'); if (el && 'showPicker' in el) (el as HTMLInputElement).showPicker?.(); }}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <input
+                      type="date"
+                      className="form-control"
+                      value={dateToFilter}
+                      onChange={(e) => setDateToFilter(e.target.value)}
+                      style={{ width: '100%', cursor: 'pointer' }}
+                    />
+                  </div>
+                </div>
+                <div style={{ marginBottom: 0 }}>
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={() => {
+                      setSearchFilter('');
+                      setSelectedTags([]);
+                      setTagSearchInput('');
+                      setStatusFilter('');
+                      setStaffFilter('');
+                      setDateFromFilter('');
+                      setDateToFilter('');
+                    }}
+                    style={{ minWidth: '100px', whiteSpace: 'nowrap' }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px', verticalAlign: 'middle' }}>
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                    Xóa lọc
+                  </button>
+                </div>
               </div>
             </div>
           )}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-4)', paddingBottom: 'var(--spacing-3)', borderBottom: '1px solid var(--border)' }}>
+        <div className="exercises-list-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-3)', paddingBottom: 'var(--spacing-3)', borderBottom: '1px solid var(--border)' }}>
           <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)', fontWeight: '600', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
+            <span style={{ color: 'var(--primary)' }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="16" y1="13" x2="8" y2="13" />
+                <line x1="16" y1="17" x2="8" y2="17" />
+                <polyline points="10 9 9 9 8 9" />
+              </svg>
+            </span>
+            <span>Các bài đã làm</span>
+            {topicOutputs.length > 0 && (
+              <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: '500', color: 'var(--muted)', marginLeft: 'var(--spacing-1)' }}>
+                ({topicOutputs.length})
+              </span>
+            )}
             {isAdmin && (
               <button
                 type="button"
                 onClick={() => setIsAddTopicModalOpen(true)}
-                title="Thêm chuyên đề"
+                title="Thêm chuyên đề tùy chỉnh"
+                className="btn btn-icon exercises-add-topic-btn"
                 style={{
                   width: '32px',
                   height: '32px',
@@ -5676,6 +6150,7 @@ function ExercisesTab({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  marginLeft: 'var(--spacing-2)',
                 }}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -5684,7 +6159,6 @@ function ExercisesTab({
                 </svg>
               </button>
             )}
-            <span>Các bài đã làm</span>
           </h3>
         </div>
 
@@ -5699,12 +6173,17 @@ function ExercisesTab({
                 overflow: 'hidden',
               }}
             >
-              <table className="table-striped exercises-table" style={{ width: '100%', margin: 0 }}>
+              <table className="table-striped exercises-table exercises-table-with-sticky" style={{ width: '100%', margin: 0, tableLayout: 'fixed' }}>
+                <colgroup>
+                  <col style={{ width: '16%' }} />
+                  <col style={{ width: 'auto' }} />
+                  <col style={{ width: '88px' }} />
+                </colgroup>
                 <thead>
                   <tr style={{ background: 'var(--bg)', borderBottom: '2px solid var(--border)' }}>
-                    <th style={{ width: '15%', padding: 'var(--spacing-3)', fontWeight: '600', color: 'var(--text)' }}>Tag</th>
-                    <th style={{ width: '50%', padding: 'var(--spacing-3)', fontWeight: '600', color: 'var(--text)' }}>Tên Bài</th>
-                    <th style={{ width: '35%', padding: 'var(--spacing-3)', fontWeight: '600', color: 'var(--text)' }}>Link</th>
+                    <th style={{ padding: 'var(--spacing-3)', fontWeight: '600', color: 'var(--text)' }}>Tag</th>
+                    <th style={{ padding: 'var(--spacing-3)', fontWeight: '600', color: 'var(--text)' }}>Tên Bài</th>
+                    <th style={{ padding: 'var(--spacing-3)', fontWeight: '600', color: 'var(--text)', width: '88px' }}>Link</th>
                   </tr>
                 </thead>
                 <tbody id="exercisesTableBody" className={canDragDrop ? 'sortable-list' : ''}>
@@ -5750,11 +6229,13 @@ function ExercisesTab({
                           <span className="text-muted">-</span>
                         )}
                       </td>
-                      <td style={{ padding: 'var(--spacing-3)' }}>
-                        <strong style={{ color: 'var(--text)' }}>{output.lesson_name || '-'}</strong>
+                      <td style={{ padding: 'var(--spacing-3)', overflow: 'hidden' }}>
+                        <div title={output.lesson_name || ''} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <strong style={{ color: 'var(--text)' }}>{output.lesson_name || '-'}</strong>
+                        </div>
                       </td>
-                      <td style={{ padding: 'var(--spacing-3)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
+                      <td style={{ padding: 'var(--spacing-3)', verticalAlign: 'middle', width: '88px', maxWidth: '88px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-1)', flexWrap: 'nowrap', justifyContent: 'flex-end' }}>
                           {output.link ? (
                             <>
                               <div className="link-actions" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
@@ -5893,12 +6374,17 @@ function ExercisesTab({
             </div>
           ) : (
             <div className="table-container" style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', overflow: 'hidden' }}>
-              <table className="table-striped exercises-table" style={{ width: '100%', margin: 0 }}>
+              <table className="table-striped exercises-table exercises-table-with-sticky" style={{ width: '100%', margin: 0, tableLayout: 'fixed' }}>
+                <colgroup>
+                  <col style={{ width: '16%' }} />
+                  <col style={{ width: 'auto' }} />
+                  <col style={{ width: '88px' }} />
+                </colgroup>
                 <thead>
                   <tr style={{ background: 'var(--bg)', borderBottom: '2px solid var(--border)' }}>
-                    <th style={{ width: '15%', padding: 'var(--spacing-3)', fontWeight: '600', color: 'var(--text)' }}>Tag</th>
-                    <th style={{ width: '50%', padding: 'var(--spacing-3)', fontWeight: '600', color: 'var(--text)' }}>Tên Bài</th>
-                    <th style={{ width: '35%', padding: 'var(--spacing-3)', fontWeight: '600', color: 'var(--text)' }}>Link</th>
+                    <th style={{ padding: 'var(--spacing-3)', fontWeight: '600', color: 'var(--text)' }}>Tag</th>
+                    <th style={{ padding: 'var(--spacing-3)', fontWeight: '600', color: 'var(--text)' }}>Tên Bài</th>
+                    <th style={{ padding: 'var(--spacing-3)', fontWeight: '600', color: 'var(--text)', width: '88px' }}>Link</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -6068,95 +6554,141 @@ function ExercisesTab({
         size="lg"
       >
         {selectedExerciseDetail && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)' }}>
-            <div>
-              <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)', fontWeight: '600', color: 'var(--text)', marginBottom: 'var(--spacing-2)' }}>
-                {selectedExerciseDetail.lesson_name}
-              </h3>
-              {selectedExerciseDetail.original_title && (
-                <p style={{ margin: 0, fontSize: 'var(--font-size-sm)', color: 'var(--muted)' }}>{selectedExerciseDetail.original_title}</p>
-              )}
+          <div className="exercise-detail-form">
+            {/* Header: tên bài + title gốc */}
+            <div className="exercise-detail-header" style={{ paddingBottom: 'var(--spacing-4)', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--spacing-3)' }}>
+                <span style={{ color: 'var(--primary)', flexShrink: 0, marginTop: '2px' }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                  </svg>
+                </span>
+                <div style={{ minWidth: 0 }}>
+                  <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)', fontWeight: '600', color: 'var(--text)', lineHeight: 1.3 }}>
+                    {selectedExerciseDetail.lesson_name}
+                  </h3>
+                  {selectedExerciseDetail.original_title && (
+                    <p style={{ margin: 'var(--spacing-1) 0 0', fontSize: 'var(--font-size-sm)', color: 'var(--muted)' }}>
+                      {selectedExerciseDetail.original_title}
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-4)' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: 'var(--font-size-sm)', color: 'var(--muted)', marginBottom: 'var(--spacing-1)' }}>Tag</label>
-                <div>
-                  {selectedExerciseDetail.tag ? (
-                    <span className="badge badge-info" style={{ fontSize: 'var(--font-size-xs)', padding: '4px 8px' }}>
-                      {selectedExerciseDetail.tag}
+            {/* Thông tin cơ bản: grid 2 cột */}
+            <div className="exercise-detail-section">
+              <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: '600', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 'var(--spacing-3)' }}>
+                Thông tin
+              </div>
+              <div className="exercise-detail-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--spacing-3) var(--spacing-4)' }}>
+                <div className="exercise-detail-row">
+                  <span className="exercise-detail-label">Tag</span>
+                  <span className="exercise-detail-value">
+                    {selectedExerciseDetail.tag ? (
+                      <span className="badge badge-info" style={{ fontSize: 'var(--font-size-xs)', padding: '4px 8px' }}>
+                        {selectedExerciseDetail.tag}
+                      </span>
+                    ) : (
+                      <span style={{ color: 'var(--muted)' }}>-</span>
+                    )}
+                  </span>
+                </div>
+                <div className="exercise-detail-row">
+                  <span className="exercise-detail-label">Level</span>
+                  <span className="exercise-detail-value">
+                    {selectedExerciseDetail.level ? (
+                      <span className="badge" style={{ fontSize: 'var(--font-size-xs)', padding: '4px 10px' }}>
+                        {selectedExerciseDetail.level}
+                      </span>
+                    ) : (
+                      <span style={{ color: 'var(--muted)' }}>-</span>
+                    )}
+                  </span>
+                </div>
+                <div className="exercise-detail-row">
+                  <span className="exercise-detail-label">Ngày</span>
+                  <span className="exercise-detail-value">
+                    {selectedExerciseDetail.date ? new Date(selectedExerciseDetail.date).toLocaleDateString('vi-VN') : '-'}
+                  </span>
+                </div>
+                <div className="exercise-detail-row">
+                  <span className="exercise-detail-label">Trạng thái</span>
+                  <span className="exercise-detail-value">
+                    {selectedExerciseDetail.status ? (
+                      <span
+                        className={`badge ${
+                          selectedExerciseDetail.status === 'paid' ? 'badge-success' : selectedExerciseDetail.status === 'deposit' ? 'badge-info' : 'badge-warning'
+                        }`}
+                        style={{ fontSize: 'var(--font-size-xs)', padding: '4px 10px' }}
+                      >
+                        {selectedExerciseDetail.status === 'paid' ? 'Đã thanh toán' : selectedExerciseDetail.status === 'deposit' ? 'Cọc' : 'Chưa thanh toán'}
+                      </span>
+                    ) : (
+                      <span style={{ color: 'var(--muted)' }}>-</span>
+                    )}
+                  </span>
+                </div>
+                {selectedExerciseDetail.cost != null && selectedExerciseDetail.cost > 0 && (
+                  <div className="exercise-detail-row" style={{ gridColumn: '1 / -1' }}>
+                    <span className="exercise-detail-label">Chi phí</span>
+                    <span className="exercise-detail-value" style={{ fontWeight: '600', color: 'var(--text)' }}>
+                      {formatCurrencyVND(selectedExerciseDetail.cost)}
                     </span>
-                  ) : (
-                    <span style={{ color: 'var(--muted)', fontSize: 'var(--font-size-sm)' }}>-</span>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 'var(--font-size-sm)', color: 'var(--muted)', marginBottom: 'var(--spacing-1)' }}>Level</label>
-                <div>
-                  {selectedExerciseDetail.level ? (
-                    <span className="badge" style={{ fontSize: 'var(--font-size-xs)', padding: '4px 10px' }}>
-                      {selectedExerciseDetail.level}
-                    </span>
-                  ) : (
-                    <span style={{ color: 'var(--muted)', fontSize: 'var(--font-size-sm)' }}>-</span>
-                  )}
-                </div>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 'var(--font-size-sm)', color: 'var(--muted)', marginBottom: 'var(--spacing-1)' }}>Ngày</label>
-                <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text)' }}>
-                  {selectedExerciseDetail.date ? new Date(selectedExerciseDetail.date).toLocaleDateString('vi-VN') : '-'}
-                </div>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 'var(--font-size-sm)', color: 'var(--muted)', marginBottom: 'var(--spacing-1)' }}>Trạng thái</label>
-                <div>
-                  {selectedExerciseDetail.status ? (
-                    <span
-                      className={`badge ${
-                        selectedExerciseDetail.status === 'paid' ? 'badge-success' : selectedExerciseDetail.status === 'deposit' ? 'badge-info' : 'badge-warning'
-                      }`}
-                      style={{ fontSize: 'var(--font-size-xs)', padding: '4px 10px' }}
-                    >
-                      {selectedExerciseDetail.status === 'paid' ? 'Đã thanh toán' : selectedExerciseDetail.status === 'deposit' ? 'Cọc' : 'Chưa thanh toán'}
-                    </span>
-                  ) : (
-                    <span style={{ color: 'var(--muted)', fontSize: 'var(--font-size-sm)' }}>-</span>
-                  )}
-                </div>
-              </div>
-              {selectedExerciseDetail.cost && (
-                <div>
-                  <label style={{ display: 'block', fontSize: 'var(--font-size-sm)', color: 'var(--muted)', marginBottom: 'var(--spacing-1)' }}>Chi phí</label>
-                  <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text)', fontWeight: '500' }}>{formatCurrencyVND(selectedExerciseDetail.cost)}</div>
-                </div>
-              )}
             </div>
 
             {selectedExerciseDetail.contest_uploaded && (
-              <div>
-                <label style={{ display: 'block', fontSize: 'var(--font-size-sm)', color: 'var(--muted)', marginBottom: 'var(--spacing-1)' }}>Contest</label>
-                <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text)', whiteSpace: 'pre-wrap' }}>{selectedExerciseDetail.contest_uploaded}</div>
+              <div className="exercise-detail-section">
+                <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: '600', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 'var(--spacing-2)' }}>
+                  Contest
+                </div>
+                <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text)', whiteSpace: 'pre-wrap', padding: 'var(--spacing-3)', background: 'var(--bg)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
+                  {selectedExerciseDetail.contest_uploaded}
+                </div>
               </div>
             )}
 
             {selectedExerciseDetail.link && (
-              <div>
-                <label style={{ display: 'block', fontSize: 'var(--font-size-sm)', color: 'var(--muted)', marginBottom: 'var(--spacing-1)' }}>Link</label>
-                <a
-                  href={selectedExerciseDetail.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ color: 'var(--primary)', fontSize: 'var(--font-size-sm)', display: 'flex', alignItems: 'center', gap: 'var(--spacing-1)' }}
-                >
-                  {selectedExerciseDetail.link}
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                    <polyline points="15 3 21 3 21 9" />
-                    <line x1="10" y1="14" x2="21" y2="3" />
-                  </svg>
-                </a>
+              <div className="exercise-detail-section">
+                <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: '600', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 'var(--spacing-2)' }}>
+                  Link bài tập
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-2)', alignItems: 'center' }}>
+                  <a
+                    href={selectedExerciseDetail.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-primary"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--spacing-2)', fontSize: 'var(--font-size-sm)' }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                      <polyline points="15 3 21 3 21 9" />
+                      <line x1="10" y1="14" x2="21" y2="3" />
+                    </svg>
+                    Mở link
+                  </a>
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    style={{ fontSize: 'var(--font-size-sm)' }}
+                    onClick={() => {
+                      navigator.clipboard.writeText(selectedExerciseDetail.link || '');
+                      toast.success('Đã sao chép link');
+                    }}
+                  >
+                    Sao chép link
+                  </button>
+                  <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--muted)', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={selectedExerciseDetail.link}>
+                    {selectedExerciseDetail.link}
+                  </span>
+                </div>
               </div>
             )}
           </div>
@@ -6206,6 +6738,299 @@ function ExercisesTab({
           </div>
         </form>
       </Modal>
+    </div>
+  );
+}
+
+// Exercises Tab Settings Modal Content
+function ExercisesSettingsModalContent({
+  lessonPlanStaff,
+  isAdmin,
+  onClose,
+}: {
+  lessonPlanStaff: any[];
+  isAdmin: boolean;
+  onClose: () => void;
+}) {
+  const [allowedStaffIds, setAllowedStaffIds] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem(EXERCISES_TAB_STAFF_IDS_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [staffSearch, setStaffSearch] = useState('');
+
+  const filteredStaff = useMemo(() => {
+    if (!staffSearch.trim()) return lessonPlanStaff;
+    const q = staffSearch.toLowerCase().trim();
+    return lessonPlanStaff.filter((s) => {
+      const name = (s.fullName || s.full_name || s.name || s.id || '').toString().toLowerCase();
+      return name.includes(q);
+    });
+  }, [lessonPlanStaff, staffSearch]);
+
+  const handleToggleStaff = (staffId: string) => {
+    setAllowedStaffIds((prev) => {
+      const next = prev.includes(staffId) ? prev.filter((id) => id !== staffId) : [...prev, staffId];
+      localStorage.setItem(EXERCISES_TAB_STAFF_IDS_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    const next = checked ? lessonPlanStaff.map((s) => s.id) : [];
+    setAllowedStaffIds(next);
+    localStorage.setItem(EXERCISES_TAB_STAFF_IDS_KEY, JSON.stringify(next));
+  };
+
+  const allSelected = lessonPlanStaff.length > 0 && allowedStaffIds.length === lessonPlanStaff.length;
+  const someSelected = allowedStaffIds.length > 0 && allowedStaffIds.length < lessonPlanStaff.length;
+  const noneSelected = allowedStaffIds.length === 0;
+  const summaryText = noneSelected
+    ? 'Tất cả nhân sự có quyền đều truy cập được'
+    : `Đã chọn ${allowedStaffIds.length} / ${lessonPlanStaff.length} nhân sự`;
+
+  const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const el = selectAllCheckboxRef.current;
+    if (el) el.indeterminate = someSelected;
+  }, [someSelected]);
+
+  return (
+    <div className="exercises-settings-modal-content" style={{ width: '100%', minWidth: 0 }}>
+      <div
+        className="exercises-settings-description"
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 'var(--spacing-2)',
+          padding: 'var(--spacing-3)',
+          background: 'var(--bg)',
+          borderRadius: 'var(--radius)',
+          border: '1px solid var(--border)',
+          borderLeft: '3px solid var(--primary)',
+          marginBottom: 'var(--spacing-4)',
+        }}
+      >
+        <span style={{ color: 'var(--primary)', flexShrink: 0, marginTop: '2px' }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 16v-4M12 8h.01" />
+          </svg>
+        </span>
+        <p style={{ margin: 0, fontSize: 'var(--font-size-sm)', color: 'var(--muted)', lineHeight: 1.5 }}>
+          Chọn nhân sự được phép xem tab Bài tập. Để trống = tất cả có quyền. Thay đổi được lưu ngay.
+        </p>
+      </div>
+
+      {!isAdmin ? (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 'var(--spacing-2)',
+            padding: 'var(--spacing-4)',
+            background: 'var(--bg)',
+            borderRadius: 'var(--radius)',
+            border: '1px solid var(--border)',
+            color: 'var(--muted)',
+            fontSize: 'var(--font-size-sm)',
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+          <span>Chỉ admin mới có thể chỉnh sửa cài đặt này.</span>
+        </div>
+      ) : (
+        <>
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              gap: 'var(--spacing-2)',
+              marginBottom: 'var(--spacing-3)',
+              padding: 'var(--spacing-2) var(--spacing-3)',
+              background: 'var(--bg)',
+              borderRadius: 'var(--radius)',
+              border: '1px solid var(--border)',
+            }}
+          >
+            <label
+              className="exercises-settings-select-all"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--spacing-2)',
+                cursor: 'pointer',
+                fontSize: 'var(--font-size-sm)',
+                fontWeight: '600',
+                color: 'var(--text)',
+              }}
+            >
+              <input
+                type="checkbox"
+                ref={selectAllCheckboxRef}
+                checked={allSelected}
+                onChange={(e) => handleSelectAll(e.target.checked)}
+              />
+              Chọn tất cả
+            </label>
+            <span
+              style={{
+                fontSize: 'var(--font-size-xs)',
+                color: 'var(--muted)',
+                padding: '2px 8px',
+                background: noneSelected ? 'transparent' : 'var(--surface)',
+                borderRadius: 'var(--radius-sm)',
+                border: noneSelected ? 'none' : '1px solid var(--border)',
+                fontWeight: '500',
+              }}
+            >
+              {summaryText}
+            </span>
+          </div>
+
+          {lessonPlanStaff.length > 0 && (
+            <div style={{ marginBottom: 'var(--spacing-3)' }}>
+              <label style={{ display: 'block', marginBottom: 'var(--spacing-1)', fontSize: 'var(--font-size-xs)', fontWeight: '600', color: 'var(--muted)' }}>
+                Tìm kiếm
+              </label>
+              <div style={{ position: 'relative' }} className="exercises-settings-search-wrap">
+                <span
+                  style={{
+                    position: 'absolute',
+                    left: '10px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'var(--muted)',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                </span>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Gõ tên nhân sự..."
+                  value={staffSearch}
+                  onChange={(e) => setStaffSearch(e.target.value)}
+                  style={{ paddingLeft: '32px', fontSize: 'var(--font-size-sm)' }}
+                />
+              </div>
+            </div>
+          )}
+
+          <div style={{ marginBottom: 'var(--spacing-2)' }}>
+            <span style={{ fontSize: 'var(--font-size-xs)', fontWeight: '600', color: 'var(--muted)' }}>Danh sách nhân sự</span>
+          </div>
+          <div
+            className="exercises-settings-list"
+            style={{
+              maxHeight: '220px',
+              overflowY: 'auto',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)',
+              background: 'var(--surface)',
+            }}
+          >
+            {lessonPlanStaff.length === 0 ? (
+              <div
+                style={{
+                  padding: 'var(--spacing-4)',
+                  textAlign: 'center',
+                  color: 'var(--muted)',
+                  fontSize: 'var(--font-size-sm)',
+                }}
+              >
+                Chưa có nhân sự có quyền lesson_plan.
+              </div>
+            ) : filteredStaff.length === 0 ? (
+              <div
+                style={{
+                  padding: 'var(--spacing-4)',
+                  textAlign: 'center',
+                  color: 'var(--muted)',
+                  fontSize: 'var(--font-size-sm)',
+                }}
+              >
+                Không tìm thấy nhân sự phù hợp.
+              </div>
+            ) : (
+              <ul style={{ listStyle: 'none', margin: 0, padding: '4px', width: '100%' }}>
+                {filteredStaff.map((staff, index) => {
+                  const displayName = staff.fullName || staff.full_name || staff.name || staff.email || staff.id || `Nhân sự`;
+                  return (
+                    <li key={staff.id} style={{ width: '100%', listStyle: 'none' }}>
+                      <label
+                        className="exercises-settings-row"
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'auto 1fr',
+                          alignItems: 'center',
+                          gap: 'var(--spacing-3)',
+                          padding: 'var(--spacing-2) var(--spacing-3)',
+                          borderRadius: 'var(--radius)',
+                          cursor: 'pointer',
+                          marginBottom: index < filteredStaff.length - 1 ? '2px' : 0,
+                          transition: 'background 0.15s ease',
+                          width: '100%',
+                          boxSizing: 'border-box',
+                          minWidth: 0,
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={allowedStaffIds.includes(staff.id)}
+                          onChange={() => handleToggleStaff(staff.id)}
+                          style={{ margin: 0, width: '1rem', height: '1rem' }}
+                        />
+                        <span
+                          title={displayName}
+                          style={{
+                            display: 'block',
+                            fontSize: 'var(--font-size-sm)',
+                            color: 'var(--text)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            minWidth: 0,
+                          }}
+                        >
+                          {displayName}
+                        </span>
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
+          <div
+            style={{
+              marginTop: 'var(--spacing-4)',
+              paddingTop: 'var(--spacing-3)',
+              borderTop: '1px solid var(--border)',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: 'var(--spacing-2)',
+            }}
+          >
+            <button type="button" className="btn btn-primary" onClick={onClose}>
+              Xong
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

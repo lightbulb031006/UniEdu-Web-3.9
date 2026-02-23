@@ -7,6 +7,7 @@ import { useAuthStore } from '../store/authStore';
 import { formatCurrencyVND, formatNumber, formatMonthKey } from '../utils/formatters';
 import { DualLineChart } from '../components/DualLineChart';
 import { DashboardAlert } from '../components/DashboardAlert';
+import Modal from '../components/Modal';
 
 /**
  * Dashboard Page Component
@@ -230,12 +231,18 @@ function Dashboard() {
     localStorage.setItem('unicorns.dashboard.state', JSON.stringify(state));
   }, [state]);
 
-  // Stable fetch function for dashboard data
+  // Lần đầu load Dashboard trong session: gửi refresh=1 để xóa cache backend (lấy đúng công thức Tổng nhận mới)
+  const hasRefreshedCacheOnce = useRef(false);
   const fetchDashboardDataFn = useCallback(
-    () => fetchDashboardData({
-      filterType: state.filterType,
-      filterValue: state.filterValue,
-    }),
+    () => {
+      const doRefresh = !hasRefreshedCacheOnce.current;
+      if (doRefresh) hasRefreshedCacheOnce.current = true;
+      return fetchDashboardData({
+        filterType: state.filterType,
+        filterValue: state.filterValue,
+        refresh: doRefresh,
+      });
+    },
     [state.filterType, state.filterValue]
   );
 
@@ -259,6 +266,7 @@ function Dashboard() {
 
   // Optimistic revenue updates - chỉ cộng/trừ transaction mới, không tính lại từ đầu
   const [revenueAdjustment, setRevenueAdjustment] = useState<number>(0);
+  const [walletDetailModalOpen, setWalletDetailModalOpen] = useState(false);
 
   // Khi số dư học sinh thay đổi (topup/loan/refund/...) → xóa cache dashboard để quay lại sẽ refetch bảng gia hạn
   const invalidateDashboardCacheStorage = useCallback(() => {
@@ -926,10 +934,30 @@ function Dashboard() {
                         </div>
                         {/* KHÔNG có breakdown ở đây - breakdown chỉ ở cột 3 */}
                       </td>
-                      {/* Cột 2: Giá trị - CHỈ có row.amount, KHÔNG có breakdown */}
+                      {/* Cột 2: Giá trị - CHỈ có row.amount; Nợ học phí chưa dạy: màu vàng, bấm mở popup chi tiết */}
                       <td style={{ ...cellStyle, textAlign: 'right', verticalAlign: 'top' }}>
                         <div style={{ fontWeight: isHeader ? '600' : '500', color: 'var(--text)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
-                          {formatCurrencyVND(row.amount)}
+                          {row.key === 'tuitionDebtNotTaught' ? (
+                            <button
+                              type="button"
+                              onClick={() => setWalletDetailModalOpen(true)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                padding: 0,
+                                cursor: 'pointer',
+                                color: '#b45309',
+                                fontWeight: '600',
+                                fontSize: 'inherit',
+                                textDecoration: 'underline',
+                                textUnderlineOffset: '2px',
+                              }}
+                            >
+                              {formatCurrencyVND(row.amount)}
+                            </button>
+                          ) : (
+                            formatCurrencyVND(row.amount)
+                          )}
                         </div>
                         {/* KHÔNG có breakdown ở đây - breakdown chỉ ở cột 3 */}
                       </td>
@@ -951,6 +979,43 @@ function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* Popup chi tiết Nợ học phí chưa dạy (số dư từng học sinh) */}
+      <Modal
+        title="Chi tiết Nợ học phí chưa dạy"
+        isOpen={walletDetailModalOpen}
+        onClose={() => setWalletDetailModalOpen(false)}
+        size="lg"
+      >
+        <p style={{ margin: '0 0 var(--spacing-3)', fontSize: 'var(--font-size-sm)', color: 'var(--muted)' }}>
+          Tổng số dư hiện tại của tất cả học sinh (học sinh – lớp – số dư).
+        </p>
+        <div style={{ maxHeight: '60vh', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-sm)' }}>
+            <thead>
+              <tr style={{ background: 'var(--bg-secondary)', borderBottom: '2px solid var(--border)' }}>
+                <th style={{ padding: 'var(--spacing-2) var(--spacing-3)', textAlign: 'left', fontWeight: '600' }}>Học sinh</th>
+                <th style={{ padding: 'var(--spacing-2) var(--spacing-3)', textAlign: 'left', fontWeight: '600' }}>Lớp</th>
+                <th style={{ padding: 'var(--spacing-2) var(--spacing-3)', textAlign: 'right', fontWeight: '600' }}>Số dư</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(data?.walletBreakdown ?? []).map((item: any) => (
+                <tr key={item.studentId} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td style={{ padding: 'var(--spacing-2) var(--spacing-3)' }}>{item.studentName}</td>
+                  <td style={{ padding: 'var(--spacing-2) var(--spacing-3)', color: 'var(--muted)' }}>{item.className}</td>
+                  <td style={{ padding: 'var(--spacing-2) var(--spacing-3)', textAlign: 'right', fontWeight: '500', color: '#b45309' }}>
+                    {formatCurrencyVND(item.walletBalance ?? 0)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {(!data?.walletBreakdown || data.walletBreakdown.length === 0) && (
+            <div style={{ padding: 'var(--spacing-4)', textAlign: 'center', color: 'var(--muted)' }}>Chưa có dữ liệu</div>
+          )}
+        </div>
+      </Modal>
 
       {/* Alerts Section */}
       {alerts && (
