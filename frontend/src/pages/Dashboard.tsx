@@ -267,6 +267,7 @@ function Dashboard() {
   // Optimistic revenue updates - chỉ cộng/trừ transaction mới, không tính lại từ đầu
   const [revenueAdjustment, setRevenueAdjustment] = useState<number>(0);
   const [walletDetailModalOpen, setWalletDetailModalOpen] = useState(false);
+  const [depositHistoryModalOpen, setDepositHistoryModalOpen] = useState(false);
 
   // Khi số dư học sinh thay đổi (topup/loan/refund/...) → xóa cache dashboard để quay lại sẽ refetch bảng gia hạn
   const invalidateDashboardCacheStorage = useCallback(() => {
@@ -955,6 +956,24 @@ function Dashboard() {
                             >
                               {formatCurrencyVND(row.amount)}
                             </button>
+                          ) : row.key === 'revenue' ? (
+                            <button
+                              type="button"
+                              onClick={() => setDepositHistoryModalOpen(true)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                padding: 0,
+                                cursor: 'pointer',
+                                color: 'var(--primary)',
+                                fontWeight: '600',
+                                fontSize: 'inherit',
+                                textDecoration: 'underline',
+                                textUnderlineOffset: '2px',
+                              }}
+                            >
+                              {formatCurrencyVND(row.amount)}
+                            </button>
                           ) : (
                             formatCurrencyVND(row.amount)
                           )}
@@ -1013,6 +1032,74 @@ function Dashboard() {
           </table>
           {(!data?.walletBreakdown || data.walletBreakdown.length === 0) && (
             <div style={{ padding: 'var(--spacing-4)', textAlign: 'center', color: 'var(--muted)' }}>Chưa có dữ liệu</div>
+          )}
+        </div>
+      </Modal>
+
+      {/* Popup lịch sử nạp (khi bấm ô Tổng nạp) */}
+      <Modal
+        title="Lịch sử nạp"
+        isOpen={depositHistoryModalOpen}
+        onClose={() => setDepositHistoryModalOpen(false)}
+        size="xl"
+      >
+        <p style={{ margin: '0 0 var(--spacing-3)', fontSize: 'var(--font-size-sm)', color: 'var(--muted)' }}>
+          Lịch sử nạp tiền trong kỳ đang chọn (ngày giờ – học sinh – số tiền – ghi chú – tổng nạp tích lũy toàn hệ thống).
+        </p>
+        <div style={{ maxHeight: '75vh', overflowY: 'auto', overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-sm)' }}>
+            <thead>
+              <tr style={{ background: 'var(--bg-secondary)', borderBottom: '2px solid var(--border)' }}>
+                <th style={{ padding: 'var(--spacing-2) var(--spacing-3)', textAlign: 'left', fontWeight: '600' }}>Ngày giờ</th>
+                <th style={{ padding: 'var(--spacing-2) var(--spacing-3)', textAlign: 'left', fontWeight: '600' }}>Tên học sinh</th>
+                <th style={{ padding: 'var(--spacing-2) var(--spacing-3)', textAlign: 'right', fontWeight: '600' }}>Số tiền nạp</th>
+                <th style={{ padding: 'var(--spacing-2) var(--spacing-3)', textAlign: 'left', fontWeight: '600' }}>Ghi chú</th>
+                <th style={{ padding: 'var(--spacing-2) var(--spacing-3)', textAlign: 'right', fontWeight: '600' }}>Tổng nạp</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(data?.depositHistory ?? []).map((item: any, index: number) => (
+                <tr key={index} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td style={{ padding: 'var(--spacing-2) var(--spacing-3)', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+                    {item.dateTime
+                      ? (() => {
+                          try {
+                            const d = new Date(item.dateTime);
+                            return isNaN(d.getTime()) ? item.dateTime : d.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
+                          } catch {
+                            return item.dateTime;
+                          }
+                        })()
+                      : '-'}
+                  </td>
+                  <td style={{ padding: 'var(--spacing-2) var(--spacing-3)' }}>{item.studentName || '-'}</td>
+                  <td style={{ padding: 'var(--spacing-2) var(--spacing-3)', textAlign: 'right', fontWeight: '500', color: 'var(--primary)' }}>
+                    {formatCurrencyVND(item.amount ?? 0)}
+                  </td>
+                  <td style={{ padding: 'var(--spacing-2) var(--spacing-3)', color: 'var(--muted)', maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.note || ''}>
+                    {item.note || '-'}
+                  </td>
+                  <td style={{ padding: 'var(--spacing-2) var(--spacing-3)', textAlign: 'right', fontWeight: '500', whiteSpace: 'nowrap' }}>
+                    {formatCurrencyVND(item.cumulativeBefore ?? 0)} → {formatCurrencyVND(item.cumulativeAfter ?? 0)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            {data?.depositHistory && data.depositHistory.length > 0 && (
+              <tfoot>
+                <tr style={{ background: 'var(--bg-secondary)', borderTop: '2px solid var(--border)', fontWeight: '600' }}>
+                  <td colSpan={4} style={{ padding: 'var(--spacing-2) var(--spacing-3)', textAlign: 'right', color: 'var(--muted)' }}>
+                    Tổng nạp kỳ (trùng ô báo cáo):
+                  </td>
+                  <td style={{ padding: 'var(--spacing-2) var(--spacing-3)', textAlign: 'right', color: 'var(--primary)' }}>
+                    {formatCurrencyVND(data.depositHistory[0]?.cumulativeAfter ?? 0)}
+                  </td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+          {(!data?.depositHistory || data.depositHistory.length === 0) && (
+            <div style={{ padding: 'var(--spacing-4)', textAlign: 'center', color: 'var(--muted)' }}>Chưa có giao dịch nạp trong kỳ</div>
           )}
         </div>
       </Modal>

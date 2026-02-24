@@ -273,6 +273,38 @@ export async function getDashboardData(params: DashboardParams) {
     .filter((item: any) => item.walletBalance > 0)
     .sort((a: any, b: any) => b.walletBalance - a.walletBalance);
 
+  // Lịch sử nạp trong kỳ (để popup khi bấm ô "Tổng nạp") - sắp xếp mới nhất lên trước, thêm tổng tích lũy toàn hệ thống
+  const monthTopupsRaw = walletTransactions
+    .filter((tx: any) => {
+      if (tx.type !== 'topup') return false;
+      if (!isWithinRange(tx.date, range)) return false;
+      const amount = Number(tx.amount) || 0;
+      return amount !== 0;
+    })
+    .map((tx: any) => {
+      const student = students.find((s: any) => s.id === tx.student_id);
+      const dateTime = tx.created_at || tx.date || '';
+      return {
+        dateTime,
+        studentName: student ? (student.full_name || student.fullName || student.id || '') : (tx.student_id || ''),
+        amount: Number(tx.amount) || 0,
+        note: tx.note || '',
+      };
+    })
+    .sort((a: any, b: any) => (b.dateTime || '').localeCompare(a.dateTime || ''));
+  const periodTotal = monthTopupsRaw.reduce((sum: number, item: any) => sum + item.amount, 0);
+  let runningTotal = periodTotal;
+  const monthTopups = monthTopupsRaw.map((item: any) => {
+    const cumulativeAfter = runningTotal;
+    const cumulativeBefore = runningTotal - item.amount;
+    runningTotal -= item.amount;
+    return {
+      ...item,
+      cumulativeBefore,
+      cumulativeAfter,
+    };
+  });
+
   // Buổi đã dạy trong kỳ
   const sessionsInRange = sessions.filter((session: any) => isWithinRange(session.date, range));
   // Học phí đã học: Tổng học phí của tất cả buổi đã học trong kỳ (theo tuition_fee từng buổi)
@@ -720,6 +752,7 @@ export async function getDashboardData(params: DashboardParams) {
     },
     financeReport,
     walletBreakdown,
+    depositHistory: monthTopups,
     charts: {
       revenueProfitLine: [], // TODO: Implement chart data
     },

@@ -12,7 +12,7 @@ interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   children: React.ReactNode;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   zIndex?: number;
   headerExtra?: React.ReactNode; // Extra content to display in header (e.g., tuition fee)
   closeOnBackdropClick?: boolean; // Whether to close modal when clicking on backdrop (default: false - không đóng khi bấm ra ngoài)
@@ -50,6 +50,7 @@ export default function Modal({ title, isOpen, onClose, children, size = 'md', z
     sm: 'max-w-md',
     md: 'max-w-lg',
     lg: 'max-w-2xl',
+    xl: 'max-w-5xl',
   };
 
   const backdropZIndex = zIndex || 1000;

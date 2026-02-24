@@ -34,6 +34,14 @@ export interface DashboardData {
     className: string;
     walletBalance: number;
   }>;
+  depositHistory?: Array<{
+    dateTime: string;
+    studentName: string;
+    amount: number;
+    note: string;
+    cumulativeBefore: number;
+    cumulativeAfter: number;
+  }>;
   charts: {
     revenueProfitLine: Array<{
       label: string;
