@@ -41,9 +41,16 @@ router.post('/', authenticate, async (req, res, next) => {
 
 router.put('/:id', authenticate, async (req, res, next) => {
   try {
-    const teacher = await updateTeacher(req.params.id, req.body);
+    const id = req.params.id;
+    const body = { ...req.body };
+    if (body.account_password !== undefined) body.account_password = '[REDACTED]';
+    if (body.accountPassword !== undefined) body.accountPassword = '[REDACTED]';
+    console.log('[teachers PUT] id=', id, 'body keys=', Object.keys(req.body), 'body (no password)=', body);
+    const teacher = await updateTeacher(id, req.body);
+    console.log('[teachers PUT] success, returned teacher id=', teacher?.id);
     res.json(teacher);
   } catch (error) {
+    console.error('[teachers PUT] error:', error);
     next(error);
   }
 });

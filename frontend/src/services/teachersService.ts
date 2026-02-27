@@ -100,21 +100,28 @@ export async function createTeacher(data: Omit<Teacher, 'id'>) {
   return normalizeTeacher(response.data);
 }
 
-export async function updateTeacher(id: string, data: Partial<Teacher>) {
-  const apiData: any = {};
-  if (data.fullName !== undefined) apiData.full_name = data.fullName;
-  if (data.birthDate !== undefined) apiData.birth_date = data.birthDate;
-  if (data.birthYear !== undefined) apiData.birth_year = data.birthYear;
-  if (data.email !== undefined) apiData.email = data.email;
-  if (data.phone !== undefined) apiData.phone = data.phone;
-  if (data.university !== undefined) apiData.university = data.university;
-  if (data.highSchool !== undefined) apiData.high_school = data.highSchool;
-  if (data.province !== undefined) apiData.province = data.province;
-  if (data.specialization !== undefined) apiData.specialization = data.specialization;
-  if (data.photoUrl !== undefined) apiData.photo_url = data.photoUrl;
-  if (data.status !== undefined) apiData.status = data.status;
-  if (data.roles !== undefined) apiData.roles = data.roles;
+export async function updateTeacher(id: string, data: Partial<Teacher> & { accountHandle?: string; accountPassword?: string }) {
+  const apiData: Record<string, unknown> = {};
+  const set = (k: string, v: unknown) => { if (v !== undefined) apiData[k] = v; };
+  set('full_name', data.fullName);
+  set('birth_date', data.birthDate);
+  set('birth_year', data.birthYear);
+  set('email', data.email);
+  set('phone', data.phone);
+  set('university', data.university);
+  set('high_school', data.highSchool);
+  set('province', data.province);
+  set('specialization', data.specialization);
+  set('photo_url', data.photoUrl);
+  set('status', data.status);
+  set('roles', data.roles);
+  set('account_handle', data.accountHandle);
+  set('account_password', data.accountPassword);
+  const logPayload = { ...apiData };
+  if (logPayload.account_password !== undefined) logPayload.account_password = '[REDACTED]';
+  console.log('[teachersService.updateTeacher] PUT', `/teachers/${id}`, 'apiData keys=', Object.keys(apiData), 'body=', logPayload);
   const response = await api.put<any>(`/teachers/${id}`, apiData);
+  console.log('[teachersService.updateTeacher] response status=', response.status, 'data id=', response.data?.id);
   return normalizeTeacher(response.data);
 }
 

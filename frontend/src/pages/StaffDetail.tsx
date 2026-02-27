@@ -363,6 +363,12 @@ function StaffDetail() {
 
   const handleSuccessEditStaff = useCallback(() => {
     setEditStaffModalOpen(false);
+    // Xóa cache để refetch lấy dữ liệu mới từ DB, tránh UI lệch với DB
+    try {
+      sessionStorage.removeItem('teachers-for-staff-detail');
+    } catch {
+      // ignore
+    }
     refetch();
   }, [refetch]);
 
@@ -2550,7 +2556,7 @@ function EditStaffModal({
           if (info.accountHandle) {
             setFormData((prev) => ({ ...prev, accountHandle: info.accountHandle || '' }));
           }
-          // Prefill password hash if exists (for comparison later)
+          // Prefill password bằng hash hiện tại để admin nhìn/ghi chú được
           if (info.hasPassword && info.password) {
             setOriginalPassword(info.password);
             setFormData((prev) => ({ ...prev, accountPassword: info.password || '' }));
@@ -2582,8 +2588,15 @@ function EditStaffModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validation
-    if (!formData.fullName.trim() || !formData.province.trim() || !formData.email.trim() || !formData.phone.trim() || !formData.highSchool.trim()) {
+    // Validation (đồng bộ với backup: bắt buộc họ tên, ngày sinh, trường, tỉnh, email, SĐT)
+    if (
+      !formData.fullName.trim() ||
+      !formData.birthDate ||
+      !formData.highSchool.trim() ||
+      !formData.province.trim() ||
+      !formData.email.trim() ||
+      !formData.phone.trim()
+    ) {
       toast.warning('Vui lòng điền đầy đủ tất cả các trường bắt buộc');
       return;
     }
@@ -2612,38 +2625,35 @@ function EditStaffModal({
       return;
     }
 
+    // Gửi đủ tất cả trường để DB cập nhật đúng (chuỗi rỗng = xóa nội dung ô, trừ handle sẽ giữ nguyên nếu không nhập gì)
     const updateData: any = {
       fullName: formData.fullName.trim(),
       province: formData.province.trim(),
       roles: formData.roles.length > 0 ? formData.roles : [STAFF_ROLES.TEACHER],
+      ...(formData.birthDate ? { birthDate: formData.birthDate } : {}),
+      university: (formData.university || '').trim(),
+      highSchool: (formData.highSchool || '').trim(),
+      email: (formData.email || '').trim(),
+      phone: (formData.phone || '').trim(),
+      specialization: (formData.specialization || '').trim(),
     };
 
-    if (formData.birthDate) {
-      updateData.birthDate = formData.birthDate;
-    }
-
-    if (formData.university) {
-      updateData.university = formData.university.trim();
-    }
-
-    if (formData.highSchool) {
-      updateData.highSchool = formData.highSchool.trim();
-    }
-
-    if (formData.email) {
-      updateData.email = formData.email.trim();
-    }
-
-    if (formData.phone) {
-      updateData.phone = formData.phone.trim();
-    }
-
-    if (formData.specialization) {
-      updateData.specialization = formData.specialization.trim();
-    }
-
-    if (formData.accountHandle) {
-      updateData.accountHandle = formData.accountHandle.trim();
+    // Đồng bộ logic accountHandle với backup:
+    // - Nếu user nhập handle mới -> dùng handle mới
+    // - Nếu để trống -> giữ nguyên handle từ DB (loginInfo hoặc staff hiện tại)
+    const trimmedHandle = (formData.accountHandle || '').trim();
+    if (trimmedHandle) {
+      updateData.accountHandle = trimmedHandle;
+    } else if (loginInfo?.accountHandle) {
+      updateData.accountHandle = loginInfo.accountHandle;
+    } else {
+      const existingHandle =
+        (staff as any)?.accountHandle ||
+        (staff as any)?.account_handle ||
+        null;
+      if (existingHandle) {
+        updateData.accountHandle = existingHandle;
+      }
     }
 
     // Only update password if provided (if empty, backend will keep old password)
@@ -2667,10 +2677,15 @@ function EditStaffModal({
       updateData.accountPassword = effectivePassword;
     }
 
+    const payloadForLog = { ...updateData };
+    if (payloadForLog.accountPassword) payloadForLog.accountPassword = '[REDACTED]';
+    console.log('[StaffDetail save] staffId=', staffId, 'updateData keys=', Object.keys(updateData), 'payload (no password)=', payloadForLog);
+
     setLoading(true);
     try {
       await updateTeacher(staffId, updateData);
-      
+      console.log('[StaffDetail save] updateTeacher OK');
+
       // Update QR link separately if changed
       const currentQrLink = (staff as any).qr_payment_link || (staff as any).qrPaymentLink || (staff as any).bank_qr_link || (staff as any).bankQRLink || '';
       if (formData.qrPaymentLink !== currentQrLink) {
@@ -2680,6 +2695,7 @@ function EditStaffModal({
       toast.success('Đã cập nhật thông tin nhân sự');
       onSuccess();
     } catch (error: any) {
+      console.error('[StaffDetail save] error:', error?.message, 'response=', error?.response?.status, error?.response?.data);
       toast.error('Lỗi khi cập nhật nhân sự: ' + (error.response?.data?.error || error.message));
     } finally {
       setLoading(false);

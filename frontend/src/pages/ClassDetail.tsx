@@ -3535,7 +3535,7 @@ function AddSessionModal({
         )}
         <div>
           <label style={{ display: 'block', marginBottom: 'var(--spacing-2)', fontWeight: '500' }}>
-            Hệ số (0-10) *
+            Hệ số (0-1) *
           </label>
           <input
             type="number"
@@ -3543,26 +3543,32 @@ function AddSessionModal({
             onChange={(e) => {
               const value = e.target.value;
               setCoefficientInputValue(value);
-              // Allow empty string for clearing - don't update coefficient yet
               if (value === '') {
-                // Keep input empty, but set coefficient to 0 for calculations
                 setCoefficient(0);
               } else {
                 const numValue = parseFloat(value);
                 if (!isNaN(numValue)) {
-                  setCoefficient(numValue);
+                  const clamped = Math.min(1, Math.max(0, numValue));
+                  setCoefficient(clamped);
+                  if (clamped !== numValue) setCoefficientInputValue(String(clamped));
                 }
               }
             }}
             onBlur={(e) => {
-              // When blur, if empty, set to 0
               if (e.target.value === '') {
                 setCoefficientInputValue('0');
                 setCoefficient(0);
+              } else {
+                const numValue = parseFloat(e.target.value);
+                if (!isNaN(numValue)) {
+                  const clamped = Math.min(1, Math.max(0, numValue));
+                  setCoefficient(clamped);
+                  setCoefficientInputValue(String(clamped));
+                }
               }
             }}
             min="0"
-            max="10"
+            max="1"
             step="0.1"
             required
             style={{
@@ -3573,7 +3579,7 @@ function AddSessionModal({
             }}
           />
           <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--muted)', marginTop: 'var(--spacing-1)' }}>
-            Hệ số từ 0 đến 10
+            Hệ số từ 0 đến 1
           </div>
         </div>
       </div>
@@ -4361,7 +4367,7 @@ function EditSessionModal({
         )}
         <div>
           <label style={{ display: 'block', marginBottom: 'var(--spacing-2)', fontWeight: '500' }}>
-            Hệ số (0-10) *
+            Hệ số (0-1) *
           </label>
           <input
             type="number"
@@ -4369,26 +4375,32 @@ function EditSessionModal({
             onChange={(e) => {
               const value = e.target.value;
               setCoefficientInputValue(value);
-              // Allow empty string for clearing - don't update coefficient yet
               if (value === '') {
-                // Keep input empty, but set coefficient to 0 for calculations
                 setCoefficient(0);
               } else {
                 const numValue = parseFloat(value);
                 if (!isNaN(numValue)) {
-                  setCoefficient(numValue);
+                  const clamped = Math.min(1, Math.max(0, numValue));
+                  setCoefficient(clamped);
+                  if (clamped !== numValue) setCoefficientInputValue(String(clamped));
                 }
               }
             }}
             onBlur={(e) => {
-              // When blur, if empty, set to 0
               if (e.target.value === '') {
                 setCoefficientInputValue('0');
                 setCoefficient(0);
+              } else {
+                const numValue = parseFloat(e.target.value);
+                if (!isNaN(numValue)) {
+                  const clamped = Math.min(1, Math.max(0, numValue));
+                  setCoefficient(clamped);
+                  setCoefficientInputValue(String(clamped));
+                }
               }
             }}
             min="0"
-            max="10"
+            max="1"
             step="0.1"
             required
             style={{
@@ -4399,7 +4411,7 @@ function EditSessionModal({
             }}
           />
           <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--muted)', marginTop: 'var(--spacing-1)' }}>
-            Hệ số từ 0 đến 10
+            Hệ số từ 0 đến 1
           </div>
         </div>
       </div>

@@ -2,9 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useTheme } from '../hooks/useTheme';
-
-// Export version constant
-export const APP_VERSION = '4.5.3';
+import { APP_VERSION } from '../constants/appVersion';
 
 interface MenuItem {
   path: string;
