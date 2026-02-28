@@ -1,378 +1,57 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuthStore } from '../store/authStore';
-import { useDataLoading } from '../hooks/useDataLoading';
-import { fetchDashboardData } from '../services/dashboardService';
-import { fetchHomePostByCategory, upsertHomePost, HomePost } from '../services/homeService';
-import AuthModal from '../components/AuthModal';
-import Modal from '../components/Modal';
-import { toast } from '../utils/toast';
-import { hasRole } from '../utils/permissions';
-
 /**
- * Home Page Component
- * Marketing style landing page before login
- * Migrated from backup/assets/js/pages/home.js
- * UI/UX giống hệt app cũ với logic đầy đủ
+ * Unicorn Edu - Math Tutoring Landing Page
+ * Modern, beautiful design for prospective students and parents
  */
 
-const HOME_MENU = [
-  { id: 'intro', label: 'Giới thiệu', description: 'Tầm nhìn & triết lý đào tạo.' },
-  { id: 'news', label: 'Khóa học', description: 'Lộ trình học phù hợp từng trình độ.' },
-  { id: 'docs', label: 'Cuộc thi', description: 'Sự kiện luyện thi & lập trình định kỳ.' },
-  { id: 'policy', label: 'Liên hệ', description: 'Kết nối với đội ngũ Unicorns Edu.' },
-];
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../store/authStore';
+import AuthModal from '../components/AuthModal';
 
-const HOME_TEAMS = [
-  {
-    id: 'it',
-    icon: '💻',
-    name: 'Team Tin học',
-    description: 'Đồng hành trong lập trình, thuật toán và ứng dụng CNTT với các lớp chuyên sâu & luyện thi.',
-    link: 'https://www.facebook.com/profile.php?id=61577992693085',
-  },
-  {
-    id: 'japanese',
-    icon: '🇯🇵',
-    name: 'Team Tiếng Nhật',
-    description: 'Đào tạo từ sơ cấp đến JLPT, giao tiếp và hiểu sâu văn hóa Nhật với giáo trình chuẩn bản xứ.',
-    link: 'https://www.facebook.com/unicornstiengnhat',
-  },
-  {
-    id: 'math',
-    icon: '📐',
-    name: 'Team Toán học',
-    description: 'Phát triển tư duy logic, luyện thi chuyên và thi HSG với lộ trình cá nhân hoá theo năng lực.',
-    link: 'https://www.facebook.com/profile.php?id=61578074894066',
-  },
-];
-
-const HOME_FEATURES = [
-  {
-    id: 'classes',
-    title: 'Quản lý lớp học',
-    description: 'Theo dõi sĩ số, lịch học và tình trạng học phí ngay trên một màn hình duy nhất.',
-    icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-      </svg>
-    ),
-    target: '#section-intro',
-  },
-  {
-    id: 'lesson',
-    title: 'Giáo án & bài tập',
-    description: 'Hệ thống hóa giáo án, giao bài tập và chấm điểm chỉ với vài thao tác.',
-    icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-        <path d="M8 7h8" />
-        <path d="M8 11h8" />
-        <path d="M8 15h4" />
-      </svg>
-    ),
-    target: '#section-news',
-  },
-  {
-    id: 'people',
-    title: 'Nhân sự & SALE-CSKH',
-    description: 'Quản lý KPIs, hoa hồng và lịch chăm sóc học sinh theo thời gian thực.',
-    icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-        <circle cx="9" cy="7" r="4" />
-        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-      </svg>
-    ),
-    target: '#section-news',
-  },
-  {
-    id: 'contests',
-    title: 'Cuộc thi & lập trình',
-    description: 'Tổ chức contest nội bộ, luyện code và chia sẻ kết quả minh bạch.',
-    icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-        <rect x="2" y="4" width="20" height="14" rx="2" />
-        <path d="M8 20h8" />
-        <path d="M12 16v4" />
-      </svg>
-    ),
-    target: '#section-docs',
-  },
-];
-
-const HOME_WORKFLOW_STEPS = [
-  {
-    id: 'sync',
-    title: 'Đồng bộ dữ liệu tức thời',
-    description: 'Kết nối dữ liệu học sinh, lớp học, lịch dạy và tài chính trong cùng một bảng điều khiển.',
-    icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-        <path d="M21 2v6h-6" />
-        <path d="M3 12a9 9 0 0 1 9-9h9" />
-        <path d="M3 22v-6h6" />
-        <path d="M21 12a9 9 0 0 1-9 9H3" />
-      </svg>
-    ),
-    actionLabel: 'Xem Dashboard',
-    page: 'dashboard',
-  },
-  {
-    id: 'people',
-    title: 'Quản trị nhân sự SALE & CSKH',
-    description: 'Theo dõi KPIs, danh sách học sinh phụ trách và tự động nhắc lịch chăm sóc.',
-    icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-        <circle cx="12" cy="7" r="4" />
-        <path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" />
-      </svg>
-    ),
-    actionLabel: 'Đi tới Nhân sự',
-    page: 'staff',
-  },
-  {
-    id: 'students',
-    title: 'Trải nghiệm chăm sóc học sinh',
-    description: 'Từ hồ sơ, trạng thái học phí đến lịch sử học tập – tất cả đều cập nhật real-time.',
-    icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-      </svg>
-    ),
-    actionLabel: 'Xem Học sinh',
-    page: 'students',
-  },
-];
-
-const HOME_MODULE_PREVIEWS = [
-  {
-    id: 'students',
-    label: 'Học sinh',
-    metricKey: 'activeStudents',
-    metricLabel: 'đang theo học',
-    blurb: 'Quản lý hồ sơ, lịch sử học, thông tin phụ huynh và công nợ ở cùng một nơi.',
-    page: 'students',
-  },
-  {
-    id: 'classes',
-    label: 'Lớp học',
-    metricKey: 'activeClasses',
-    metricLabel: 'lớp đang mở',
-    blurb: 'Xếp lịch, phân giáo viên, chấm buổi và đồng bộ học phí chỉ với vài thao tác.',
-    page: 'classes',
-  },
-  {
-    id: 'staff',
-    label: 'SALE & CSKH',
-    metricKey: 'activeStaff',
-    metricLabel: 'nhân sự đang hoạt động',
-    blurb: 'Danh sách học sinh phụ trách, KPIs và hoa hồng được đồng bộ trực tiếp từ Supabase.',
-    page: 'staff',
-  },
-];
-
-const HOME_SECTION_DEFAULTS = {
-  intro: {
-    title: 'Nơi kết nối giáo viên, học sinh và phụ huynh trong một hệ thống thống nhất',
-    content: 'Unicorns Edu cung cấp bộ công cụ quản lý dành riêng cho các trung tâm luyện thi và bồi dưỡng. Từ việc tạo lớp, xếp lịch đến đánh giá kết quả đều được số hóa giúp educator tiết kiệm thời gian và tập trung vào chất lượng giảng dạy.',
-  },
-  news: {
-    title: 'Chương trình học cá nhân hoá theo trình độ',
-    content: 'Hệ thống hỗ trợ xây dựng khóa học theo gói buổi, tự động nhắc lịch và cập nhật tình trạng học phí. Học sinh có ứng dụng riêng để theo dõi tiến độ, nhận tài liệu và tương tác với giáo viên.',
-  },
-  docs: {
-    title: 'Cuộc thi lập trình & học thuật mỗi tháng',
-    content: 'Unicorns Edu tích hợp module contest để trung tâm tạo đề, chấm điểm và công bố bảng xếp hạng. Lịch sử cuộc thi được lưu lại giúp học sinh theo dõi sự tiến bộ của chính mình.',
-  },
-};
-
-const HOME_CONTACT = {
-  email: 'unicornseducvp@gmail.com',
-  phone: '0911 589 217 • 0336 755 856',
-  address: 'Đại học Bách khoa Hà Nội',
-  socials: [
-    {
-      label: 'Facebook',
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3.64L18 10h-4V7a1 1 0 0 1 1-1h3z" />
-        </svg>
-      ),
-      url: 'https://facebook.com',
-    },
-    {
-      label: 'YouTube',
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M2.5 17.5v-11l9 5.5z" />
-          <rect x="2.5" y="6.5" width="19" height="11" rx="2" />
-        </svg>
-      ),
-      url: 'https://youtube.com',
-    },
-    {
-      label: 'LinkedIn',
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z" />
-          <rect x="2" y="9" width="4" height="12" />
-          <circle cx="4" cy="4" r="2" />
-        </svg>
-      ),
-      url: 'https://linkedin.com',
-    },
-  ],
-};
-
-// Get home stats from dashboard API
-async function getHomeStats() {
-  try {
-    // Dashboard API cần filterType và filterValue
-    const currentYear = new Date().getFullYear().toString();
-    const dashboardData = await fetchDashboardData({ 
-      filterType: 'year', 
-      filterValue: currentYear 
-    });
-    return {
-      activeStudents: dashboardData.summary.activeStudents || 0,
-      activeClasses: dashboardData.summary.activeClasses || 0,
-      activeStaff: dashboardData.summary.totalTeachers || 0,
-      satisfaction: Math.min(99, 82 + Math.round(Math.random() * 12)),
-      automationRate: 72 + Math.round(Math.random() * 12),
-    };
-  } catch (error) {
-    // Fallback to default values - không log 400/404 errors
-    if (error && typeof error === 'object' && 'response' in error) {
-      const httpError = error as { response?: { status?: number } };
-      if (httpError.response?.status === 400 || httpError.response?.status === 404) {
-        // Ignore 400/404 errors silently
-      } else {
-        console.debug('Failed to fetch home stats:', error);
-      }
-    }
-    return {
-      activeStudents: 150,
-      activeClasses: 25,
-      activeStaff: 12,
-      satisfaction: Math.min(99, 82 + Math.round(Math.random() * 12)),
-      automationRate: 72 + Math.round(Math.random() * 12),
-    };
-  }
-}
-
-interface HomeProps {
-  initialAuthMode?: 'login' | 'register';
-}
-
-function Home({ initialAuthMode }: HomeProps = {} as HomeProps) {
+function Home() {
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuthStore();
-  const [activeNav, setActiveNav] = useState('intro');
-  const [stats, setStats] = useState({ activeStudents: 0, activeClasses: 0, activeStaff: 0, satisfaction: 85, automationRate: 75 });
-  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const [authModalOpen, setAuthModalOpen] = useState(!!initialAuthMode);
-  const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>(initialAuthMode || 'login');
-  const [editSectionModalOpen, setEditSectionModalOpen] = useState(false);
-  const [editingSection, setEditingSection] = useState<{ id: string; category: string } | null>(null);
-  const [sections, setSections] = useState<Record<string, { title: string; content: string; id?: string }>>({});
-  
-  const isAdmin = hasRole('admin');
+  const [activeSection, setActiveSection] = useState('intro');
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('login');
+  const [formData, setFormData] = useState({
+    name: '',
+    phone: '',
+    grade: '',
+    goal: ''
+  });
 
-  // Set body class for landing mode
-  useEffect(() => {
-    document.body.classList.add('home-landing-mode');
-    return () => {
-      document.body.classList.remove('home-landing-mode');
-    };
-  }, []);
-
-  // Scroll detection for header - giống code cũ
-  useEffect(() => {
-    const header = document.querySelector('.home-landing-header');
-    if (!header) return;
-
-    let ticking = false;
-    const handleScroll = () => {
-      if (!ticking) {
-        window.requestAnimationFrame(() => {
-          const currentScroll = window.pageYOffset || document.documentElement.scrollTop;
-          if (currentScroll > 50) {
-            header.classList.add('scrolled');
-          } else {
-            header.classList.remove('scrolled');
-          }
-          ticking = false;
-        });
-        ticking = true;
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    handleScroll(); // Initial check
-
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-    };
-  }, []);
-
-  // Scroll detection for active nav - giống code cũ
+  // Scroll detection for header
   useEffect(() => {
     const handleScroll = () => {
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-
-      scrollTimeoutRef.current = setTimeout(() => {
-        const sections = HOME_MENU.map((item) => {
-          const element = document.getElementById(`section-${item.id}`);
-          return { id: item.id, element };
-        }).filter((s) => s.element);
-
-        const scrollPosition = window.scrollY + window.innerHeight / 3;
-
-        // Find the section that's currently in view
-        for (let i = sections.length - 1; i >= 0; i--) {
-          const section = sections[i];
-          if (section.element && section.element.offsetTop <= scrollPosition) {
-            setActiveNav(section.id);
-            break;
-          }
-        }
-      }, 100);
+      setIsScrolled(window.scrollY > 50);
     };
 
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    handleScroll(); // Initial check
-
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const handleScrollTo = (sectionId: string) => {
+  const scrollToSection = (sectionId: string) => {
     const element = document.getElementById(sectionId);
     if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      // Set active nav immediately when clicking
-      const normalizedId = sectionId.replace('#section-', '').replace('section-', '');
-      setActiveNav(normalizedId);
+      element.scrollIntoView({ behavior: 'smooth' });
+      setActiveSection(sectionId);
     }
   };
 
-  const handleStart = () => {
-    if (isAuthenticated) {
-      navigate('/dashboard');
-    } else {
-      setAuthModalMode('login');
-      setAuthModalOpen(true);
-    }
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    // In a real implementation, this would submit to a backend
+    alert(`Cảm ơn ${formData.name}! Chúng tôi sẽ liên hệ với bạn sớm nhất.`);
+    setFormData({ name: '', phone: '', grade: '', goal: '' });
+  };
+
+  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData(prev => ({
+      ...prev,
+      [e.target.name]: e.target.value
+    }));
   };
 
   const openAuthModal = (mode: 'login' | 'register') => {
@@ -380,521 +59,932 @@ function Home({ initialAuthMode }: HomeProps = {} as HomeProps) {
     setAuthModalOpen(true);
   };
 
-  const handleNavClick = (navId: string) => {
-    setActiveNav(navId);
-    handleScrollTo(`section-${navId}`);
-  };
-
-  // Load stats from API (only if authenticated)
-  useEffect(() => {
-    const token = localStorage.getItem('unicorns.token');
-    if (!token) {
-      // Use default stats if not authenticated
-      return;
-    }
-
-    let cancelled = false;
-    
-    getHomeStats()
-      .then((stats) => {
-        if (!cancelled) {
-          setStats(stats);
-        }
-      })
-      .catch((error) => {
-        // Ignore errors (connection refused, etc.) - use default stats
-        if (!cancelled && error?.code !== 'ERR_CONNECTION_REFUSED') {
-          console.debug('Failed to load home stats:', error);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Load sections from API (only if authenticated)
-  useEffect(() => {
-    const token = localStorage.getItem('unicorns.token');
-    if (!token) {
-      // Use defaults if not authenticated
-      setSections(HOME_SECTION_DEFAULTS);
-      return;
-    }
-
-    let cancelled = false;
-
-    const loadSections = async () => {
-      const sectionIds = ['news', 'docs'];
-      const loadedSections: Record<string, { title: string; content: string; id?: string }> = {};
-      
-      // Initialize with defaults first to prevent loading state
-      setSections(HOME_SECTION_DEFAULTS);
-      
-      for (const sectionId of sectionIds) {
-        if (cancelled) break;
-        
-        try {
-          const post = await fetchHomePostByCategory(sectionId);
-          if (cancelled) break;
-          
-          if (post) {
-            loadedSections[sectionId] = {
-              title: post.title,
-              content: post.content,
-              id: post.id,
-            };
-          } else {
-            // Use default - 404 is expected when posts don't exist
-            loadedSections[sectionId] = HOME_SECTION_DEFAULTS[sectionId as keyof typeof HOME_SECTION_DEFAULTS] || { title: '', content: '' };
-          }
-        } catch (error: any) {
-          // Use default on error - fetchHomePostByCategory should never throw for 404
-          // But just in case, handle it here too
-          loadedSections[sectionId] = HOME_SECTION_DEFAULTS[sectionId as keyof typeof HOME_SECTION_DEFAULTS] || { title: '', content: '' };
-        }
-      }
-      
-      if (!cancelled) {
-        // Merge loaded sections with defaults (keep defaults for sections not loaded)
-        setSections({
-          ...HOME_SECTION_DEFAULTS,
-          ...loadedSections,
-        });
-      }
-    };
-    
-    loadSections();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const getHomeSection = useCallback((sectionId: string) => {
-    if (sections[sectionId]) {
-      return sections[sectionId];
-    }
-    return HOME_SECTION_DEFAULTS[sectionId as keyof typeof HOME_SECTION_DEFAULTS] || { title: '', content: '' };
-  }, [sections]);
-
-  const handleEditSection = (sectionId: string) => {
-    const sectionMeta = HOME_MENU.find((item) => item.id === sectionId);
-    if (!sectionMeta) return;
-    
-    const current = getHomeSection(sectionId);
-    setEditingSection({ id: current.id || '', category: sectionId });
-    setEditSectionModalOpen(true);
-  };
-
-  const handleSaveSection = async (title: string, content: string) => {
-    if (!editingSection) return;
-    
-    try {
-      await upsertHomePost({
-        id: editingSection.id || undefined,
-        category: editingSection.category as 'intro' | 'news' | 'docs' | 'policy',
-        title: title.trim(),
-        content: content.trim(),
-        author_id: user?.id,
-        author_name: user?.name || user?.email,
-      });
-      
-      // Update local state
-      setSections((prev) => ({
-        ...prev,
-        [editingSection.category]: { title: title.trim(), content: content.trim(), id: editingSection.id },
-      }));
-      
-      setEditSectionModalOpen(false);
-      setEditingSection(null);
-      toast.success('Đã cập nhật nội dung');
-    } catch (error: any) {
-      toast.error('Không thể lưu nội dung: ' + (error.response?.data?.error || error.message));
+  const handleDashboardClick = () => {
+    if (isAuthenticated) {
+      navigate('/dashboard');
+    } else {
+      openAuthModal('login');
     }
   };
-
-  const formatSectionContent = (content: string) => {
-    if (!content) return '';
-    return content.split(/\n{2,}/).map((paragraph, i) => (
-      <p key={i} style={{ marginBottom: 'var(--spacing-3)' }}>
-        {paragraph.split('\n').map((line, j) => (
-          <React.Fragment key={j}>
-            {line}
-            {j < paragraph.split('\n').length - 1 && <br />}
-          </React.Fragment>
-        ))}
-      </p>
-    ));
-  };
-
-  const getHomeUserLinks = (user: any) => {
-    if (!user) return [];
-    switch (user.role) {
-      case 'admin':
-        return [
-          { label: 'Về Dashboard', page: 'dashboard' },
-          { label: 'Quản lý Trang Chủ', action: 'manage-home' },
-        ];
-      case 'teacher':
-        return [
-          { label: 'Dashboard', page: 'dashboard' },
-          { label: 'Lớp học', page: 'classes' },
-        ];
-      case 'student':
-        return [
-          { label: 'Lớp học', page: 'classes' },
-          { label: 'Lịch sử học', page: 'dashboard' },
-        ];
-      default:
-        return [{ label: 'Dashboard', page: 'dashboard' }];
-    }
-  };
-
-  const userLinks = getHomeUserLinks(user);
 
   return (
-    <div className="home-landing">
+    <div className="math-landing">
       {/* Header */}
-      <header className="home-landing-header">
-        <div className="home-brand">
-          <div className="home-logo" onClick={() => handleScrollTo('hero')} style={{ cursor: 'pointer' }}>
-            <svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 2l3 6 6 3-6 3-3 6-3-6-6-3 6-3 3-6z" fill="currentColor" />
-            </svg>
-            <div>
-              <span className="home-brand-name">Unicorns Edu</span>
-              <span className="home-brand-tagline">Education Platform</span>
+      <header className={`math-header ${isScrolled ? 'scrolled' : ''}`}>
+        <div className="header-container">
+          <a href="#hero" className="math-logo" onClick={(e) => { e.preventDefault(); scrollToSection('hero'); }}>
+            <div className="logo-icon">🦄</div>
+            <div className="logo-text">
+              <div className="logo-main">Unicorn Edu</div>
+              <div className="logo-sub">Học Toán cùng Huster</div>
             </div>
-          </div>
-        </div>
-        <nav className="home-primary-nav">
-          {HOME_MENU.map((item, index) => (
-            <button
-              key={item.id}
-              className={`home-nav-link ${activeNav === item.id || (index === 0 && activeNav === 'intro') ? 'active' : ''}`}
-              onClick={() => handleNavClick(item.id)}
-            >
-              {item.label}
+          </a>
+
+          <nav className="math-nav">
+            <button className={`nav-link ${activeSection === 'intro' ? 'active' : ''}`} onClick={() => scrollToSection('intro')}>
+              Giới thiệu
             </button>
-          ))}
-        </nav>
-        <div className="home-auth-actions">
-          {isAuthenticated ? (
-            <>
-              <div className="home-user-chip">
-                <span className="chip-name">{user?.name || user?.email || 'Người dùng'}</span>
-                <span className="chip-role">
-                  {user?.role === 'admin' ? 'Quản trị viên' : user?.role === 'teacher' ? 'Giáo viên' : 'Thành viên'}
-                </span>
-              </div>
-              {userLinks.map((link, idx) =>
-                link.action === 'manage-home' ? (
-                  <button
-                    key={idx}
-                    className="btn btn-outline"
-                    onClick={() => {
-                      handleScrollTo('section-intro');
-                      toast.info('Cuộn đến phần Giới thiệu để chỉnh sửa');
-                    }}
-                  >
-                    Quản lý Trang Chủ
-                  </button>
-                ) : (
-                  <button key={idx} className="btn btn-outline" onClick={() => navigate(`/${link.page}`)}>
-                    {link.label}
-                  </button>
-                )
-              )}
-            </>
-          ) : (
-            <>
-              <button className="btn btn-ghost" onClick={() => openAuthModal('login')}>
-                <span>Đăng nhập</span>
-              </button>
-              <button className="btn btn-primary" onClick={() => openAuthModal('register')}>
-                <span>Đăng ký</span>
-              </button>
-            </>
-          )}
+            <button className={`nav-link ${activeSection === 'courses' ? 'active' : ''}`} onClick={() => scrollToSection('courses')}>
+              Khóa học
+            </button>
+            <button className={`nav-link ${activeSection === 'mentors' ? 'active' : ''}`} onClick={() => scrollToSection('mentors')}>
+              Đội ngũ Mentor
+            </button>
+            <button className={`nav-link ${activeSection === 'benefits' ? 'active' : ''}`} onClick={() => scrollToSection('benefits')}>
+              Góc học tập
+            </button>
+          </nav>
+
+          <div style={{ display: 'flex', gap: 'var(--spacing-3)', alignItems: 'center' }}>
+            {isAuthenticated ? (
+              <>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--spacing-2)',
+                  padding: '8px 16px',
+                  background: 'var(--gradient-card)',
+                  borderRadius: 'var(--radius-full)',
+                  fontSize: '14px'
+                }}>
+                  <span style={{ fontWeight: 600 }}>{user?.name || user?.email || 'User'}</span>
+                </div>
+                <button
+                  className="header-cta"
+                  onClick={handleDashboardClick}
+                  style={{ background: 'var(--gradient-primary)' }}
+                >
+                  Vào Dashboard
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  className="nav-link"
+                  onClick={() => openAuthModal('login')}
+                  style={{ padding: '8px 16px' }}
+                >
+                  Đăng nhập
+                </button>
+                <button
+                  className="header-cta"
+                  onClick={() => openAuthModal('register')}
+                >
+                  Đăng ký
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="home-main">
-        {/* Hero Section */}
-        <section className="home-hero" id="hero">
-          <div className="home-hero-content">
-            <p className="home-pill">#1 Education Management Platform</p>
-            <h1>Nền tảng quản lý giáo dục & luyện thi hiện đại</h1>
-            <p className="home-hero-subtext">
-              Quản lý lớp học, giáo án, học sinh và nhân sự trong một hệ thống duy nhất. Được phát triển riêng cho các trung tâm luyện thi, bồi dưỡng văn hoá và lập trình.
+      {/* Hero Section */}
+      <section id="hero" className="hero-section">
+        <div className="hero-container">
+          <div className="hero-content">
+            <h1 style={{ marginBottom: 'var(--spacing-4)' }}>
+              Chinh phục Toán học
+              <br />
+              <span className="hero-tagline">÷ – Bứt phá điểm số</span>
+              <br />
+              <span className="hero-tagline">cùng Sinh viên Bách Khoa</span>
+            </h1>
+
+            <div className="hero-subtitle" style={{ marginTop: 'var(--spacing-6)' }}>
+              <p style={{ marginBottom: 'var(--spacing-3)' }}>
+                • Chuyên kèm Toán 1-1 Online và Nhóm nhỏ (THCS – THPT)
+              </p>
+              <p style={{ marginBottom: 'var(--spacing-3)' }}>
+                • Mục tiêu toàn diện: Lấp lỗ hổng kiến thức – Bồi dưỡng HSG – Chinh phục kỳ thi Vào 10, Chuyên & Đại học.
+              </p>
+              <p>
+                • Lộ trình cá nhân hóa, học tư duy, hiểu bản chất, không học vẹt theo dạng bài.
+              </p>
+            </div>
+
+            <div className="hero-actions">
+              <button className="btn-primary-large" onClick={() => scrollToSection('contact')}>
+                Đăng ký tư vấn lộ trình
+              </button>
+              <button className="btn-secondary-large" onClick={() => scrollToSection('mentors')}>
+                Tìm hiểu đội ngũ Mentor
+              </button>
+            </div>
+
+            <div className="hero-stats">
+              <div className="stat-item">
+                <svg className="stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="9" cy="7" r="4"></circle>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+                <span><strong>1-1 & Nhóm nhỏ</strong><br />(Zoom)</span>
+              </div>
+              <div className="stat-item">
+                <svg className="stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                <span><strong>Hỗ trợ 24/24</strong><br />(Giải đáp tức thì)</span>
+              </div>
+              <div className="stat-item">
+                <svg className="stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="8.5" cy="7" r="4"></circle>
+                  <polyline points="17 11 19 13 23 9"></polyline>
+                </svg>
+                <span><strong>Sinh viên top đầu</strong><br />Bách Khoa & Chuyên Toán</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="hero-visual" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+            <svg width="700" height="700" viewBox="0 0 700 700" xmlns="http://www.w3.org/2000/svg" style={{ maxWidth: '100%', height: 'auto' }}>
+              <defs>
+                <linearGradient id="purpleBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#9333EA" stopOpacity="1" />
+                  <stop offset="50%" stopColor="#7C3AED" stopOpacity="1" />
+                  <stop offset="100%" stopColor="#3B82F6" stopOpacity="1" />
+                </linearGradient>
+                <linearGradient id="cyanGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#06B6D4" stopOpacity="1" />
+                  <stop offset="100%" stopColor="#67E8F9" stopOpacity="1" />
+                </linearGradient>
+                <linearGradient id="energyBeam" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#F0ABFC" stopOpacity="0" />
+                  <stop offset="50%" stopColor="#A78BFA" stopOpacity="1" />
+                  <stop offset="100%" stopColor="#60A5FA" stopOpacity="0" />
+                </linearGradient>
+                <radialGradient id="glowingCore">
+                  <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.8" />
+                  <stop offset="50%" stopColor="#C4B5FD" stopOpacity="0.4" />
+                  <stop offset="100%" stopColor="#9333EA" stopOpacity="0" />
+                </radialGradient>
+                <filter id="softGlow">
+                  <feGaussianBlur stdDeviation="3" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
+
+              {/* Technical Grid Background */}
+              <g opacity="0.12" stroke="#E0E7FF" strokeWidth="0.5">
+                <line x1="0" y1="50" x2="700" y2="50" />
+                <line x1="0" y1="100" x2="700" y2="100" />
+                <line x1="0" y1="150" x2="700" y2="150" />
+                <line x1="0" y1="200" x2="700" y2="200" />
+                <line x1="0" y1="250" x2="700" y2="250" />
+                <line x1="0" y1="300" x2="700" y2="300" />
+                <line x1="0" y1="350" x2="700" y2="350" />
+                <line x1="0" y1="400" x2="700" y2="400" />
+                <line x1="0" y1="450" x2="700" y2="450" />
+                <line x1="0" y1="500" x2="700" y2="500" />
+                <line x1="0" y1="550" x2="700" y2="550" />
+                <line x1="0" y1="600" x2="700" y2="600" />
+                <line x1="0" y1="650" x2="700" y2="650" />
+                <line x1="50" y1="0" x2="50" y2="700" />
+                <line x1="100" y1="0" x2="100" y2="700" />
+                <line x1="150" y1="0" x2="150" y2="700" />
+                <line x1="200" y1="0" x2="200" y2="700" />
+                <line x1="250" y1="0" x2="250" y2="700" />
+                <line x1="300" y1="0" x2="300" y2="700" />
+                <line x1="350" y1="0" x2="350" y2="700" />
+                <line x1="400" y1="0" x2="400" y2="700" />
+                <line x1="450" y1="0" x2="450" y2="700" />
+                <line x1="500" y1="0" x2="500" y2="700" />
+                <line x1="550" y1="0" x2="550" y2="700" />
+                <line x1="600" y1="0" x2="600" y2="700" />
+                <line x1="650" y1="0" x2="650" y2="700" />
+              </g>
+
+              {/* Fibonacci Spiral */}
+              <path d="M 100 100 Q 100 50, 150 50 Q 200 50, 200 100 Q 200 180, 120 180" fill="none" stroke="#C4B5FD" strokeWidth="1.5" opacity="0.3" />
+
+              {/* Large geometric circles in background */}
+              <circle cx="150" cy="150" r="120" fill="none" stroke="#E0E7FF" strokeWidth="1" opacity="0.2" />
+              <circle cx="550" cy="550" r="100" fill="none" stroke="#DDD6FE" strokeWidth="1" opacity="0.2" />
+
+              {/* Central 3D Energy Cube */}
+              <g transform="translate(350, 350)">
+                {/* Glowing core */}
+                <circle cx="0" cy="0" r="80" fill="url(#glowingCore)" opacity="0.6">
+                  <animate attributeName="r" values="80;90;80" dur="3s" repeatCount="indefinite" />
+                </circle>
+
+                {/* 3D Cube structure */}
+                <path d="M -80 -40 L 0 -80 L 80 -40 L 0 0 Z" fill="none" stroke="#A78BFA" strokeWidth="2.5" opacity="0.7" filter="url(#softGlow)" />
+                <path d="M -80 -40 L -80 40 L 0 80 L 0 0 Z" fill="none" stroke="#818CF8" strokeWidth="2.5" opacity="0.7" filter="url(#softGlow)" />
+                <path d="M 80 -40 L 80 40 L 0 80 L 0 0 Z" fill="none" stroke="#60A5FA" strokeWidth="2.5" opacity="0.7" filter="url(#softGlow)" />
+
+                {/* Energy beams */}
+                <line x1="-80" y1="-40" x2="80" y2="40" stroke="url(#energyBeam)" strokeWidth="1.5" opacity="0.6">
+                  <animate attributeName="opacity" values="0.3;0.8;0.3" dur="2s" repeatCount="indefinite" />
+                </line>
+                <line x1="80" y1="-40" x2="-80" y2="40" stroke="url(#energyBeam)" strokeWidth="1.5" opacity="0.6">
+                  <animate attributeName="opacity" values="0.8;0.3;0.8" dur="2s" repeatCount="indefinite" />
+                </line>
+
+                {/* Math symbols */}
+                <text x="-25" y="-10" fontFamily="Georgia, serif" fontSize="24" fill="#A78BFA" fontStyle="italic">∫</text>
+                <text x="10" y="15" fontFamily="Arial, sans-serif" fontSize="20" fill="#818CF8">Σ</text>
+                <text x="-30" y="25" fontFamily="Arial, sans-serif" fontSize="18" fill="#60A5FA">f(x)</text>
+
+                {/* Shapes */}
+                <path d="M -15 -25 L 0 -35 L 15 -25 L 0 -15 Z" fill="none" stroke="#C4B5FD" strokeWidth="1.5" />
+                <circle cx="20" cy="-5" r="8" fill="none" stroke="#DDD6FE" strokeWidth="1.5" />
+
+                {/* Rotating frame */}
+                <g opacity="0.8">
+                  <path d="M -100 -50 L -20 -90 M 100 -50 L 20 -90 M -100 50 L -20 90 M 100 50 L 20 90"
+                    stroke="url(#cyanGlow)" strokeWidth="2" strokeLinecap="round" filter="url(#softGlow)">
+                    <animate attributeName="opacity" values="0.5;1;0.5" dur="3s" repeatCount="indefinite" />
+                  </path>
+                  <animateTransform attributeName="transform" type="rotate" values="0 0 0; 360 0 0" dur="30s" repeatCount="indefinite" />
+                </g>
+              </g>
+
+              {/* Energy particles */}
+              <circle cx="100" cy="100" r="2" fill="#A78BFA" opacity="0.7"><animate attributeName="cy" values="100;80;100" dur="2s" repeatCount="indefinite" /></circle>
+              <circle cx="140" cy="300" r="2" fill="#A78BFA" opacity="0.7"><animate attributeName="cy" values="300;280;300" dur="3s" repeatCount="indefinite" /></circle>
+              <circle cx="180" cy="500" r="2" fill="#A78BFA" opacity="0.7"><animate attributeName="cy" values="500;480;500" dur="2s" repeatCount="indefinite" /></circle>
+              <circle cx="220" cy="100" r="2" fill="#A78BFA" opacity="0.7"><animate attributeName="cy" values="100;80;100" dur="3s" repeatCount="indefinite" /></circle>
+              <circle cx="260" cy="300" r="2" fill="#A78BFA" opacity="0.7"><animate attributeName="cy" values="300;280;300" dur="2s" repeatCount="indefinite" /></circle>
+              <circle cx="300" cy="500" r="2" fill="#A78BFA" opacity="0.7"><animate attributeName="cy" values="500;480;500" dur="3s" repeatCount="indefinite" /></circle>
+              <circle cx="340" cy="100" r="2" fill="#A78BFA" opacity="0.7"><animate attributeName="cy" values="100;80;100" dur="2s" repeatCount="indefinite" /></circle>
+              <circle cx="380" cy="300" r="2" fill="#A78BFA" opacity="0.7"><animate attributeName="cy" values="300;280;300" dur="3s" repeatCount="indefinite" /></circle>
+
+              {/* Formulas */}
+              <text x="50" y="120" fontFamily="Georgia, serif" fontSize="16" fill="#A78BFA" opacity="0.8" fontStyle="italic">eⁱᵖⁱ + 1 = 0</text>
+              <text x="520" y="150" fontFamily="Georgia, serif" fontSize="14" fill="#818CF8" opacity="0.7">∮ E·dl = -dΦ/dt</text>
+              <text x="80" y="580" fontFamily="Georgia, serif" fontSize="15" fill="#60A5FA" opacity="0.8">∫₋∞^∞ e⁻ˣ² dx = √π</text>
+              <text x="480" y="600" fontFamily="Arial, sans-serif" fontSize="13" fill="#A78BFA" opacity="0.7">lim(x→∞) (1+1/x)ˣ = e</text>
+              <text x="30" y="350" fontFamily="Georgia, serif" fontSize="14" fill="#C4B5FD" opacity="0.7" transform="rotate(-15 30 350)">∇²φ = ρ/ε₀</text>
+              <text x="580" y="380" fontFamily="Arial, sans-serif" fontSize="13" fill="#818CF8" opacity="0.6" transform="rotate(12 580 380)">Σ(n=1→∞) 1/n² = π²/6</text>
+
+              {/* Greek */}
+              <text x="120" y="200" fontFamily="Arial, sans-serif" fontSize="22" fill="#DDD6FE" opacity="0.5">α</text>
+              <text x="560" y="280" fontFamily="Arial, sans-serif" fontSize="20" fill="#C4B5FD" opacity="0.5">β</text>
+              <text x="180" y="520" fontFamily="Arial, sans-serif" fontSize="24" fill="#A78BFA" opacity="0.5">θ</text>
+              <text x="520" y="480" fontFamily="Arial, sans-serif" fontSize="18" fill="#818CF8" opacity="0.5">λ</text>
+
+              {/* Tools */}
+              <g transform="translate(580, 120)" opacity="0.7">
+                <rect x="0" y="0" width="60" height="80" rx="4" fill="none" stroke="#818CF8" strokeWidth="2" />
+                <line x1="5" y1="20" x2="55" y2="20" stroke="#60A5FA" strokeWidth="1.5" />
+                <line x1="5" y1="35" x2="55" y2="35" stroke="#60A5FA" strokeWidth="1.5" />
+                <line x1="5" y1="50" x2="55" y2="50" stroke="#60A5FA" strokeWidth="1.5" />
+                <line x1="5" y1="65" x2="55" y2="65" stroke="#60A5FA" strokeWidth="1.5" />
+                <circle cx="20" cy="20" r="3" fill="#A78BFA" />
+                <circle cx="35" cy="35" r="3" fill="#A78BFA" />
+              </g>
+
+              <g transform="translate(60, 520)" opacity="0.7">
+                <line x1="20" y1="10" x2="20" y2="50" stroke="#818CF8" strokeWidth="2.5" />
+                <line x1="20" y1="10" x2="35" y2="45" stroke="#60A5FA" strokeWidth="2.5" />
+                <circle cx="20" cy="10" r="3" fill="#A78BFA" />
+                <circle cx="35" cy="45" r="2" fill="#60A5FA" />
+              </g>
+
+              <g transform="translate(550, 520)" opacity="0.6">
+                <rect x="0" y="0" width="100" height="15" fill="none" stroke="#818CF8" strokeWidth="1.5" />
+                <line x1="0" y1="0" x2="0" y2="10" stroke="#60A5FA" strokeWidth="1" />
+                <line x1="10" y1="0" x2="10" y2="6" stroke="#60A5FA" strokeWidth="1" />
+                <line x1="20" y1="0" x2="20" y2="6" stroke="#60A5FA" strokeWidth="1" />
+                <line x1="30" y1="0" x2="30" y2="6" stroke="#60A5FA" strokeWidth="1" />
+                <line x1="40" y1="0" x2="40" y2="6" stroke="#60A5FA" strokeWidth="1" />
+                <line x1="50" y1="0" x2="50" y2="10" stroke="#60A5FA" strokeWidth="1" />
+                <line x1="60" y1="0" x2="60" y2="6" stroke="#60A5FA" strokeWidth="1" />
+                <line x1="70" y1="0" x2="70" y2="6" stroke="#60A5FA" strokeWidth="1" />
+                <line x1="80" y1="0" x2="80" y2="6" stroke="#60A5FA" strokeWidth="1" />
+                <line x1="90" y1="0" x2="90" y2="6" stroke="#60A5FA" strokeWidth="1" />
+                <line x1="100" y1="0" x2="100" y2="10" stroke="#60A5FA" strokeWidth="1" />
+              </g>
+
+              {/* Decorative */}
+              <path d="M 150 50 L 165 65 L 150 80" fill="none" stroke="#C4B5FD" strokeWidth="1.5" opacity="0.4" />
+              <path d="M 550 50 L 535 65 L 550 80" fill="none" stroke="#DDD6FE" strokeWidth="1.5" opacity="0.4" />
+
+              {/* Stars */}
+              <g transform="translate(150, 80)" opacity="0.6">
+                <path d="M 0 -4 L 1 -1 L 4 0 L 1 1 L 0 4 L -1 1 L -4 0 L -1 -1 Z" fill="#E0E7FF">
+                  <animate attributeName="opacity" values="0.3;0.8;0.3" dur="2s" repeatCount="indefinite" />
+                </path>
+              </g>
+              <g transform="translate(210, 230)" opacity="0.6">
+                <path d="M 0 -4 L 1 -1 L 4 0 L 1 1 L 0 4 L -1 1 L -4 0 L -1 -1 Z" fill="#E0E7FF">
+                  <animate attributeName="opacity" values="0.3;0.8;0.3" dur="3s" repeatCount="indefinite" />
+                </path>
+              </g>
+              <g transform="translate(270, 380)" opacity="0.6">
+                <path d="M 0 -4 L 1 -1 L 4 0 L 1 1 L 0 4 L -1 1 L -4 0 L -1 -1 Z" fill="#E0E7FF">
+                  <animate attributeName="opacity" values="0.3;0.8;0.3" dur="4s" repeatCount="indefinite" />
+                </path>
+              </g>
+              <g transform="translate(330, 530)" opacity="0.6">
+                <path d="M 0 -4 L 1 -1 L 4 0 L 1 1 L 0 4 L -1 1 L -4 0 L -1 -1 Z" fill="#E0E7FF">
+                  <animate attributeName="opacity" values="0.3;0.8;0.3" dur="2s" repeatCount="indefinite" />
+                </path>
+              </g>
+            </svg>
+          </div>
+        </div>
+      </section>
+
+      {/* Introduction - Teams Section with Modern SaaS Design */}
+      <section id="intro" className="relative overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 py-24">
+        {/* Animated Background Blobs */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -top-40 -right-40 w-96 h-96 bg-gradient-to-br from-blue-400/30 to-indigo-400/30 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '4s' }}></div>
+          <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-gradient-to-tr from-violet-400/20 to-purple-400/20 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '6s' }}></div>
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-gradient-to-r from-cyan-300/10 to-blue-300/10 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '5s' }}></div>
+        </div>
+
+        <div className="section-container relative z-10">
+          {/* Modern Hero Header */}
+          <div className="text-center max-w-4xl mx-auto">
+            {/* Decorative Badge */}
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border border-blue-200/50 backdrop-blur-sm mb-6 animate-bounce" style={{ animationDuration: '3s' }}>
+              <span className="text-2xl">🦄</span>
+              <span className="text-sm font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                Nền Tảng Giáo Dục Đa Ngành
+              </span>
+            </div>
+
+            {/* Main Title with Gradient */}
+            <h2 className="text-5xl md:text-6xl font-bold mb-6 leading-tight">
+              <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 bg-clip-text text-transparent">
+                Giới thiệu Teams
+              </span>
+              <br />
+              <span className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+                Unicorns Edu
+              </span>
+            </h2>
+
+            {/* Subtitle */}
+            <p className="text-xl text-gray-600 mb-12 max-w-2xl mx-auto">
+              Đồng hành cùng bạn trên hành trình học tập với đội ngũ chuyên gia hàng đầu
             </p>
-            <div className="home-hero-actions">
-              <button className="btn btn-primary btn-lg" onClick={handleStart}>
-                Bắt đầu ngay
-              </button>
-              <button className="btn btn-text" onClick={() => handleScrollTo('section-intro')}>
-                Tìm hiểu thêm
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: 'var(--spacing-2)' }}>
-                  <path d="m9 18 6-6-6-6" />
-                </svg>
-              </button>
-            </div>
-            <div className="home-hero-kpis">
-              <div className="hero-kpi-card">
-                <p>Học sinh đang theo học</p>
-                <strong>{stats.activeStudents}</strong>
-              </div>
-              <div className="hero-kpi-card">
-                <p>Lớp học đang vận hành</p>
-                <strong>{stats.activeClasses}</strong>
-              </div>
-              <div className="hero-kpi-card">
-                <p>Nhân sự Sale & CSKH</p>
-                <strong>{stats.activeStaff}</strong>
-              </div>
-            </div>
           </div>
-          <div className="home-hero-illustration">
-            <div className="hero-badge">
-              <span>Realtime Sync</span>
-              <strong>+38%</strong>
-            </div>
-            <div className="hero-card hero-card--primary">
-              <p>Giáo án đã hoàn thành</p>
-              <strong>1,240+</strong>
-            </div>
-            <div className="hero-card hero-card--secondary">
-              <p>Nhân sự đang hoạt động</p>
-              <strong>63</strong>
-            </div>
-          </div>
-        </section>
 
-        {/* Insights Section */}
-        <section className="home-insights">
-          <div className="home-insight-card">
-            <p className="insight-label">Mức độ hài lòng phụ huynh</p>
-            <div className="insight-value">{stats.satisfaction}%</div>
-            <p className="insight-meta">Tổng hợp từ khảo sát định kỳ & phản hồi CSKH</p>
-          </div>
-          <div className="home-insight-card">
-            <p className="insight-label">Quy trình tự động hóa</p>
-            <div className="insight-value">{stats.automationRate}%</div>
-            <p className="insight-meta">Lịch học, nhắc học phí, chăm sóc học sinh đều chạy nền</p>
-          </div>
-          <div className="home-insight-card">
-            <p className="insight-label">Module đang sử dụng</p>
-            <div className="insight-chips">
-              {['Dashboard', 'Students', 'Staff', 'Contest'].map((chip) => (
-                <span key={chip}>{chip}</span>
-              ))}
-            </div>
-            <p className="insight-meta">Học hỏi từ các trang Dashboard, Students, Staff</p>
-          </div>
-        </section>
+          {/* Team Cards Grid - Modern Bento Style */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-16">
+            {/* Team Toán học - Blue Theme */}
+            <div className="group relative bg-white/80 backdrop-blur-sm rounded-3xl p-8 shadow-lg hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 border border-blue-100/50 overflow-hidden">
+              {/* Background Gradient Overlay */}
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-cyan-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
 
-        {/* Teams Section */}
-        <section className="home-teams-section" id="section-intro">
-          <div className="teams-header">
-            <p className="section-eyebrow">Giới thiệu</p>
-            <h2>Giới thiệu Teams Unicorns Edu</h2>
-            <p className="teams-tagline">Đồng hành cùng bạn trên hành trình học tập</p>
-          </div>
-          <div className="home-teams-grid">
-            {HOME_TEAMS.map((team) => (
-              <article key={team.id} className="home-team-card">
-                <div className="team-icon">{team.icon}</div>
-                <h3>{team.name}</h3>
-                <p>{team.description}</p>
-                <a className="btn btn-outline" href={team.link} target="_blank" rel="noopener noreferrer">
-                  Xem Fanpage
+              {/* Icon Container */}
+              <div className="relative mb-6">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 shadow-lg group-hover:scale-110 transition-transform duration-500">
+                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="relative">
+                <h3 className="text-2xl font-bold text-gray-900 mb-3 group-hover:text-blue-600 transition-colors duration-300">
+                  Team Toán học
+                </h3>
+                <p className="text-gray-600 leading-relaxed mb-6">
+                  Phát triển tư duy logic, luyện thi chuyên và thi HSG với lộ trình cá nhân hoá theo năng lực.
+                </p>
+
+                {/* CTA Button */}
+                <a
+                  href="https://www.facebook.com/profile.php?id=61578074894066"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold shadow-md hover:shadow-xl transition-all duration-300 hover:scale-105"
+                >
+                  <span>Xem Fanpage</span>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
                 </a>
-              </article>
-            ))}
-          </div>
-          <div className="home-teams-contact">
-            <div>
-              <p className="muted text-sm">Liên hệ ngay</p>
-              <div className="contact-inline">
-                <span>📞 {HOME_CONTACT.phone}</span>
-                <span>📧 {HOME_CONTACT.email}</span>
-                <span>📍 {HOME_CONTACT.address}</span>
               </div>
+
+              {/* Decorative Element */}
+              <div className="absolute top-4 right-4 w-20 h-20 bg-blue-500/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
+            </div>
+
+            {/* Team Tin học - Indigo/Emerald Theme */}
+            <div className="group relative bg-white/80 backdrop-blur-sm rounded-3xl p-8 shadow-lg hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 border border-indigo-100/50 overflow-hidden">
+              {/* Background Gradient Overlay */}
+              <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+
+              {/* Icon Container */}
+              <div className="relative mb-6">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-emerald-500 shadow-lg group-hover:scale-110 transition-transform duration-500">
+                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="relative">
+                <h3 className="text-2xl font-bold text-gray-900 mb-3 group-hover:text-indigo-600 transition-colors duration-300">
+                  Team Tin học
+                </h3>
+                <p className="text-gray-600 leading-relaxed mb-6">
+                  Đồng hành trong lập trình, thuật toán và ứng dụng CNTT với các lớp chuyên sâu & luyện thi.
+                </p>
+
+                {/* CTA Button */}
+                <a
+                  href="https://www.facebook.com/profile.php?id=61577992693085"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-emerald-500 text-white font-semibold shadow-md hover:shadow-xl transition-all duration-300 hover:scale-105"
+                >
+                  <span>Xem Fanpage</span>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </a>
+              </div>
+
+              {/* Decorative Element */}
+              <div className="absolute top-4 right-4 w-20 h-20 bg-indigo-500/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
+            </div>
+
+            {/* Team Tiếng Nhật - Rose/Red Theme */}
+            <div className="group relative bg-white/80 backdrop-blur-sm rounded-3xl p-8 shadow-lg hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 border border-rose-100/50 overflow-hidden">
+              {/* Background Gradient Overlay */}
+              <div className="absolute inset-0 bg-gradient-to-br from-rose-500/5 to-red-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+
+              {/* Icon Container */}
+              <div className="relative mb-6">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-rose-500 to-red-500 shadow-lg group-hover:scale-110 transition-transform duration-500">
+                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="relative">
+                <h3 className="text-2xl font-bold text-gray-900 mb-3 group-hover:text-rose-600 transition-colors duration-300">
+                  Team Tiếng Nhật
+                </h3>
+                <p className="text-gray-600 leading-relaxed mb-6">
+                  Đào tạo từ sơ cấp đến JLPT, giao tiếp và hiểu sâu văn hóa Nhật với giáo trình chuẩn bản xứ.
+                </p>
+
+                {/* CTA Button */}
+                <a
+                  href="https://www.facebook.com/unicornstiengnhat"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-rose-500 to-red-500 text-white font-semibold shadow-md hover:shadow-xl transition-all duration-300 hover:scale-105"
+                >
+                  <span>Xem Fanpage</span>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </a>
+              </div>
+
+              {/* Decorative Element */}
+              <div className="absolute top-4 right-4 w-20 h-20 bg-rose-500/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
             </div>
           </div>
-        </section>
 
-        {/* Features Section */}
-        <section className="home-feature-grid">
-          {HOME_FEATURES.map((feature) => (
-            <article key={feature.id} className="home-feature-card">
-              <div className="feature-icon" style={{ width: '48px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(59, 130, 246, 0.12)', borderRadius: 'var(--radius)', color: 'var(--primary)', marginBottom: 'var(--spacing-3)' }}>
-                {feature.icon}
+          {/* Modern Contact Footer */}
+          <div className="mt-20 relative">
+            <div className="bg-white/60 backdrop-blur-lg rounded-3xl p-10 shadow-xl border border-gray-200/50">
+              {/* Top Decoration */}
+              <div className="flex justify-center mb-8">
+                <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/50">
+                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  <span className="text-sm font-semibold text-blue-600">Liên hệ ngay</span>
+                </div>
               </div>
-              <h3>{feature.title}</h3>
-              <p>{feature.description}</p>
-              <button className="feature-link" onClick={() => handleScrollTo(feature.target.replace('#section-', ''))} style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', padding: 0, marginTop: 'var(--spacing-2)', textAlign: 'left' }}>
-                Xem chi tiết →
-              </button>
-            </article>
-          ))}
-        </section>
 
-        {/* Workflow Section */}
-        <section className="home-workflow">
-          <div className="workflow-header">
-            <p className="section-eyebrow">Quy trình vận hành</p>
-            <h2>Học hỏi từ Dashboard, Staff, Students</h2>
-            <p className="workflow-tagline">Gắn kết dữ liệu từ Supabase và các trang nội bộ để tạo nên luồng chăm sóc hoàn chỉnh.</p>
-          </div>
-          <div className="workflow-grid">
-            {HOME_WORKFLOW_STEPS.map((step) => (
-              <article key={step.id} className="workflow-card">
-                <div className="workflow-icon">{step.icon}</div>
-                <h3>{step.title}</h3>
-                <p>{step.description}</p>
-                <button className="feature-link" onClick={() => navigate(`/${step.page}`)} style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', padding: 0, marginTop: 'var(--spacing-2)', textAlign: 'left' }}>
-                  {step.actionLabel}
-                </button>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        {/* Module Preview Section */}
-        <section className="home-preview" aria-label="Tổng quan hệ thống">
-          <div className="preview-header">
-            <div>
-              <p className="section-eyebrow">Giao diện sản phẩm</p>
-              <h2>Góc nhìn nhanh từ Students, Classes, Staff</h2>
-              <p className="preview-tagline">Tái sử dụng các layout đã quen thuộc ở trang quản trị để giới thiệu với khách truy cập.</p>
-            </div>
-          </div>
-          <div className="preview-grid">
-            {HOME_MODULE_PREVIEWS.map((module) => (
-              <article key={module.id} className="preview-card">
-                <div className="preview-card-top">
-                  <div>
-                    <p className="muted text-sm">{module.label}</p>
-                    <h3>
-                      {stats[module.metricKey as keyof typeof stats] || 0} <span>{module.metricLabel}</span>
-                    </h3>
-                  </div>
-                  <button className="btn btn-ghost btn-icon" onClick={() => navigate(`/${module.page}`)} title={`Đi tới ${module.label}`}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M9 18l6-6-6-6" />
+              {/* Contact Information Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Phone */}
+                <div className="flex items-center gap-4 p-4 rounded-2xl bg-gradient-to-br from-blue-50 to-cyan-50 hover:shadow-lg transition-shadow duration-300">
+                  <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-md">
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                     </svg>
-                  </button>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Hotline</p>
+                    <p className="text-base font-bold text-gray-900">0912888908</p>
+                  </div>
                 </div>
-                <p>{module.blurb}</p>
-                <div className="preview-meta">
-                  <span>Liên kết trực tiếp tới trang {module.page}</span>
-                  <span className="status-pill">Realtime DB</span>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
 
-        {/* Sections */}
-        {HOME_MENU.filter((item) => item.id !== 'policy' && item.id !== 'intro').map((section) => {
-          const content = getHomeSection(section.id);
-          return (
-            <section key={section.id} className="home-section" id={`section-${section.id}`}>
-              <div className="home-section-header">
-                <p className="section-eyebrow">{section.label}</p>
-                <div className="section-title-row">
-                  <h2>{content.title}</h2>
-                  {isAuthenticated && isAdmin && (
-                    <button
-                      className="home-edit-btn"
-                      onClick={() => handleEditSection(section.id)}
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                      </svg>
-                      Chỉnh sửa
-                    </button>
-                  )}
+                {/* Email */}
+                <div className="flex items-center gap-4 p-4 rounded-2xl bg-gradient-to-br from-indigo-50 to-purple-50 hover:shadow-lg transition-shadow duration-300">
+                  <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center shadow-md">
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Email</p>
+                    <p className="text-sm font-bold text-gray-900 break-all">unicornsmath@gmail.com</p>
+                  </div>
                 </div>
-                <div className="home-section-description">{formatSectionContent(content.content)}</div>
-              </div>
-            </section>
-          );
-        })}
-      </main>
 
-      {/* Footer/Contact Section */}
-      <footer className="home-footer" id="section-policy">
-        <div className="home-footer-card">
-          <div className="home-footer-left">
-            <p className="section-eyebrow">Liên hệ</p>
-            <h2>Kết nối với Unicorns Edu</h2>
-            <p className="home-footer-lede">Đội ngũ CSKH của chúng tôi luôn sẵn sàng để hỗ trợ bạn triển khai hệ thống.</p>
-            <div className="home-contact-grid">
-              <div className="contact-item">
-                <div className="contact-icon">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M4 4h16v16H4z" />
-                    <polyline points="22,6 12,13 2,6" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="muted text-sm">Email</p>
-                  <a href={`mailto:${HOME_CONTACT.email}`}>{HOME_CONTACT.email}</a>
-                </div>
-              </div>
-              <div className="contact-item">
-                <div className="contact-icon">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M22 16.92V21a2 2 0 0 1-2.18 2A19.79 19.79 0 0 1 3 6.18 2 2 0 0 1 5 4h4.09a1 1 0 0 1 1 .75l1 4a1 1 0 0 1-.27.95l-2.2 2.2a16 16 0 0 0 5.66 5.66l2.2-2.2a1 1 0 0 1 .95-.27l4 1a1 1 0 0 1 .75 1z" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="muted text-sm">Hotline</p>
-                  <a href={`tel:${HOME_CONTACT.phone.replace(/[^0-9]/g, '')}`}>{HOME_CONTACT.phone}</a>
-                </div>
-              </div>
-              <div className="contact-item">
-                <div className="contact-icon">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 1 1 18 0z" />
-                    <circle cx="12" cy="10" r="3" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="muted text-sm">Địa chỉ</p>
-                  <p>{HOME_CONTACT.address}</p>
+                {/* Address */}
+                <div className="flex items-center gap-4 p-4 rounded-2xl bg-gradient-to-br from-rose-50 to-pink-50 hover:shadow-lg transition-shadow duration-300">
+                  <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-rose-500 to-pink-500 flex items-center justify-center shadow-md">
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Địa chỉ</p>
+                    <p className="text-sm font-bold text-gray-900">Đại học Bách Khoa Hà Nội</p>
+                  </div>
                 </div>
               </div>
             </div>
-            <div className="home-footer-actions">
-              <button className="btn btn-primary" onClick={() => openAuthModal('register')}>
-                Nhận tư vấn triển khai
-              </button>
-              <button className="btn btn-ghost" onClick={() => handleScrollTo('hero')}>
-                Xem thêm tính năng
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: 'var(--spacing-2)' }}>
-                  <path d="M9 18l6-6-6-6" />
-                </svg>
-              </button>
+          </div>
+        </div>
+      </section>
+
+      {/* Courses Section - Redesigned */}
+      <section id="courses" className="courses-section-redesigned">
+        {/* Background Elements */}
+        <div className="section-bg-pattern"></div>
+
+        <div className="section-container">
+          <div className="section-header">
+            {/* <span className="section-badge">🎯 Mục tiêu của bạn</span> */}
+            <h2 className="section-title">Bạn đang cần hỗ trợ <span className="text-highlight">mục tiêu nào?</span></h2>
+            <p className="section-subtitle">
+              Lựa chọn khóa học phù hợp với nhu cầu và định hướng học tập để bắt đầu hành trình của riêng bạn.
+            </p>
+          </div>
+
+          <div className="courses-grid-redesigned">
+            {/* Card 1 */}
+            <div className="course-card-redesigned gradient-blue">
+              <div className="course-card-inner">
+                <div className="course-icon-large">📚</div>
+                <h3>Củng cố & Lấy lại gốc</h3>
+                <p>
+                  Dành cho học sinh mất căn bản, muốn cải thiện điểm số trên lớp.
+                  Học từ bản chất, lấp lỗ hổng kiến thức nhanh chóng.
+                </p>
+                <div className="course-features">
+                  <span className="feature-tag">✓ Học từ căn bản</span>
+                  <span className="feature-tag">✓ Lấp lỗ hổng nhanh</span>
+                </div>
+              </div>
+              <div className="card-shine"></div>
+            </div>
+
+            {/* Card 2 */}
+            <div className="course-card-redesigned gradient-purple">
+              <div className="course-card-inner">
+                <div className="course-icon-large">🎯</div>
+                <h3>Ôn thi Chuyển cấp</h3>
+                <p>
+                  Luyện đề chuyên sâu, rèn kỹ năng làm bài thi vào 10 và các trường Chuyên.
+                  Chiến thuật làm bài thông minh, tối ưu điểm số.
+                </p>
+                <div className="course-features">
+                  <span className="feature-tag">✓ Vào 10 Chuyên</span>
+                  <span className="feature-tag">✓ Chiến thuật thi</span>
+                </div>
+              </div>
+              <div className="card-shine"></div>
+            </div>
+
+            {/* Card 3 */}
+            <div className="course-card-redesigned gradient-cyan">
+              <div className="course-card-inner">
+                <div className="course-icon-large">🎓</div>
+                <h3>Luyện thi Tốt nghiệp & ĐH</h3>
+                <p>
+                  Tổng ôn kiến thức THPT. Rèn tư duy giải toán trắc nghiệm,
+                  luyện đề thực chiến cho kỳ thi Tốt nghiệp, HSA, TSA.
+                </p>
+                <div className="course-features">
+                  <span className="feature-tag">✓ Tốt nghiệp THPT</span>
+                  <span className="feature-tag">✓ Thi Đại học</span>
+                </div>
+              </div>
+              <div className="card-shine"></div>
+            </div>
+
+            {/* Card 4 */}
+            <div className="course-card-redesigned gradient-orange">
+              <div className="course-card-inner">
+                <div className="course-icon-large">🏆</div>
+                <h3>Bồi dưỡng HSG</h3>
+                <p>
+                  Dành cho học sinh có tố chất, hướng tới HSG Quận, Thành phố và Quốc gia.
+                  Phát triển tư duy sáng tạo với Mentor từng đạt giải.
+                </p>
+                <div className="course-features">
+                  <span className="feature-tag">✓ Chuyên đề nâng cao</span>
+                  <span className="feature-tag">✓ Tư duy sáng tạo</span>
+                </div>
+              </div>
+              <div className="card-shine"></div>
             </div>
           </div>
-          <div className="home-footer-right">
-            <p className="muted text-sm">Theo dõi chúng tôi</p>
-            <h3>SALE & CSKH cập nhật mỗi tuần</h3>
-            <div className="home-footer-socials">
-              {HOME_CONTACT.socials.map((social) => (
-                <a key={social.label} href={social.url} target="_blank" rel="noopener" className="home-social-link">
-                  <span className="home-social-icon">{social.icon}</span>
-                  <span>{social.label}</span>
+        </div>
+      </section>
+
+      {/* Process Section - Redesigned */}
+      <section id="process" className="process-section-redesigned">
+        <div className="section-container">
+          <div className="section-header">
+            <span className="section-badge">📊 Quy trình đào tạo</span>
+            <h2 className="section-title">Lộ trình học tập chặt chẽ & Linh hoạt</h2>
+            <p className="section-subtitle">
+              Quy trình đào tạo 4 bước được cá nhân hóa cho từng học sinh
+            </p>
+          </div>
+
+          <div className="process-timeline">
+            {/* Step 1 */}
+            <div className="process-card">
+              <div className="process-card-number">01</div>
+              <div className="process-card-content">
+                <div className="process-icon">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                  </svg>
+                </div>
+                <h3>Test trình độ đầu vào</h3>
+                <p>Đánh giá chính xác năng lực hiện tại trước khi vào học chính thức.</p>
+                <div className="process-tags">
+                  <span>✓ Đánh giá năng lực</span>
+                  <span>✓ Xác định lỗ hổng</span>
+                </div>
+              </div>
+              <div className="process-connector"></div>
+            </div>
+
+            {/* Step 2 */}
+            <div className="process-card">
+              <div className="process-card-number">02</div>
+              <div className="process-card-content">
+                <div className="process-icon">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                </div>
+                <h3>Xây dựng lộ trình cá nhân hóa</h3>
+                <p>Thiết kế kế hoạch học tập riêng biệt dựa trên kết quả test và mục tiêu cụ thể của học sinh.</p>
+                <div className="process-tags">
+                  <span>✓ Lộ trình riêng</span>
+                  <span>✓ Mục tiêu rõ ràng</span>
+                </div>
+              </div>
+              <div className="process-connector"></div>
+            </div>
+
+            {/* Step 3 */}
+            <div className="process-card">
+              <div className="process-card-number">03</div>
+              <div className="process-card-content">
+                <div className="process-icon">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                </div>
+                <h3>Học tập & Rèn tư duy</h3>
+                <p>Gia sư giảng dạy đi từ bản chất, giải thích dễ hiểu. Tránh học vẹt, tập trung rèn tư duy giải toán.</p>
+                <div className="process-tags">
+                  <span>✓ Hiểu bản chất</span>
+                  <span>✓ Tư duy logic</span>
+                </div>
+              </div>
+              <div className="process-connector"></div>
+            </div>
+
+            {/* Step 4 */}
+            <div className="process-card">
+              <div className="process-card-number">04</div>
+              <div className="process-card-content">
+                <div className="process-icon">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <h3>Theo dõi & Điều chỉnh</h3>
+                <p>Theo dõi tiến độ thường xuyên. Chủ động điều chỉnh lộ trình nếu cần để đảm bảo học đúng trọng tâm.</p>
+                <div className="process-tags">
+                  <span>✓ Báo cáo tiến độ</span>
+                  <span>✓ Linh hoạt điều chỉnh</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Mentors Section - Redesigned */}
+      <section id="mentors" className="mentors-section-redesigned">
+        <div className="section-container">
+          <div className="section-header">
+            <span className="section-badge">👨‍🏫 Đội ngũ giảng viên</span>
+            <h2 className="section-title">Gặp gỡ các <span className="text-highlight">Mentor xuất sắc</span></h2>
+            <p className="section-subtitle">
+              Đội ngũ giảng viên trẻ, tài năng từ Đại học Bách Khoa Hà Nội
+            </p>
+          </div>
+
+          {/* Stats Bar */}
+          <div className="mentor-stats-bar">
+            <div className="mentor-stat">
+              <div className="stat-number">50+</div>
+              <div className="stat-label">Mentor xuất sắc</div>
+            </div>
+            <div className="mentor-stat">
+              <div className="stat-number">100+</div>
+              <div className="stat-label">Học sinh tin tưởng</div>
+            </div>
+            <div className="mentor-stat">
+              <div className="stat-number">5.0</div>
+              <div className="stat-label">Đánh giá</div>
+            </div>
+            <div className="mentor-stat">
+              <div className="stat-number">100%</div>
+              <div className="stat-label">Hài lòng</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Benefits Section */}
+      <section id="benefits" className="benefits-section">
+        <div className="section-container">
+          <div className="section-header">
+            <h2 className="section-title">Đồng hành 24/24 - Không chỉ là giờ học trên lớp</h2>
+            <p className="section-subtitle">
+              Quyền lợi đặc biệt cho học sinh Unicorn Edu
+            </p>
+          </div>
+
+          <div className="benefits-grid">
+            <div className="benefit-card">
+              <h3>
+                <span className="benefit-emoji">💬</span>
+                Hỗ trợ giải đáp 24/24
+              </h3>
+              <p>
+                Học sinh gặp bài khó khi tự học? Nhắn tin ngay cho Mentor để được hỗ trợ bất cứ lúc nào.
+                Không phải chờ đến buổi học tiếp theo.
+              </p>
+            </div>
+
+            <div className="benefit-card">
+              <h3>
+                <span className="benefit-emoji">✍️</span>
+                Giao & Chữa bài chi tiết
+              </h3>
+              <p>
+                Bài tập về nhà được giao sát với năng lực. Mentor chữa bài chi tiết,
+                chỉ rõ lỗi sai tư duy và cách khắc phục.
+              </p>
+            </div>
+
+            <div className="benefit-card">
+              <h3>
+                <span className="benefit-emoji">📊</span>
+                Báo cáo tiến độ cho phụ huynh
+              </h3>
+              <p>
+                Phụ huynh nắm bắt được sự tiến bộ rõ rệt của con theo từng giai đoạn.
+                Minh bạch trong từng bước phát triển.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Contact Section */}
+      <section id="contact" className="contact-section">
+        <div className="contact-container">
+          <h2>Giúp con nắm chắc kiến thức<br />Tự tin làm bài ngay hôm nay</h2>
+          <p style={{ fontSize: '16px', marginBottom: 'var(--spacing-8)' }}>
+            Đăng ký ngay để nhận tư vấn lộ trình học tập phù hợp
+          </p>
+
+          <form className="contact-form" onSubmit={handleFormSubmit}>
+            <div className="form-grid">
+              <input
+                type="text"
+                name="name"
+                className="form-input"
+                placeholder="Tên phụ huynh/học sinh"
+                value={formData.name}
+                onChange={handleFormChange}
+                required
+              />
+              <input
+                type="tel"
+                name="phone"
+                className="form-input"
+                placeholder="Số điện thoại"
+                value={formData.phone}
+                onChange={handleFormChange}
+                required
+              />
+              <input
+                type="text"
+                name="grade"
+                className="form-input form-input-full"
+                placeholder="Lớp hiện tại (VD: Lớp 9)"
+                value={formData.grade}
+                onChange={handleFormChange}
+                required
+              />
+              <input
+                type="text"
+                name="goal"
+                className="form-input form-input-full"
+                placeholder="Mục tiêu (VD: Ôn thi vào 10 Chuyên)"
+                value={formData.goal}
+                onChange={handleFormChange}
+                required
+              />
+            </div>
+            <button type="submit" className="submit-btn">
+              Nhận tư vấn lộ trình
+            </button>
+          </form>
+
+          <div style={{ marginTop: 'var(--spacing-12)', display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 'var(--spacing-8)', flexWrap: 'wrap', justifyContent: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
+                <span style={{ fontSize: '20px' }}>📞</span>
+                <span>0912888908</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
+                <span style={{ fontSize: '20px' }}>📧</span>
+                <span>unicornsmath@gmail.com</span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
+              <span style={{ fontSize: '20px' }}>🌐</span>
+              <span>Fanpage: Unicorn Edu - Học Toán Cùng Huster</span>
+            </div>
+          </div>
+        </div>
+      </section >
+
+      {/* Footer */}
+      < footer className="math-footer" >
+        <div className="footer-container">
+          <div className="footer-grid">
+            <div className="footer-brand">
+              <h3>Unicorn Edu</h3>
+              <p>
+                Nền tảng giáo dục toán học chất lượng cao, kết nối học sinh với các mentor xuất sắc
+                từ Đại học Bách Khoa Hà Nội.
+              </p>
+            </div>
+
+            <div className="footer-section">
+              <h4>Liên kết</h4>
+              <div className="footer-links">
+                <a href="#intro" className="footer-link" onClick={(e) => { e.preventDefault(); scrollToSection('intro'); }}>
+                  Giới thiệu
                 </a>
-              ))}
+                <a href="#courses" className="footer-link" onClick={(e) => { e.preventDefault(); scrollToSection('courses'); }}>
+                  Khóa học
+                </a>
+                <a href="#mentors" className="footer-link" onClick={(e) => { e.preventDefault(); scrollToSection('mentors'); }}>
+                  Đội ngũ Mentor
+                </a>
+                <a href="#contact" className="footer-link" onClick={(e) => { e.preventDefault(); scrollToSection('contact'); }}>
+                  Liên hệ
+                </a>
+              </div>
             </div>
-            <div className="home-footer-note">© {new Date().getFullYear()} Unicorns Edu • Bản quyền thuộc Unicorns Edu.</div>
+
+            <div className="footer-section">
+              <h4>Liên hệ</h4>
+              <div className="footer-links">
+                <span style={{ color: '#9CA3AF', fontSize: '14px' }}>📞 0912888908</span>
+                <span style={{ color: '#9CA3AF', fontSize: '14px' }}>📧 unicornsmath@gmail.com</span>
+                <span style={{ color: '#9CA3AF', fontSize: '14px' }}>📍 Đại học Bách Khoa Hà Nội</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="footer-bottom">
+            © 2026 Unicorns Edu Math. All rights reserved.
           </div>
         </div>
       </footer>
@@ -902,128 +992,12 @@ function Home({ initialAuthMode }: HomeProps = {} as HomeProps) {
       {/* Auth Modal */}
       <AuthModal
         isOpen={authModalOpen}
-        onClose={() => setAuthModalOpen(false)}
+        onClose={() => setAuthModalOpen(false)
+        }
         mode={authModalMode}
-        onModeChange={setAuthModalMode}
+        onModeChange={(mode) => setAuthModalMode(mode)}
       />
-
-      {/* Edit Section Modal */}
-      {editingSection && (
-        <EditSectionModal
-          isOpen={editSectionModalOpen}
-          onClose={() => {
-            setEditSectionModalOpen(false);
-            setEditingSection(null);
-          }}
-          sectionId={editingSection.category}
-          sectionMeta={HOME_MENU.find((item) => item.id === editingSection.category)}
-          initialData={getHomeSection(editingSection.category)}
-          onSave={handleSaveSection}
-        />
-      )}
     </div>
-  );
-}
-
-// Edit Section Modal Component
-function EditSectionModal({
-  isOpen,
-  onClose,
-  sectionId,
-  sectionMeta,
-  initialData,
-  onSave,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  sectionId: string;
-  sectionMeta?: { id: string; label: string; description: string };
-  initialData: { title: string; content: string };
-  onSave: (title: string, content: string) => void;
-}) {
-  const [title, setTitle] = useState(initialData.title);
-  const [content, setContent] = useState(initialData.content);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (isOpen) {
-      setTitle(initialData.title);
-      setContent(initialData.content);
-    }
-  }, [isOpen, initialData]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim() || !content.trim()) {
-      toast.warning('Vui lòng nhập đầy đủ tiêu đề và nội dung');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await onSave(title, content);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <Modal
-      title={sectionMeta ? `Chỉnh sửa ${sectionMeta.label}` : 'Chỉnh sửa nội dung'}
-      isOpen={isOpen}
-      onClose={onClose}
-      size="md"
-    >
-      <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: 'var(--spacing-4)' }}>
-          <label style={{ display: 'block', marginBottom: 'var(--spacing-2)', fontWeight: '500' }}>
-            Tiêu đề *
-          </label>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            required
-            style={{
-              width: '100%',
-              padding: 'var(--spacing-2)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius)',
-            }}
-          />
-        </div>
-        <div style={{ marginBottom: 'var(--spacing-4)' }}>
-          <label style={{ display: 'block', marginBottom: 'var(--spacing-2)', fontWeight: '500' }}>
-            Nội dung mô tả *
-          </label>
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            required
-            rows={6}
-            placeholder={`Nhập mô tả hiển thị ở mục ${sectionMeta?.label || sectionId}`}
-            style={{
-              width: '100%',
-              padding: 'var(--spacing-2)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius)',
-              resize: 'vertical',
-            }}
-          />
-          <p style={{ marginTop: 'var(--spacing-1)', fontSize: '0.875rem', color: 'var(--muted)' }}>
-            Có thể xuống dòng để tách ý. Nội dung sẽ hiển thị trực tiếp trên trang chủ.
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 'var(--spacing-2)', justifyContent: 'flex-end' }}>
-          <button type="button" className="btn" onClick={onClose} disabled={loading}>
-            Hủy
-          </button>
-          <button type="submit" className="btn btn-primary" disabled={loading}>
-            {loading ? 'Đang lưu...' : 'Lưu nội dung'}
-          </button>
-        </div>
-      </form>
-    </Modal>
   );
 }
 

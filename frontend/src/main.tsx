@@ -2,6 +2,8 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
+import './assets/css/landing-math.css'
+import './assets/css/landing-redesign.css'
 import { useAuthStore } from './store/authStore'
 
 // Initialize auth from localStorage (giống code cũ)
