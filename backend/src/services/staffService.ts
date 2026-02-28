@@ -56,11 +56,11 @@ export async function getStaffUnpaidAmount(staffId: string): Promise<number> {
  */
 export async function getStaffUnpaidAmounts(staffIds: string[]): Promise<Record<string, number>> {
   const result: Record<string, number> = {};
-
+  
   // Get current month (YYYY-MM)
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-
+  
   // Calculate previous month (for unpaid calculation: current month + previous month)
   const [year, monthNum] = currentMonth.split('-').map(Number);
   let previousYear = year;
@@ -70,12 +70,12 @@ export async function getStaffUnpaidAmounts(staffIds: string[]): Promise<Record<
     previousYear = year - 1;
   }
   const previousMonth = `${previousYear}-${String(previousMonthNum).padStart(2, '0')}`;
-
+  
   const previousMonthStart = new Date(previousYear, previousMonthNum - 1, 1);
   const previousMonthEnd = new Date(previousYear, previousMonthNum, 0, 23, 59, 59);
   const monthStart = new Date(year, monthNum - 1, 1);
   const monthEnd = new Date(year, monthNum, 0, 23, 59, 59);
-
+  
   // Format dates for database query
   const previousMonthStartStr = `${previousYear}-${String(previousMonthNum).padStart(2, '0')}-01`;
   const lastDayOfPreviousMonth = new Date(previousYear, previousMonthNum, 0).getDate();
@@ -92,10 +92,10 @@ export async function getStaffUnpaidAmounts(staffIds: string[]): Promise<Record<
     }
     return { staffId, unpaid: null };
   });
-
+  
   const cacheResults = await Promise.all(cachePromises);
   const uncachedStaffIds: string[] = [];
-
+  
   cacheResults.forEach(({ staffId, unpaid }) => {
     if (unpaid !== null) {
       result[staffId] = unpaid;
@@ -128,11 +128,11 @@ export async function getStaffUnpaidAmounts(staffIds: string[]): Promise<Record<
     }
     return { staffId, unpaidBonuses: null };
   });
-
+  
   const bonusesCacheResults = await Promise.all(bonusesCachePromises);
   const bonusesUncachedIds: string[] = [];
   const unpaidBonuses: Record<string, number> = {};
-
+  
   bonusesCacheResults.forEach(({ staffId, unpaidBonuses: unpaid }) => {
     if (unpaid !== null) {
       unpaidBonuses[staffId] = unpaid;
@@ -140,16 +140,16 @@ export async function getStaffUnpaidAmounts(staffIds: string[]): Promise<Record<
       bonusesUncachedIds.push(staffId);
     }
   });
-
+  
   // Only query database for staff without cache
   // Query bonuses from current month + previous month only (matching getStaffBonusesStatistics logic)
   const { data: bonuses, error: bonusesError } = bonusesUncachedIds.length > 0
     ? await supabase
-      .from('bonuses')
-      .select('staff_id, amount, month')
-      .in('staff_id', bonusesUncachedIds)
-      .eq('status', 'unpaid')
-      .in('month', [currentMonth, previousMonth])
+        .from('bonuses')
+        .select('staff_id, amount, month')
+        .in('staff_id', bonusesUncachedIds)
+        .eq('status', 'unpaid')
+        .in('month', [currentMonth, previousMonth])
     : { data: [], error: null };
 
   // Add bonuses from database query to existing cache results
@@ -177,11 +177,11 @@ export async function getStaffUnpaidAmounts(staffIds: string[]): Promise<Record<
     }
     return { staffId, unpaidWorkItems: null };
   });
-
+  
   const workItemsCacheResults = await Promise.all(workItemsCachePromises);
   const workItemsUncachedIds: string[] = [];
   const unpaidWorkItems: Record<string, number> = {};
-
+  
   workItemsCacheResults.forEach(({ staffId, unpaidWorkItems: unpaid }) => {
     if (unpaid !== null) {
       unpaidWorkItems[staffId] = unpaid;
@@ -189,7 +189,7 @@ export async function getStaffUnpaidAmounts(staffIds: string[]): Promise<Record<
       workItemsUncachedIds.push(staffId);
     }
   });
-
+  
   // Only calculate for staff without cache - run in parallel
   if (workItemsUncachedIds.length > 0) {
     const workItemsPromises = workItemsUncachedIds.map(async (staffId) => {
@@ -202,7 +202,7 @@ export async function getStaffUnpaidAmounts(staffIds: string[]): Promise<Record<
         return { staffId, unpaidWorkItems: 0 };
       }
     });
-
+    
     const workItemsResults = await Promise.all(workItemsPromises);
     workItemsResults.forEach(({ staffId, unpaidWorkItems: unpaid }) => {
       unpaidWorkItems[staffId] = unpaid;
@@ -214,12 +214,12 @@ export async function getStaffUnpaidAmounts(staffIds: string[]): Promise<Record<
   // Only query for staff without cache
   const { data: sessions, error: sessionsError } = uncachedStaffIds.length > 0
     ? await supabase
-      .from('sessions')
-      .select('teacher_id, class_id, date, payment_status, allowance_amount')
-      .in('teacher_id', uncachedStaffIds)
-      .eq('payment_status', 'unpaid')
-      .gte('date', previousMonthStartStr)
-      .lte('date', monthEndStr)
+        .from('sessions')
+        .select('teacher_id, class_id, date, payment_status, allowance_amount')
+        .in('teacher_id', uncachedStaffIds)
+        .eq('payment_status', 'unpaid')
+        .gte('date', previousMonthStartStr)
+        .lte('date', monthEndStr)
     : { data: [], error: null };
 
   const unpaidSessions: Record<string, number> = {};
@@ -230,7 +230,7 @@ export async function getStaffUnpaidAmounts(staffIds: string[]): Promise<Record<
       .from('class_teachers')
       .select('teacher_id, class_id')
       .in('teacher_id', teacherIds);
-
+    
     const classIds = [...new Set((classTeachers || []).map((ct: any) => ct.class_id))];
     let classes: any[] = [];
     if (classIds.length > 0) {
@@ -240,12 +240,12 @@ export async function getStaffUnpaidAmounts(staffIds: string[]): Promise<Record<
         .in('id', classIds);
       classes = classesResult.data || [];
     }
-
+    
     const classMap = new Map();
     (classes || []).forEach((cls: any) => {
       classMap.set(cls.id, cls);
     });
-
+    
     const teacherClassMap = new Map<string, string[]>();
     (classTeachers || []).forEach((ct: any) => {
       if (!teacherClassMap.has(ct.teacher_id)) {
@@ -253,18 +253,18 @@ export async function getStaffUnpaidAmounts(staffIds: string[]): Promise<Record<
       }
       teacherClassMap.get(ct.teacher_id)!.push(ct.class_id);
     });
-
+    
     sessions.forEach((s: any) => {
       if (!unpaidSessions[s.teacher_id]) {
         unpaidSessions[s.teacher_id] = 0;
       }
-
+      
       // Calculate allowance using the same logic as getStaffDetailData
       const cls = classMap.get(s.class_id);
       const classTuition = cls ? (Number(cls.tuition_per_session) || 0) : 0;
       const customAllowances = cls ? ((cls.custom_teacher_allowances as Record<string, number>) || {}) : {};
       const teacherAllowance = customAllowances[s.teacher_id] ?? classTuition;
-
+      
       // Use getSessionAllowance function to ensure consistency with getStaffDetailData
       const allowance = getSessionAllowance(s, teacherAllowance);
       unpaidSessions[s.teacher_id] += allowance;
@@ -330,7 +330,7 @@ export async function getStaffWorkItems(staffId: string, month: string) {
       case 'lesson_plan': {
         // Calculate from lesson_outputs
         const DEFAULT_LESSON_OUTPUT_ALLOWANCE = 50000;
-
+        
         // Calculate previous month (for unpaid calculation: current month + previous month)
         const [year, monthNum] = validMonth.split('-').map(Number);
         let previousYear = year;
@@ -340,7 +340,7 @@ export async function getStaffWorkItems(staffId: string, month: string) {
           previousYear = year - 1;
         }
         const previousMonth = `${previousYear}-${String(previousMonthNum).padStart(2, '0')}`;
-
+        
         // Get outputs for current month (for paid/total display)
         let monthOutputs: any[] = [];
         if (getLessonOutputs) {
@@ -351,7 +351,7 @@ export async function getStaffWorkItems(staffId: string, month: string) {
             monthOutputs = [];
           }
         }
-
+        
         // Get outputs for previous month (for unpaid calculation)
         let previousMonthOutputs: any[] = [];
         if (getLessonOutputs) {
@@ -362,10 +362,10 @@ export async function getStaffWorkItems(staffId: string, month: string) {
             previousMonthOutputs = [];
           }
         }
-
+        
         // Combine outputs from previous month and current month for unpaid calculation
         const outputsInTwoMonths = [...previousMonthOutputs, ...monthOutputs];
-
+        
         // Calculate unpaid from outputs in previous month and current month only
         // "Chưa nhận" = tổng số bài chưa thanh toán (status='pending', không tính 'deposit' và 'paid')
         // Filter unpaid outputs from BOTH previous month and current month
@@ -374,11 +374,11 @@ export async function getStaffWorkItems(staffId: string, month: string) {
           // Only count 'pending' status (chưa thanh toán), NOT 'deposit' or 'paid'
           return status === 'pending';
         });
-
+        
         // Calculate unpaid from outputs in previous month and current month
         const unpaidFromPreviousMonth = previousMonthOutputs.filter((o) => (o.status || 'pending') === 'pending');
         const unpaidFromCurrentMonth = monthOutputs.filter((o) => (o.status || 'pending') === 'pending');
-
+        
         const totalUnpaid = unpaidOutputs.reduce((sum, output) => {
           const amount = Number(output.cost || DEFAULT_LESSON_OUTPUT_ALLOWANCE) || DEFAULT_LESSON_OUTPUT_ALLOWANCE;
           return sum + amount;
@@ -428,42 +428,42 @@ export async function getStaffWorkItems(staffId: string, month: string) {
         } catch (error) {
           console.error('Failed to fetch default profit percent:', error);
         }
-
+        
         // Parse month (YYYY-MM) to get start and end dates
         // Match backup logic: monthStart = new Date(selectedYear, selectedMonth - 1, 1)
         //                     monthEnd = new Date(selectedYear, selectedMonth, 0, 23, 59, 59)
         const [year, monthNum] = validMonth.split('-').map(Number);
         const monthStart = new Date(year, monthNum - 1, 1); // First day of month, 00:00:00
         const monthEnd = new Date(year, monthNum, 0, 23, 59, 59); // Last day of month, 23:59:59
-
+        
         // Format dates as YYYY-MM-DD for database query (Supabase date column is DATE type)
         // Use local date string to avoid timezone issues
         const monthStartStr = `${year}-${String(monthNum).padStart(2, '0')}-01`;
         const lastDayOfMonth = new Date(year, monthNum, 0).getDate();
         const monthEndStr = `${year}-${String(monthNum).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`;
-
+        
         // Get students assigned to this CSKH staff (including date fields for filtering)
         // Match StaffCSKHDetail logic: check cskh_staff_id (database uses snake_case, not camelCase)
         const { data: students, error: studentsError } = await supabase
           .from('students')
           .select('id, cskh_staff_id, cskh_assigned_date, cskh_unassigned_date')
           .eq('cskh_staff_id', staffId);
-
+        
         if (studentsError) {
           console.error('[getStaffWorkItems] CSKH: Failed to fetch CSKH students:', studentsError);
         } else {
         }
-
+        
         // Get student_classes to check which students have classes (matching backup logic)
         const { data: studentClasses, error: studentClassesError } = await supabase
           .from('student_classes')
           .select('student_id, class_id')
           .eq('status', 'active');
-
+        
         if (studentClassesError) {
           console.error('Failed to fetch student classes:', studentClassesError);
         }
-
+        
         // Create a map of student_id -> class_ids
         const studentClassMap = new Map<string, string[]>();
         (studentClasses || []).forEach((sc: any) => {
@@ -473,31 +473,31 @@ export async function getStaffWorkItems(staffId: string, month: string) {
           }
           studentClassMap.get(studentId)!.push(sc.class_id);
         });
-
+        
         // Get sessions in the month to check activity (matching backup logic)
         const { data: sessions, error: sessionsError } = await supabase
           .from('sessions')
           .select('id, class_id, date')
           .gte('date', monthStartStr)
           .lte('date', monthEndStr);
-
+        
         if (sessionsError) {
           console.error('Failed to fetch sessions:', sessionsError);
         }
-
+        
         // Get attendance to check student activity (matching backup logic)
         const sessionIds = (sessions || []).map((s: any) => s.id);
         const { data: attendance, error: attendanceError } = sessionIds.length > 0
           ? await supabase
-            .from('attendance')
-            .select('session_id, student_id')
-            .in('session_id', sessionIds)
+              .from('attendance')
+              .select('session_id, student_id')
+              .in('session_id', sessionIds)
           : { data: [], error: null };
-
+        
         if (attendanceError) {
           console.error('Failed to fetch attendance:', attendanceError);
         }
-
+        
         // Create sets for quick lookup
         const studentsWithClasses = new Set(Array.from(studentClassMap.keys()));
         const sessionClassMap = new Map<string, string>(); // session_id -> class_id
@@ -514,7 +514,7 @@ export async function getStaffWorkItems(staffId: string, month: string) {
             }
           }
         });
-
+        
         // Filter students: Simplified logic to match getCSKHDetailData
         // Show ALL students with cskh_staff_id matching and have classes
         const assignedStudentIds = (students || [])
@@ -523,20 +523,20 @@ export async function getStaffWorkItems(staffId: string, month: string) {
             if (s.cskh_staff_id !== staffId) {
               return false;
             }
-
+            
             // Check if student has any classes
             const classIds = studentClassMap.get(s.id) || [];
             if (classIds.length === 0) {
               return false;
             }
-
+            
             // Include the student - they are assigned and have classes
             // (Matching simplified logic in getCSKHDetailData)
             return true;
           })
           .map((s: any) => s.id);
-
-
+        
+        
         if (assignedStudentIds.length === 0) {
           workItems.push({
             name: 'CSKH & SALE',
@@ -548,7 +548,7 @@ export async function getStaffWorkItems(staffId: string, month: string) {
           });
           break;
         }
-
+        
         // Get wallet transactions (topup) for assigned students in the month ONLY
         // Only count transactions within the selected month, not previous months
         const { data: transactions, error: transactionsError } = await supabase
@@ -558,44 +558,44 @@ export async function getStaffWorkItems(staffId: string, month: string) {
           .eq('type', 'topup')
           .gte('date', monthStartStr)
           .lte('date', monthEndStr);
-
-
+        
+        
         if (transactionsError) {
           console.error('Failed to fetch wallet transactions:', transactionsError);
         }
-
+        
         // Double-check: Filter out any transactions that are outside the month (safety check)
         // Match backup logic: txDate >= monthStart && txDate <= monthEnd (using Date objects)
         const filteredTransactions = (transactions || []).filter((tx: any) => {
           if (!tx.date) return false;
-
+          
           // Parse transaction date (should be YYYY-MM-DD format from database)
           const txDate = new Date(tx.date);
           if (isNaN(txDate.getTime())) {
             console.warn(`[getStaffWorkItems] CSKH: WARNING: Transaction ${tx.id} has invalid date: ${tx.date}`);
             return false;
           }
-
+          
           // Compare using Date objects (matching backup logic)
           const isValid = txDate >= monthStart && txDate <= monthEnd;
-
+          
           if (!isValid) {
             const txMonth = tx.date.slice(0, 7); // Extract YYYY-MM for logging
             console.warn(`[getStaffWorkItems] CSKH: WARNING: Transaction ${tx.id} has date ${tx.date} (parsed: ${txDate.toISOString()}, month: ${txMonth}) which is outside selected month ${validMonth} (${monthStart.toISOString()} to ${monthEnd.toISOString()})`);
           }
           return isValid;
         });
-
+        
         if (filteredTransactions.length !== (transactions || []).length) {
           console.warn(`[getStaffWorkItems] CSKH: Filtered out ${(transactions || []).length - filteredTransactions.length} transactions outside month ${validMonth}`);
         }
-
+        
         // Use filtered transactions instead of raw transactions
         const transactionsToUse = filteredTransactions;
-
+        
         // Get payment status from database using service (matching StaffCSKHDetail logic)
         const { getCSKHPaymentStatuses } = await import('./cskhPaymentStatusService');
-
+        
         // Get payment statuses for CURRENT MONTH (for paid/total display)
         let paymentStatusesCurrentMonth: any[] = [];
         try {
@@ -605,7 +605,7 @@ export async function getStaffWorkItems(staffId: string, month: string) {
         } catch (error) {
           console.error('Failed to fetch payment statuses for current month:', error);
         }
-
+        
         // Calculate previous month (for unpaid calculation: current month + previous month)
         let previousYear = year;
         let previousMonthNum = monthNum - 1;
@@ -619,7 +619,7 @@ export async function getStaffWorkItems(staffId: string, month: string) {
         const previousMonthStartStr = `${previousYear}-${String(previousMonthNum).padStart(2, '0')}-01`;
         const lastDayOfPreviousMonth = new Date(previousYear, previousMonthNum, 0).getDate();
         const previousMonthEndStr = `${previousYear}-${String(previousMonthNum).padStart(2, '0')}-${String(lastDayOfPreviousMonth).padStart(2, '0')}`;
-
+        
         // Get ALL payment statuses for PREVIOUS MONTH (to check which students are paid/unpaid)
         let allPaymentStatusesPreviousMonth: any[] = [];
         try {
@@ -631,17 +631,17 @@ export async function getStaffWorkItems(staffId: string, month: string) {
         } catch (error) {
           console.error('Failed to fetch payment statuses for previous month:', error);
         }
-
+        
         // Filter to only get unpaid payment statuses from previous month
         const unpaidPaymentStatusesPreviousMonth = allPaymentStatusesPreviousMonth.filter(
           (ps: any) => ps.payment_status === 'unpaid'
         );
-
+        
         // Get payment statuses for CURRENT MONTH with unpaid status (for unpaid calculation)
         const unpaidPaymentStatusesCurrentMonth = paymentStatusesCurrentMonth.filter(
           (ps: any) => ps.payment_status === 'unpaid'
         );
-
+        
         // Create a map of student_id -> payment status and profit percent for CURRENT MONTH
         const paymentStatusMap = new Map<string, { status: string; profitPercent: number }>();
         paymentStatusesCurrentMonth.forEach((ps: any) => {
@@ -650,7 +650,7 @@ export async function getStaffWorkItems(staffId: string, month: string) {
             profitPercent: Number(ps.profit_percent) || defaultProfitPercent,
           });
         });
-
+        
         // Group transactions by student and calculate totalPaid for each student in CURRENT MONTH
         const studentTotalPaid = new Map<string, number>();
         transactionsToUse.forEach((tx: any) => {
@@ -659,18 +659,18 @@ export async function getStaffWorkItems(staffId: string, month: string) {
           const currentTotal = studentTotalPaid.get(studentId) || 0;
           studentTotalPaid.set(studentId, currentTotal + amount);
         });
-
+        
         // Calculate UNPAID profit from PREVIOUS MONTH and CURRENT MONTH
         // "Chưa nhận" = tổng chưa thanh toán của tháng trước + tháng này
-
+        
         // Step 1: Calculate unpaid from PREVIOUS MONTH
         // Only count students with status='unpaid' or no payment status record (NOT 'paid')
         let totalUnpaidPreviousMonth = 0;
-
+        
         // 1a. From payment statuses with status='unpaid' in previous month
         for (const unpaidStatus of unpaidPaymentStatusesPreviousMonth) {
           const studentId = unpaidStatus.student_id;
-
+          
           // Get transactions for this student in previous month
           const { data: previousMonthTransactions } = await supabase
             .from('wallet_transactions')
@@ -679,32 +679,32 @@ export async function getStaffWorkItems(staffId: string, month: string) {
             .eq('type', 'topup')
             .gte('date', previousMonthStartStr)
             .lte('date', previousMonthEndStr);
-
+          
           // Calculate totalPaid for this student in previous month
           const previousMonthTotalPaid = (previousMonthTransactions || []).reduce((sum: number, tx: any) => {
             return sum + (Number(tx.amount) || 0);
           }, 0);
-
+          
           // Calculate profit for this student in previous month
           const profitPercent = Number(unpaidStatus.profit_percent) || defaultProfitPercent;
           const profit = previousMonthTotalPaid * (profitPercent / 100);
-
+          
           totalUnpaidPreviousMonth += profit;
         }
-
+        
         // 1b. From students with transactions in previous month but NO payment status record (unpaid by default)
         // IMPORTANT: Skip students who have payment status='paid' in previous month
         for (const studentId of assignedStudentIds) {
           // Check if student has payment status record in previous month
           const paymentStatusInPreviousMonth = allPaymentStatusesPreviousMonth.find((ps: any) => ps.student_id === studentId);
-
+          
           // Skip if has payment status record (whether paid or unpaid - already handled in 1a if unpaid)
           if (paymentStatusInPreviousMonth) {
             // If status is 'paid', skip (don't count in unpaid)
             // If status is 'unpaid', already counted in 1a, so skip
             continue;
           }
-
+          
           // Get transactions for this student in previous month
           const { data: previousMonthTransactions } = await supabase
             .from('wallet_transactions')
@@ -713,12 +713,12 @@ export async function getStaffWorkItems(staffId: string, month: string) {
             .eq('type', 'topup')
             .gte('date', previousMonthStartStr)
             .lte('date', previousMonthEndStr);
-
+          
           // Calculate totalPaid for this student in previous month
           const previousMonthTotalPaid = (previousMonthTransactions || []).reduce((sum: number, tx: any) => {
             return sum + (Number(tx.amount) || 0);
           }, 0);
-
+          
           if (previousMonthTotalPaid > 0) {
             // Student has transactions in previous month but no payment status record = unpaid by default
             const profitPercent = defaultProfitPercent;
@@ -726,7 +726,7 @@ export async function getStaffWorkItems(staffId: string, month: string) {
             totalUnpaidPreviousMonth += profit;
           }
         }
-
+        
         // Calculate paid and total for CURRENT MONTH
         // Calculate profit for ALL assigned students in current month (based on transactions)
         // IMPORTANT: Calculate for ALL assigned students, even if they don't have payment status record
@@ -738,44 +738,44 @@ export async function getStaffWorkItems(staffId: string, month: string) {
           const profit = totalPaid * (profitPercent / 100);
           studentProfitsCurrentMonth.set(studentId, profit);
         });
-
+        
         // Calculate paid profit in CURRENT MONTH (only students with status='paid')
         let totalPaid = 0;
         studentProfitsCurrentMonth.forEach((profit, studentId) => {
           const paymentStatus = paymentStatusMap.get(studentId);
           // If no payment status record, default to 'unpaid' (so not counted in paid)
           const status = paymentStatus?.status || 'unpaid';
-
+          
           // Only count 'paid' status (NOT 'deposit' or 'unpaid')
           if (status === 'paid') {
             totalPaid += profit;
           }
         });
-
+        
         // Calculate unpaid profit in CURRENT MONTH (only students with status='unpaid' or no status)
         let totalUnpaidCurrentMonth = 0;
         studentProfitsCurrentMonth.forEach((profit, studentId) => {
           const paymentStatus = paymentStatusMap.get(studentId);
           // If no payment status record, default to 'unpaid'
           const status = paymentStatus?.status || 'unpaid';
-
+          
           // Only count 'unpaid' status (NOT 'deposit' or 'paid')
           if (status === 'unpaid') {
             totalUnpaidCurrentMonth += profit;
           }
         });
-
+        
         // Step 2 & 3: Calculate total unpaid from PREVIOUS MONTH + CURRENT MONTH
         // "Chưa nhận" = tổng chưa thanh toán của tháng trước + tháng này
         const totalUnpaidTwoMonths = totalUnpaidPreviousMonth + totalUnpaidCurrentMonth;
-
+        
         // "Tổng tháng" = totalPaid + totalUnpaidCurrentMonth (all profit in current month)
         // This includes ALL assigned students with transactions in current month
         const totalReceived = totalPaid + totalUnpaidCurrentMonth;
-
+        
         // "Chưa nhận" = totalUnpaidTwoMonths (unpaid in previous month + current month)
         // "Đã nhận" = totalPaid (paid in current month)
-
+        
         workItems.push({
           name: 'CSKH & SALE',
           type: 'cskh_sale',
@@ -819,7 +819,7 @@ export async function getStaffBonuses(staffId: string, month: string) {
  */
 export async function getStaffBonusesStatistics(staffId: string, month: string) {
   const { getBonuses } = await import('./bonusesService');
-
+  
   // Calculate previous month (for unpaid calculation: current month + previous month)
   const [year, monthNum] = month.split('-').map(Number);
   let previousYear = year;
@@ -829,32 +829,32 @@ export async function getStaffBonusesStatistics(staffId: string, month: string) 
     previousYear = year - 1;
   }
   const previousMonth = `${previousYear}-${String(previousMonthNum).padStart(2, '0')}`;
-
+  
   // Get bonuses for current month
   const currentMonthBonuses = await getBonuses({ staffId, month });
-
+  
   // Get bonuses for previous month (to calculate unpaid from previous month)
   const previousMonthBonuses = await getBonuses({ staffId, month: previousMonth });
-
+  
   // Tổng tháng: tổng số tiền thưởng trong tháng (tất cả status: paid, unpaid, deposit)
   const totalMonth = currentMonthBonuses.reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
-
+  
   // Đã nhận: tổng số tiền đã nhận trong tháng (chỉ status='paid')
   const paid = currentMonthBonuses
     .filter((b) => (b.status || 'unpaid') === 'paid')
     .reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
-
+  
   // Chưa nhận: tổng số tiền chưa thanh toán tháng này + tháng trước (chỉ status='unpaid')
   const unpaidFromPreviousMonth = previousMonthBonuses
     .filter((b) => (b.status || 'unpaid') === 'unpaid')
     .reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
-
+  
   const unpaidFromCurrentMonth = currentMonthBonuses
     .filter((b) => (b.status || 'unpaid') === 'unpaid')
     .reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
-
+  
   const unpaid = unpaidFromPreviousMonth + unpaidFromCurrentMonth;
-
+  
   return {
     totalMonth,
     paid,
@@ -952,13 +952,13 @@ export async function getCSKHDetailData(staffId: string, month: string) {
   const [year, monthNum] = month.split('-').map(Number);
   const monthStart = new Date(year, monthNum - 1, 1, 0, 0, 0, 0);
   const monthEnd = new Date(year, monthNum, 0, 23, 59, 59, 999); // Ngày 0 của tháng sau = ngày cuối của tháng hiện tại
-
+  
   // Format dates as YYYY-MM-DD for database query (using local timezone, not UTC)
   // Important: Use local date to avoid timezone issues
   const monthStartStr = `${year}-${String(monthNum).padStart(2, '0')}-01`;
   const lastDayOfMonth = new Date(year, monthNum, 0).getDate();
   const monthEndStr = `${year}-${String(monthNum).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`;
-
+  
   // Get students assigned to this CSKH staff (including date fields for filtering)
   // Database uses snake_case: cskh_staff_id (not camelCase: cskhStaffId)
   const { data: students, error: studentsError } = await supabase
@@ -1005,9 +1005,9 @@ export async function getCSKHDetailData(staffId: string, month: string) {
   const sessionIds = (sessions || []).map((s: any) => s.id);
   const { data: attendance, error: attendanceError } = sessionIds.length > 0
     ? await supabase
-      .from('attendance')
-      .select('session_id, student_id')
-      .in('session_id', sessionIds)
+        .from('attendance')
+        .select('session_id, student_id')
+        .in('session_id', sessionIds)
     : { data: [], error: null };
 
   if (attendanceError) {
@@ -1017,7 +1017,7 @@ export async function getCSKHDetailData(staffId: string, month: string) {
   // Create sets for quick lookup (matching backup logic exactly)
   // Backup checks: monthSessions.length > 0 || monthAttendance.length > 0
   // So we need to check if student has sessions in their classes OR has attendance
-
+  
   // Map: student_id -> has sessions in their classes this month
   const studentHasSessions = new Set<string>();
   (sessions || []).forEach((s: any) => {
@@ -1029,7 +1029,7 @@ export async function getCSKHDetailData(staffId: string, month: string) {
       }
     });
   });
-
+  
   // Map: student_id -> has attendance this month
   const studentHasAttendance = new Set<string>();
   const sessionClassMap = new Map<string, string>(); // session_id -> class_id
@@ -1054,10 +1054,10 @@ export async function getCSKHDetailData(staffId: string, month: string) {
     if (s.cskh_staff_id !== staffId) {
       return false;
     }
-
+    
     // Check if student has any classes
     const classIds = studentClassMap.get(s.id) || [];
-
+    
     // Include the student - they are assigned (and optionally have classes)
     return true;
   });
@@ -1088,35 +1088,35 @@ export async function getCSKHDetailData(staffId: string, month: string) {
     .eq('type', 'topup')
     .gte('date', monthStartStr)
     .lte('date', monthEndStr);
-
-
+  
+  
   // Double-check: Filter out any transactions that are outside the month (safety check)
   // Match backup logic: txDate >= monthStart && txDate <= monthEnd (using Date objects)
   const filteredTransactions = (transactions || []).filter((tx: any) => {
     if (!tx.date) return false;
-
+    
     // Parse transaction date (should be YYYY-MM-DD format from database)
     const txDate = new Date(tx.date);
     if (isNaN(txDate.getTime())) {
       console.warn(`[getCSKHDetailData] WARNING: Transaction ${tx.id} has invalid date: ${tx.date}`);
       return false;
     }
-
+    
     // Compare using Date objects (matching backup logic)
     const isValid = txDate >= monthStart && txDate <= monthEnd;
-
+    
     if (!isValid) {
       const txMonth = tx.date.slice(0, 7); // Extract YYYY-MM for logging
       console.warn(`[getCSKHDetailData] WARNING: Transaction ${tx.id} has date ${tx.date} (parsed: ${txDate.toISOString()}, month: ${txMonth}) which is outside selected month ${month} (${monthStart.toISOString()} to ${monthEnd.toISOString()})`);
     }
     return isValid;
   });
-
+  
   if (filteredTransactions.length !== (transactions || []).length) {
     console.warn(`[getCSKHDetailData] Filtered out ${(transactions || []).length - filteredTransactions.length} transactions outside month ${month}`);
   }
-
-
+  
+  
   // Use filtered transactions instead of raw transactions
   const transactionsToUse = filteredTransactions;
 
@@ -1210,12 +1210,12 @@ function getSessionAllowance(session: any, classTuitionPerSession: number = 0): 
   if (session.allowance_amount != null && session.allowance_amount !== undefined) {
     return Number(session.allowance_amount) || 0;
   }
-
+  
   // Calculate from coefficient and duration if available
   const duration = Number(session.duration) || 2.0;
   const coefficient = Number(session.coefficient) || 1.0;
   const baseAmount = classTuitionPerSession || 0;
-
+  
   return baseAmount * duration * coefficient;
 }
 
@@ -1232,12 +1232,12 @@ export async function getStaffDetailData(staffId: string, month: string) {
 
   // Try to get cached stats first
   const cachedStats = await getStaffMonthlyStats(staffId, month);
-
+  
   // Parse month (YYYY-MM)
   const [year, monthNum] = month.split('-').map(Number);
   const monthStart = new Date(year, monthNum - 1, 1);
   const monthEnd = new Date(year, monthNum, 0, 23, 59, 59);
-
+  
   // Calculate previous month (for unpaid calculation: current month + previous month)
   // Handle case when current month is January (previous month is December of previous year)
   let previousYear = year;
@@ -1246,15 +1246,15 @@ export async function getStaffDetailData(staffId: string, month: string) {
     previousMonthNum = 12;
     previousYear = year - 1;
   }
-
+  
   const previousMonthStart = new Date(previousYear, previousMonthNum - 1, 1); // First day of previous month
   const previousMonthEnd = new Date(previousYear, previousMonthNum, 0, 23, 59, 59); // Last day of previous month
-
+  
   // Format dates as YYYY-MM-DD for database query
   const previousMonthStartStr = `${previousYear}-${String(previousMonthNum).padStart(2, '0')}-01`;
   const lastDayOfPreviousMonth = new Date(previousYear, previousMonthNum, 0).getDate();
   const previousMonthEndStr = `${previousYear}-${String(previousMonthNum).padStart(2, '0')}-${String(lastDayOfPreviousMonth).padStart(2, '0')}`;
-
+  
   const monthStartStr = `${year}-${String(monthNum).padStart(2, '0')}-01`;
   const lastDayOfMonth = new Date(year, monthNum, 0).getDate();
   const monthEndStr = `${year}-${String(monthNum).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`;
@@ -1263,7 +1263,7 @@ export async function getStaffDetailData(staffId: string, month: string) {
   // 1. Fetch teacher với denormalized class IDs
   // 2. Chỉ fetch classes có trong active_class_ids + taught_class_ids
   // 3. Không cần fetch tất cả classes rồi filter
-
+  
   // Step 1: Fetch teacher với denormalized columns (NHANH NHẤT)
   const { data: teacherData, error: teacherError } = await supabase
     .from('teachers')
@@ -1278,7 +1278,7 @@ export async function getStaffDetailData(staffId: string, month: string) {
   // Step 2: Parse class IDs từ denormalized columns (NHANH - không cần query)
   const activeClassIds: string[] = [];
   const taughtClassIds: string[] = [];
-
+  
   if (teacherData) {
     // Parse active_class_ids
     if (teacherData.active_class_ids) {
@@ -1295,7 +1295,7 @@ export async function getStaffDetailData(staffId: string, month: string) {
         }
       }
     }
-
+    
     // Parse taught_class_ids
     if (teacherData.taught_class_ids) {
       if (Array.isArray(teacherData.taught_class_ids)) {
@@ -1317,50 +1317,16 @@ export async function getStaffDetailData(staffId: string, month: string) {
   const allRelevantClassIds = new Set<string>();
   activeClassIds.forEach(id => allRelevantClassIds.add(id));
   taughtClassIds.forEach(id => allRelevantClassIds.add(id));
-
-  // FALLBACK: If denormalized columns are empty (migration not applied), 
-  // query class_teachers and sessions tables directly
-  if (allRelevantClassIds.size === 0) {
-    console.warn('[getStaffDetailData] Denormalized columns empty, falling back to class_teachers query');
-
-    // Get active classes from class_teachers
-    const { data: classTeachersData } = await supabase
-      .from('class_teachers')
-      .select('class_id')
-      .eq('teacher_id', staffId);
-
-    if (classTeachersData) {
-      classTeachersData.forEach((ct: any) => {
-        allRelevantClassIds.add(ct.class_id);
-        activeClassIds.push(ct.class_id);
-      });
-    }
-
-    // Get taught classes from sessions
-    const { data: sessionClassData } = await supabase
-      .from('sessions')
-      .select('class_id')
-      .eq('teacher_id', staffId);
-
-    if (sessionClassData) {
-      sessionClassData.forEach((s: any) => {
-        allRelevantClassIds.add(s.class_id);
-        if (!taughtClassIds.includes(s.class_id)) {
-          taughtClassIds.push(s.class_id);
-        }
-      });
-    }
-  }
-
+  
   // Step 4: Fetch CHỈ các classes liên quan (NHANH - không fetch tất cả)
   // Parallel fetch: classes + sessions + cache
   const [classesResult, sessionsResult, cachedStatsCheck] = await Promise.all([
     // Chỉ fetch classes có trong danh sách (NHANH HƠN NHIỀU)
     allRelevantClassIds.size > 0
       ? supabase
-        .from('classes')
-        .select('*')
-        .in('id', Array.from(allRelevantClassIds))
+          .from('classes')
+          .select('id, name, tuition_per_session, custom_teacher_allowances, status, teacher_ids')
+          .in('id', Array.from(allRelevantClassIds))
       : Promise.resolve({ data: [], error: null }),
     // Fetch sessions (chỉ để tính toán thống kê, không dùng để filter classes)
     supabase
@@ -1420,9 +1386,9 @@ export async function getStaffDetailData(staffId: string, month: string) {
 
   // Sessions cho tính toán thống kê
   const sessions = (sessionsData || []).filter((s: any) => s.teacher_id === staffId);
-
+  
   const classIds = teacherClasses.map((c: any) => c.id);
-
+  
   // Use the cached stats from parallel fetch if available
   const finalCachedStats = cachedStatsCheck || cachedStats;
 
@@ -1453,14 +1419,14 @@ export async function getStaffDetailData(staffId: string, month: string) {
     totalMonthWorkItems = workItems.reduce((sum, item) => sum + (item.total || 0), 0);
     totalPaidWorkItems = workItems.reduce((sum, item) => sum + (item.paid || 0), 0);
     totalUnpaidWorkItems = workItems.reduce((sum, item) => sum + (item.unpaid || 0), 0);
-
+    
     // Get bonuses statistics (bảng thưởng) - áp dụng cho cả teacher và non-teacher
     bonusesStatistics = await getStaffBonusesStatistics(staffId, month);
     totalMonthBonuses = bonusesStatistics.totalMonth || 0;
     totalPaidBonuses = bonusesStatistics.paid || 0;
     totalUnpaidBonuses = bonusesStatistics.unpaid || 0;
   }
-
+  
   // Calculate total paid in current year for non-teacher (work items + bonuses only)
   // Query bonuses directly from database
   const { data: bonusesInYearNonTeacher, error: bonusesErrorNonTeacher } = await supabase
@@ -1469,11 +1435,11 @@ export async function getStaffDetailData(staffId: string, month: string) {
     .eq('staff_id', staffId)
     .eq('status', 'paid')
     .like('month', `${year}-%`);
-
+  
   const totalPaidBonusesInYearNonTeacher = bonusesErrorNonTeacher
     ? 0
     : (bonusesInYearNonTeacher || []).reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
-
+  
   let totalPaidWorkItemsInYearNonTeacher = 0;
   for (let m = 1; m <= 12; m++) {
     const monthStr = `${year}-${String(m).padStart(2, '0')}`;
@@ -1485,17 +1451,17 @@ export async function getStaffDetailData(staffId: string, month: string) {
       // Silently continue if one month fails
     }
   }
-
+  
   if (classIds.length === 0) {
     // Non-teacher: chỉ tính từ work items và bonuses
     // Try to get cached stats first
     const cachedStatsNonTeacher = await getStaffMonthlyStats(staffId, month);
-
+    
     let totalMonthAllNonTeacher: number;
     let totalPaidAllNonTeacher: number;
     let totalUnpaidAllNonTeacher: number;
     let totalPaidAllTimeNonTeacher: number;
-
+    
     if (cachedStatsNonTeacher) {
       // Use cached values
       totalMonthAllNonTeacher = cachedStatsNonTeacher.total_month_all;
@@ -1508,7 +1474,7 @@ export async function getStaffDetailData(staffId: string, month: string) {
       totalPaidAllNonTeacher = totalPaidWorkItems + totalPaidBonuses;
       totalUnpaidAllNonTeacher = totalUnpaidWorkItems + totalUnpaidBonuses;
       totalPaidAllTimeNonTeacher = totalPaidWorkItemsInYearNonTeacher + totalPaidBonusesInYearNonTeacher;
-
+      
       // Save to cache
       await saveStaffMonthlyStats(staffId, month, {
         classes_total_month: 0,
@@ -1526,7 +1492,7 @@ export async function getStaffDetailData(staffId: string, month: string) {
         total_paid_all_time: totalPaidAllTimeNonTeacher,
       });
     }
-
+    
     return {
       teacherClassStats: [],
       incomeStats: {
@@ -1551,7 +1517,7 @@ export async function getStaffDetailData(staffId: string, month: string) {
   const teacherClassStats = teacherClasses.map((cls: any) => {
     // Get sessions for this class (giống backup: const classSessions = sessions.filter(s => s.classId === cls.id))
     const classSessions = sessions.filter((s: any) => s.class_id === cls.id);
-
+    
     // Filter sessions in selected month (giống backup: const monthSessions = classSessions.filter(session => (session.date || '').slice(0, 7) === month))
     const monthSessions = classSessions.filter((session: any) => {
       if (!session.date) return false;
@@ -1603,13 +1569,13 @@ export async function getStaffDetailData(staffId: string, month: string) {
   const totalMonthAllClasses = teacherClassStats.reduce((sum, stat) => sum + stat.totalMonth, 0);
   const totalPaidByStatus = teacherClassStats.reduce((sum, stat) => sum + stat.totalPaid, 0);
   const totalUnpaidByStatus = teacherClassStats.reduce((sum, stat) => sum + stat.totalUnpaid, 0);
-
+  
   // Use cached values if available, otherwise calculate
   let totalMonthAll: number;
   let totalPaidAll: number;
   let totalUnpaidAll: number;
   let totalPaidAllTime: number;
-
+  
   // Use finalCachedStats (from parallel fetch) if available
   const statsToUse = finalCachedStats || cachedStats;
   if (statsToUse) {
@@ -1623,10 +1589,10 @@ export async function getStaffDetailData(staffId: string, month: string) {
     // Tổng hợp từ tất cả các bảng:
     // Tổng trợ cấp tháng = tổng tháng bảng các lớp dạy + tổng tháng bảng công việc + tổng tháng bảng thưởng
     totalMonthAll = totalMonthAllClasses + totalMonthWorkItems + totalMonthBonuses;
-
+    
     // Đã thanh toán = tổng đã nhận các bảng
     totalPaidAll = totalPaidByStatus + totalPaidWorkItems + totalPaidBonuses;
-
+    
     // Chưa thanh toán = tổng chưa nhận ở các bảng
     totalUnpaidAll = totalUnpaidByStatus + totalUnpaidWorkItems + totalUnpaidBonuses;
 
@@ -1634,7 +1600,7 @@ export async function getStaffDetailData(staffId: string, month: string) {
     const currentYear = year;
     const yearStart = new Date(currentYear, 0, 1); // January 1st of current year
     const yearEnd = new Date(currentYear, 11, 31, 23, 59, 59); // December 31st of current year
-
+    
     // Total paid from sessions in current year
     const totalPaidSessionsInYear = sessions
       .filter((s: any) => {
@@ -1649,7 +1615,7 @@ export async function getStaffDetailData(staffId: string, month: string) {
         const teacherAllowance = customAllowances[staffId] ?? classTuition;
         return sum + getSessionAllowance(s, teacherAllowance);
       }, 0);
-
+    
     // Total paid from bonuses in current year - query directly from database
     const { data: bonusesInYear, error: bonusesError } = await supabase
       .from('bonuses')
@@ -1657,11 +1623,11 @@ export async function getStaffDetailData(staffId: string, month: string) {
       .eq('staff_id', staffId)
       .eq('status', 'paid')
       .like('month', `${currentYear}-%`);
-
-    const totalPaidBonusesInYear = bonusesError
-      ? 0
+    
+    const totalPaidBonusesInYear = bonusesError 
+      ? 0 
       : (bonusesInYear || []).reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
-
+    
     // Total paid from work items in current year
     // Note: Work items calculation is complex (CSKH, Lesson Plan, etc.), so we need to call getStaffWorkItems
     // But we can optimize by batching or caching if needed
@@ -1676,10 +1642,10 @@ export async function getStaffDetailData(staffId: string, month: string) {
         // Silently continue if one month fails
       }
     }
-
+    
     // Tổng nhận từ trước = tổng tất cả trong năm hiện tại
     totalPaidAllTime = totalPaidSessionsInYear + totalPaidWorkItemsInYear + totalPaidBonusesInYear;
-
+    
     // Save to cache for future use
     await saveStaffMonthlyStats(staffId, month, {
       classes_total_month: totalMonthAllClasses,
@@ -1715,7 +1681,7 @@ export async function getStaffDetailData(staffId: string, month: string) {
     if (!s.date) return false;
     return s.date.slice(0, 7) === month;
   });
-
+  
   const totalAllowance = monthSessionsForStats.reduce((sum: number, s: any) => {
     const cls = teacherClasses.find((c: any) => c.id === s.class_id);
     const classTuition = cls ? (Number(cls.tuition_per_session) || 0) : 0;
