@@ -33,8 +33,8 @@ function Layout({ children }: LayoutProps) {
   const { data: teachersData } = useDataLoading(
     () => fetchTeachers(),
     [],
-    { 
-      cacheKey: 'teachers-for-layout-permissions', 
+    {
+      cacheKey: 'teachers-for-layout-permissions',
       staleTime: 5 * 60 * 1000,
       enabled: user?.role === 'teacher' // CHỈ fetch cho teacher
     }
@@ -48,7 +48,6 @@ function Layout({ children }: LayoutProps) {
     { path: '/home', label: 'Trang chủ', icon: ['M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', 'M9 22V12h6v10'], roles: ['teacher'] }, // Thêm Trang chủ cho teacher
     { path: '/staff', label: 'Nhân sự', icon: ['M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2', 'M9 7a4 4 0 1 0 8 0 4 4 0 0 0-8 0', 'M23 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'], roles: ['admin'], requireStaffRole: 'accountant' }, // Only admin and accountant can access
     { path: '/classes', label: 'Lớp học', icon: ['M4 19.5A2.5 2.5 0 0 1 6.5 17H20', 'M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'], roles: ['admin'], requireStaffRole: 'accountant' }, // Only admin and accountant can access
-    { path: '/coding', label: 'Lập trình', icon: ['M2 4h20v14H2z', 'M8 20h8', 'M12 16v4'], roles: ['admin', 'teacher', 'student'] },
     { path: '/students', label: 'Học sinh', icon: ['M22 10v6M2 10l10-5 10 5M2 17l10 5 10-5M2 12l10 5 10-5'], roles: ['admin'] },
     { path: '/costs', label: 'Chi phí', icon: ['M12 1v22', 'M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'], roles: ['admin'] },
     { path: '/categories', label: 'Phân loại lớp', icon: ['M4 7h16', 'M4 12h16', 'M4 17h16'], roles: ['admin'] },
@@ -59,47 +58,47 @@ function Layout({ children }: LayoutProps) {
   const menuItems = allMenuItems.filter(item => {
     if (isAdmin) return true;
     if (item.showOnlyForAdmin) return false;
-    
+
     // Exclude items for specific roles
     if ((item as any).excludeRoles && (item as any).excludeRoles.includes(user?.role || 'guest')) {
       return false;
     }
-    
+
     // Check base role access
     if (!item.roles.includes(user?.role || 'guest')) return false;
-    
+
     // Check staff role requirement for teacher
     if (user?.role === 'teacher' && item.requireStaffRole) {
       return userHasStaffRole(item.requireStaffRole, user, teachers);
     }
-    
+
     // For admin role, check if item requires staff role (e.g., accountant)
     // Admin can access everything, but we still check requireStaffRole for consistency
     if (isAdmin && item.requireStaffRole) {
       // Admin can access, but we can also check if they have the staff role
       return true; // Admin always has access
     }
-    
+
     return true;
   });
 
   const topNavItems = allMenuItems.filter(item => {
     if (isAdmin) return false;
     if (item.showOnlyForAdmin) return false;
-    
+
     // Exclude items for specific roles
     if ((item as any).excludeRoles && (item as any).excludeRoles.includes(user?.role || 'guest')) {
       return false;
     }
-    
+
     // Check base role access
     if (!item.roles.includes(user?.role || 'guest')) return false;
-    
+
     // Check staff role requirement for teacher
     if (user?.role === 'teacher' && item.requireStaffRole) {
       return userHasStaffRole(item.requireStaffRole, user, teachers);
     }
-    
+
     return true;
   });
 
@@ -209,7 +208,7 @@ function Layout({ children }: LayoutProps) {
                           navigate(`/staff/${user.linkId}`, { replace: false });
                           return;
                         }
-                        
+
                         // Nếu không có linkId, cần fetch teachers nếu chưa có
                         let teachersToUse = teachers;
                         if (teachersToUse.length === 0) {
@@ -221,20 +220,20 @@ function Layout({ children }: LayoutProps) {
                             return;
                           }
                         }
-                        
-                          // Tìm teacher record
-                          let teacherRecord = null;
-                          if (user.id) {
+
+                        // Tìm teacher record
+                        let teacherRecord = null;
+                        if (user.id) {
                           teacherRecord = teachersToUse.find((t) => (t as any).userId === user.id);
-                          }
-                          if (!teacherRecord && user.email) {
-                          teacherRecord = teachersToUse.find((t) => 
-                              t.email?.toLowerCase() === user.email?.toLowerCase()
-                            );
-                          }
-                        
-                          if (teacherRecord) {
-                            navigate(`/staff/${teacherRecord.id}`, { replace: false });
+                        }
+                        if (!teacherRecord && user.email) {
+                          teacherRecord = teachersToUse.find((t) =>
+                            t.email?.toLowerCase() === user.email?.toLowerCase()
+                          );
+                        }
+
+                        if (teacherRecord) {
+                          navigate(`/staff/${teacherRecord.id}`, { replace: false });
                         } else {
                           console.warn('[Layout] Teacher record not found for user:', {
                             userId: user.id,
