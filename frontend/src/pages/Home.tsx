@@ -431,7 +431,7 @@ function Home() {
           </div>
 
           {/* Team Cards Grid - Modern Bento Style */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-16" style={{ maxWidth: '900px', margin: '64px auto 0' }}>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-16">
             {/* Team Toán học - Blue Theme */}
             <div className="group relative bg-white/80 backdrop-blur-sm rounded-3xl p-8 shadow-lg hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 border border-blue-100/50 overflow-hidden">
               {/* Background Gradient Overlay */}
@@ -473,6 +473,46 @@ function Home() {
               <div className="absolute top-4 right-4 w-20 h-20 bg-blue-500/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
             </div>
 
+            {/* Team Tin học - Indigo/Emerald Theme */}
+            <div className="group relative bg-white/80 backdrop-blur-sm rounded-3xl p-8 shadow-lg hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 border border-indigo-100/50 overflow-hidden">
+              {/* Background Gradient Overlay */}
+              <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+
+              {/* Icon Container */}
+              <div className="relative mb-6">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-emerald-500 shadow-lg group-hover:scale-110 transition-transform duration-500">
+                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="relative">
+                <h3 className="text-2xl font-bold text-gray-900 mb-3 group-hover:text-indigo-600 transition-colors duration-300">
+                  Team Tin học
+                </h3>
+                <p className="text-gray-600 leading-relaxed mb-6">
+                  Đồng hành trong lập trình, thuật toán và ứng dụng CNTT với các lớp chuyên sâu & luyện thi.
+                </p>
+
+                {/* CTA Button */}
+                <a
+                  href="https://www.facebook.com/profile.php?id=61577992693085"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-emerald-500 text-white font-semibold shadow-md hover:shadow-xl transition-all duration-300 hover:scale-105"
+                >
+                  <span>Xem Fanpage</span>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </a>
+              </div>
+
+              {/* Decorative Element */}
+              <div className="absolute top-4 right-4 w-20 h-20 bg-indigo-500/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
+            </div>
 
             {/* Team Tiếng Nhật - Rose/Red Theme */}
             <div className="group relative bg-white/80 backdrop-blur-sm rounded-3xl p-8 shadow-lg hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 border border-rose-100/50 overflow-hidden">
