@@ -493,7 +493,7 @@ function Home() {
                   Team Tin học
                 </h3>
                 <p className="text-gray-600 leading-relaxed mb-6">
-                  Đồng hành trong lập trình, thuật toán và ứng dụng CNTT với các lớp chuyên sâu & luyện thi.
+                  Đồng hành trong thuật toán và ứng dụng CNTT với các lớp chuyên sâu & luyện thi.
                 </p>
 
                 {/* CTA Button */}
