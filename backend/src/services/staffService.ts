@@ -1561,28 +1561,42 @@ export async function getStaffDetailData(staffId: string, month: string) {
 
     // Get allowance (giống backup: const allowances = cls.customTeacherAllowances || {}; const baseAllowance = allowances[staffId] ?? (cls.tuitionPerSession || 0))
     const allowances = cls.custom_teacher_allowances || {};
+    const hasCustomAllowance = allowances[staffId] !== undefined && allowances[staffId] !== null;
     const baseAllowance = allowances[staffId] ?? (Number(cls.tuition_per_session) || 0);
+
+    // Helper: calculate session allowance correctly
+    // If teacher has custom allowance, always recalculate (stored allowance_amount may be wrong)
+    const calcAllowance = (session: any) => {
+      if (hasCustomAllowance) {
+        // Recalculate: baseAllowance * coefficient * studentPaidCount
+        const coefficient = Number(session.coefficient) || 1;
+        const studentPaidCount = Number(session.student_paid_count || session.studentPaidCount || 0) || 0;
+        if (studentPaidCount > 0) {
+          return baseAllowance * coefficient * studentPaidCount;
+        }
+        // Fallback if no studentPaidCount data
+        return session.allowance_amount ?? getSessionAllowance(session, baseAllowance) ?? 0;
+      }
+      return session.allowance_amount ?? getSessionAllowance(session, baseAllowance) ?? 0;
+    };
 
     // Calculate totals for month (giống backup: const totalMonth = monthSessions.reduce((sum, session) => { const allowanceAmount = session.allowanceAmount ?? window.UniData.computeSessionAllowance?.(session) ?? 0; return sum + allowanceAmount; }, 0))
     const totalMonth = monthSessions.reduce((sum: number, session: any) => {
-      const allowanceAmount = session.allowance_amount ?? getSessionAllowance(session, baseAllowance) ?? 0;
-      return sum + allowanceAmount;
+      return sum + calcAllowance(session);
     }, 0);
 
     // Calculate total paid (giống backup: const totalPaid = monthSessions.filter(s => (s.paymentStatus || 'unpaid') === 'paid').reduce(...))
     const totalPaid = monthSessions
       .filter((s: any) => (s.payment_status || 'unpaid') === 'paid')
       .reduce((sum: number, session: any) => {
-        const allowanceAmount = session.allowance_amount ?? getSessionAllowance(session, baseAllowance) ?? 0;
-        return sum + allowanceAmount;
+        return sum + calcAllowance(session);
       }, 0);
 
     // Calculate total unpaid (giống backup: const totalUnpaid = classSessions.filter(s => (s.paymentStatus || 'unpaid') === 'unpaid').reduce(...))
     const totalUnpaid = classSessions
       .filter((s: any) => (s.payment_status || 'unpaid') === 'unpaid')
       .reduce((sum: number, session: any) => {
-        const allowanceAmount = session.allowance_amount ?? getSessionAllowance(session, baseAllowance) ?? 0;
-        return sum + allowanceAmount;
+        return sum + calcAllowance(session);
       }, 0);
 
     // isActive đã được set ở trên khi map classesWithStatus

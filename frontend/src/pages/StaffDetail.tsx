@@ -54,7 +54,7 @@ function StaffDetail() {
 
   const fetchTeacherFn = useCallback(async () => {
     if (!id) throw new Error('Staff ID is required');
-    
+
     // Sử dụng cache từ sessionStorage nếu có
     const cacheKey = 'teachers-for-staff-detail';
     try {
@@ -71,10 +71,10 @@ function StaffDetail() {
     } catch {
       // Ignore cache errors
     }
-    
+
     // Nếu không có cache, fetch teachers
     const teachers = await fetchTeachers();
-    
+
     // Lưu vào cache
     try {
       sessionStorage.setItem(cacheKey, JSON.stringify({
@@ -84,7 +84,7 @@ function StaffDetail() {
     } catch {
       // Ignore storage errors
     }
-    
+
     const teacher = teachers.find((t) => t.id === id);
     if (!teacher) {
       throw new Error(`Không tìm thấy nhân sự với ID: ${id}`);
@@ -96,7 +96,7 @@ function StaffDetail() {
     cacheKey: `staff-${id}`,
     staleTime: 5 * 60 * 1000, // Tăng cache time lên 5 phút
   });
-  
+
   // Log errors only
   useEffect(() => {
     if (error) {
@@ -150,7 +150,7 @@ function StaffDetail() {
     persistCache: true, // Lưu vào localStorage để persist qua sessions
     enabled: !!staff && !isLoading,
   });
-  
+
   // Prefetch next month work items
   useEffect(() => {
     if (!id || !staff || isLoading) return;
@@ -162,11 +162,11 @@ function StaffDetail() {
       nextYear = year + 1;
     }
     const nextMonthStr = `${nextYear}-${String(nextMonth).padStart(2, '0')}`;
-    
+
     const timeoutId = setTimeout(() => {
-      fetchStaffWorkItems(id, nextMonthStr).catch(() => {});
+      fetchStaffWorkItems(id, nextMonthStr).catch(() => { });
     }, 2000);
-    
+
     return () => clearTimeout(timeoutId);
   }, [id, staff, isLoading, debouncedMonth]);
 
@@ -180,7 +180,7 @@ function StaffDetail() {
     staleTime: 2 * 60 * 1000,
     enabled: !!staff && !isLoading,
   });
-  
+
   // Prefetch next month bonuses
   useEffect(() => {
     if (!id || !staff || isLoading) return;
@@ -192,11 +192,11 @@ function StaffDetail() {
       nextYear = year + 1;
     }
     const nextMonthStr = `${nextYear}-${String(nextMonth).padStart(2, '0')}`;
-    
+
     const timeoutId = setTimeout(() => {
-      fetchStaffBonuses(id, nextMonthStr).catch(() => {});
+      fetchStaffBonuses(id, nextMonthStr).catch(() => { });
     }, 2000);
-    
+
     return () => clearTimeout(timeoutId);
   }, [id, staff, isLoading, debouncedMonth]);
 
@@ -211,25 +211,25 @@ function StaffDetail() {
     persistCache: true, // Lưu vào localStorage để persist qua sessions
     enabled: !!staff && !isLoading,
   });
-  
+
   // Background refresh: Load fresh data in background after showing cached data
   // This ensures UI shows immediately while data is being updated
   useEffect(() => {
     if (!id || !staff || isLoading || !staffDetailData) return;
-    
+
     // If we have cached data, refresh in background to ensure it's up-to-date
     // But don't show loading state - just update silently
     const timeoutId = setTimeout(() => {
       refetchStaffDetailData();
     }, 500); // Small delay to let UI render first
-    
+
     return () => clearTimeout(timeoutId);
   }, [id, staff, isLoading, staffDetailData, refetchStaffDetailData]);
 
   // Listen for teacher-class-updated events to refetch immediately
   useEffect(() => {
     if (!id || !staff) return;
-    
+
     const handleTeacherClassUpdated = (event: CustomEvent) => {
       const { teacherId, action } = event.detail || {};
       // If this staff is the affected teacher, refetch immediately
@@ -242,13 +242,13 @@ function StaffDetail() {
         refetchStaffDetailData();
       }
     };
-    
+
     window.addEventListener('teacher-class-updated', handleTeacherClassUpdated as EventListener);
     return () => {
       window.removeEventListener('teacher-class-updated', handleTeacherClassUpdated as EventListener);
     };
   }, [id, staff, debouncedMonth, refetchStaffDetailData]);
-  
+
   // Prefetch next month detail data
   useEffect(() => {
     if (!id || !staff || isLoading) return;
@@ -260,11 +260,11 @@ function StaffDetail() {
       nextYear = year + 1;
     }
     const nextMonthStr = `${nextYear}-${String(nextMonth).padStart(2, '0')}`;
-    
+
     const timeoutId = setTimeout(() => {
-      fetchStaffDetailData(id, nextMonthStr).catch(() => {});
+      fetchStaffDetailData(id, nextMonthStr).catch(() => { });
     }, 2000);
-    
+
     return () => clearTimeout(timeoutId);
   }, [id, staff, isLoading, debouncedMonth]);
 
@@ -401,44 +401,57 @@ function StaffDetail() {
   // Logic tính trợ cấp cho session: ưu tiên dùng allowanceAmount nếu có, nếu không thì tính từ computeSessionAllowance (giống backup)
   const getSessionAllowance = useMemo(() => {
     return (session: any) => {
+      // Tìm class để lấy customTeacherAllowances
+      const cls = classes.find((c) => c.id === session.class_id);
+      const customAllowances = (cls as any)?.customTeacherAllowances || {};
+      const hasCustomAllowance = customAllowances[id || ''] !== undefined && customAllowances[id || ''] !== null;
+      const baseAllowance = Number(customAllowances[id || ''] ?? (cls?.tuitionPerSession || 0)) || 0;
+
+      // Nếu teacher có custom allowance, LUÔN tính lại (stored allowance_amount có thể sai)
+      if (hasCustomAllowance) {
+        const coefficient = session.coefficient != null ? Number(session.coefficient) : 1;
+        if (coefficient === 0) return 0;
+        const paidCount = Number(session.studentPaidCount || session.student_paid_count || 0) || 0;
+        if (paidCount > 0) {
+          const scale = Number((cls as any)?.scaleAmount || 0) || 0;
+          let allowance = (baseAllowance * coefficient * paidCount) + scale;
+          const maxPerSession = Number((cls as any)?.maxAllowancePerSession || 0) || 0;
+          if (maxPerSession > 0 && allowance > maxPerSession) allowance = maxPerSession;
+          return allowance > 0 ? Math.round(allowance) : 0;
+        }
+        // Fallback: nếu không có paidCount, dùng stored value nếu có
+      }
+
       // Ưu tiên dùng allowance_amount hoặc allowanceAmount nếu có (giống backup: session.allowanceAmount ?? computeSessionAllowance(session) ?? 0)
-      // Kiểm tra cả allowance_amount và allowanceAmount (camelCase)
       const allowanceAmount = session.allowance_amount ?? session.allowanceAmount;
-      // Nếu allowanceAmount có giá trị (không phải null/undefined), dùng nó (kể cả khi = 0)
-      // Giống backup: session.allowanceAmount ?? computeSessionAllowance(session) ?? 0
       if (allowanceAmount != null && allowanceAmount !== undefined) {
         const numValue = Number(allowanceAmount);
-        // Nếu giá trị > 0, dùng nó
-        // Nếu giá trị = 0, vẫn dùng 0 (không tính lại, vì có thể đã được set rõ ràng là 0)
         return numValue;
       }
-      
+
       // Tính từ class's customTeacherAllowances, coefficient, và studentPaidCount (giống backup)
-      const cls = classes.find((c) => c.id === session.class_id);
       if (!cls) return 0;
-      
-      const customAllowances = (cls as any)?.customTeacherAllowances || {};
-      const baseAllowance = Number(customAllowances[id || ''] ?? (cls.tuitionPerSession || 0)) || 0;
+
       const coefficient = session.coefficient != null ? Number(session.coefficient) : 1;
-      
+
       // Nếu hệ số = 0 thì số tiền = 0 luôn
       if (coefficient === 0) {
         return 0;
       }
-      
+
       // Số học sinh đã thanh toán (từ attendance hoặc studentPaidCount)
       const paidCount = Number(session.studentPaidCount || session.student_paid_count || 0) || 0;
       const scale = Number((cls as any)?.scaleAmount || 0) || 0;
       const maxPerSession = Number((cls as any)?.maxAllowancePerSession || 0) || 0;
-      
+
       // Công thức: (baseAllowance * coefficient * paidCount) + scale
       let allowance = (baseAllowance * coefficient * paidCount) + scale;
-      
+
       // Nếu có maxPerSession thì giới hạn tối đa
       if (maxPerSession > 0 && allowance > maxPerSession) {
         allowance = maxPerSession;
       }
-      
+
       return allowance > 0 ? Math.round(allowance) : 0;
     };
   }, [classes, id]);
@@ -460,7 +473,7 @@ function StaffDetail() {
         const totalPaid = monthSessionsForClass
           .filter((s) => s.payment_status === 'paid')
           .reduce((sum, s) => sum + getSessionAllowance(s), 0);
-        const teacherSessionsForClass = classSessions.filter((s) => 
+        const teacherSessionsForClass = classSessions.filter((s) =>
           (s.teacher_id === staff.id || s.teacherId === staff.id)
         );
         const totalUnpaid = teacherSessionsForClass
@@ -480,7 +493,7 @@ function StaffDetail() {
         };
       });
     }
-    
+
     // Use backend calculated data, but map class IDs to full class objects
     return staffDetailData.teacherClassStats.map((stat) => {
       const cls = staffClasses.find((c) => c.id === stat.class.id) || stat.class;
@@ -519,35 +532,35 @@ function StaffDetail() {
     const totalMonthWorkItems = workItems.reduce((sum, item) => sum + (item.total || 0), 0);
     const totalPaidWorkItems = workItems.reduce((sum, item) => sum + (item.paid || 0), 0);
     const totalUnpaidWorkItems = workItems.reduce((sum, item) => sum + (item.unpaid || 0), 0);
-    
+
     // Calculate from bonuses (bảng thưởng) - tính từ TẤT CẢ bonuses đã load
     // Nếu có statistics thì dùng, nếu không thì tính từ bonuses array
     let totalMonthBonuses = bonusesStatistics.totalMonth || 0;
     let totalPaidBonuses = bonusesStatistics.paid || 0;
     let totalUnpaidBonuses = bonusesStatistics.unpaid || 0;
-    
+
     // Nếu không có statistics, tính từ bonuses array
     if (totalMonthBonuses === 0 && bonuses.length > 0) {
       totalMonthBonuses = bonuses.reduce((sum, b) => sum + (b.amount || 0), 0);
       totalPaidBonuses = bonuses.filter(b => b.status === 'paid').reduce((sum, b) => sum + (b.amount || 0), 0);
       totalUnpaidBonuses = bonuses.filter(b => b.status === 'unpaid').reduce((sum, b) => sum + (b.amount || 0), 0);
     }
-    
+
     // Calculate from classes (bảng các lớp dạy) - tính từ TẤT CẢ sessions đã load, không filter theo tháng
     // Tính từ tất cả sessions, không chỉ tháng hiện tại
     const allClassSessions = sessions.filter((s) => s.teacher_id === id || s.teacherId === id);
-    
+
     // Tính tổng cho tháng hiện tại (selectedMonth)
     const monthSessions = allClassSessions.filter((s) => {
       if (!s.date) return false;
       return s.date.slice(0, 7) === selectedMonth;
     });
-    
+
     const totalMonthAllClasses = monthSessions.reduce((sum, s) => sum + getSessionAllowance(s), 0);
     const totalPaidByStatus = monthSessions
       .filter((s) => s.payment_status === 'paid')
       .reduce((sum, s) => sum + getSessionAllowance(s), 0);
-    
+
     // Tính unpaid từ tháng hiện tại + tháng trước (theo logic backend)
     const [year, month] = selectedMonth.split('-').map(Number);
     let previousYear = year;
@@ -557,42 +570,42 @@ function StaffDetail() {
       previousYear = year - 1;
     }
     const previousMonthStr = `${previousYear}-${String(previousMonth).padStart(2, '0')}`;
-    
+
     const unpaidSessions = allClassSessions.filter((s) => {
       if (!s.date || s.payment_status !== 'unpaid') return false;
       const sessionMonth = s.date.slice(0, 7);
       return sessionMonth === selectedMonth || sessionMonth === previousMonthStr;
     });
-    
+
     const totalUnpaidByStatus = unpaidSessions.reduce((sum, s) => sum + getSessionAllowance(s), 0);
-    
+
     // Calculate total paid in current year from TẤT CẢ 3 bảng (Classes + Work Items + Bonuses)
     const currentYear = selectedMonth.split('-')[0]; // Lấy năm từ selectedMonth
-    
+
     // Tính từ Classes (sessions) trong năm hiện tại
     const yearSessions = allClassSessions.filter((s) => {
       if (!s.date) return false;
       return s.date.slice(0, 4) === currentYear && s.payment_status === 'paid';
     });
     const totalPaidClassesYear = yearSessions.reduce((sum, s) => sum + getSessionAllowance(s), 0);
-    
+
     // Tính từ Work Items trong năm hiện tại
     const yearWorkItems = workItems.filter((item) => {
       if (!item.month) return false;
       return item.month.slice(0, 4) === currentYear;
     });
     const totalPaidWorkItemsYear = yearWorkItems.reduce((sum, item) => sum + (item.paid || 0), 0);
-    
+
     // Tính từ Bonuses trong năm hiện tại
     const yearBonuses = bonuses.filter((b) => {
       if (!b.month) return false;
       return b.month.slice(0, 4) === currentYear && b.status === 'paid';
     });
     const totalPaidBonusesYear = yearBonuses.reduce((sum, b) => sum + (b.amount || 0), 0);
-    
+
     // Tổng năm = Classes + Work Items + Bonuses (đã thanh toán trong năm)
     const totalPaidAllTime = totalPaidClassesYear + totalPaidWorkItemsYear + totalPaidBonusesYear;
-    
+
     // Tính cọc từ sessions trong năm hiện tại
     const yearDepositSessions = allClassSessions.filter((s) => {
       if (!s.date) return false;
@@ -627,7 +640,7 @@ function StaffDetail() {
       totalDepositAllTime,
     };
   }, [workItems, workItemsData, bonuses, bonusesData, bonusesStatistics, sessions, selectedMonth, id, getSessionAllowance]);
-  
+
   // Check if income stats are loading
   // Income stats are calculated from UI data, so only show loading if work items are loading
   // Không cần đợi debounce vì tính từ dữ liệu đã có
@@ -664,11 +677,11 @@ function StaffDetail() {
 
   // QR payment link - match backup logic: qr_payment_link || qrPaymentLink || bank_qr_link || bankQRLink
   // Check all possible field names and filter out empty strings
-  const qrPaymentLink = 
-    (staff as any)?.qr_payment_link || 
-    (staff as any)?.qrPaymentLink || 
-    (staff as any)?.bank_qr_link || 
-    (staff as any)?.bankQRLink || 
+  const qrPaymentLink =
+    (staff as any)?.qr_payment_link ||
+    (staff as any)?.qrPaymentLink ||
+    (staff as any)?.bank_qr_link ||
+    (staff as any)?.bankQRLink ||
     null;
   const hasQrPaymentLink = Boolean(qrPaymentLink && qrPaymentLink.trim());
 
@@ -703,7 +716,7 @@ function StaffDetail() {
       </div>
     );
   }
-  
+
   // If staff is loaded but other data is loading, show page with skeleton loaders
   // Also handle case where staff is null after loading (shouldn't happen but safety check)
   if (!staff && !isLoading) {
@@ -916,9 +929,9 @@ function StaffDetail() {
             Thông tin nhân sự
           </h3>
           {canManageStaff && (
-            <button 
-              className="btn btn-sm" 
-              id="editStaffBtn" 
+            <button
+              className="btn btn-sm"
+              id="editStaffBtn"
               data-staff-id={staff.id}
               onClick={() => setEditStaffModalOpen(true)}
             >
@@ -1316,81 +1329,81 @@ function StaffDetail() {
                       )}
                     </div>
                   </div>
-              <div className="staff-detail-stat-item">
-                <div className="staff-detail-stat-label">
-                  <span className="badge badge-success" style={{ marginRight: '8px' }}>✓</span>
-                  Đã thanh toán
-                </div>
-                <div className="staff-detail-stat-value" style={{ color: '#059669', opacity: isIncomeStatsLoading ? 0.5 : 1, transition: 'opacity 0.2s', minHeight: '24px', display: 'flex', alignItems: 'center' }}>
-                  {isIncomeStatsLoading ? (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-                      <span style={{ display: 'inline-block', width: '12px', height: '12px', border: '2px solid var(--border)', borderTopColor: '#059669', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-                      Đang tải...
-                    </span>
-                  ) : (
-                    formatCurrencyVND(incomeStats.totalPaidAll)
-                  )}
-                </div>
-              </div>
-              <div className="staff-detail-stat-item">
-                <div className="staff-detail-stat-label">
-                  <span className="badge badge-danger" style={{ marginRight: '8px' }}>✗</span>
-                  Chưa thanh toán
-                </div>
-                <div className="staff-detail-stat-value" style={{ color: '#dc2626', opacity: isIncomeStatsLoading ? 0.5 : 1, transition: 'opacity 0.2s', minHeight: '24px', display: 'flex', alignItems: 'center' }}>
-                  {isIncomeStatsLoading ? (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-                      <span style={{ display: 'inline-block', width: '12px', height: '12px', border: '2px solid var(--border)', borderTopColor: '#dc2626', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-                      Đang tải...
-                    </span>
-                  ) : (
-                    formatCurrencyVND(incomeStats.totalUnpaidAll)
-                  )}
-                </div>
-              </div>
-              <div className="staff-detail-stat-item">
-                <div className="staff-detail-stat-label">Tổng năm</div>
-                <div className="staff-detail-stat-value" style={{ color: 'var(--primary)', opacity: isIncomeStatsLoading ? 0.5 : 1, transition: 'opacity 0.2s', minHeight: '24px', display: 'flex', alignItems: 'center' }}>
-                  {isIncomeStatsLoading ? (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-                      <span style={{ display: 'inline-block', width: '12px', height: '12px', border: '2px solid var(--border)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-                      Đang tải...
-                    </span>
-                  ) : (
-                    formatCurrencyVND(incomeStats.totalPaidAllTime)
-                  )}
-                </div>
-              </div>
-              <div
-                className="staff-detail-stat-item"
-                id="depositStatItem"
-                style={{ cursor: 'pointer', transition: 'all 0.2s ease' }}
-                title="Click để xem chi tiết"
-                onClick={() => setDepositDetailsModalOpen(true)}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                  e.currentTarget.style.boxShadow = 'var(--shadow-md)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = 'none';
-                }}
-              >
-                <div className="staff-detail-stat-label">
-                  <span className="badge badge-purple" style={{ marginRight: '8px' }}>●</span>
-                  Cọc
-                </div>
-                <div className="staff-detail-stat-value" style={{ color: '#9333ea', opacity: isIncomeStatsLoading ? 0.5 : 1, transition: 'opacity 0.2s' }}>
-                  {isIncomeStatsLoading ? (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                      <span style={{ fontSize: '0.75rem' }}>⏳</span>
-                      <span style={{ fontSize: '0.875rem' }}>Đang tải...</span>
-                    </span>
-                  ) : (
-                    formatCurrencyVND(incomeStats.totalDepositAllTime)
-                  )}
-                </div>
-              </div>
+                  <div className="staff-detail-stat-item">
+                    <div className="staff-detail-stat-label">
+                      <span className="badge badge-success" style={{ marginRight: '8px' }}>✓</span>
+                      Đã thanh toán
+                    </div>
+                    <div className="staff-detail-stat-value" style={{ color: '#059669', opacity: isIncomeStatsLoading ? 0.5 : 1, transition: 'opacity 0.2s', minHeight: '24px', display: 'flex', alignItems: 'center' }}>
+                      {isIncomeStatsLoading ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                          <span style={{ display: 'inline-block', width: '12px', height: '12px', border: '2px solid var(--border)', borderTopColor: '#059669', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                          Đang tải...
+                        </span>
+                      ) : (
+                        formatCurrencyVND(incomeStats.totalPaidAll)
+                      )}
+                    </div>
+                  </div>
+                  <div className="staff-detail-stat-item">
+                    <div className="staff-detail-stat-label">
+                      <span className="badge badge-danger" style={{ marginRight: '8px' }}>✗</span>
+                      Chưa thanh toán
+                    </div>
+                    <div className="staff-detail-stat-value" style={{ color: '#dc2626', opacity: isIncomeStatsLoading ? 0.5 : 1, transition: 'opacity 0.2s', minHeight: '24px', display: 'flex', alignItems: 'center' }}>
+                      {isIncomeStatsLoading ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                          <span style={{ display: 'inline-block', width: '12px', height: '12px', border: '2px solid var(--border)', borderTopColor: '#dc2626', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                          Đang tải...
+                        </span>
+                      ) : (
+                        formatCurrencyVND(incomeStats.totalUnpaidAll)
+                      )}
+                    </div>
+                  </div>
+                  <div className="staff-detail-stat-item">
+                    <div className="staff-detail-stat-label">Tổng năm</div>
+                    <div className="staff-detail-stat-value" style={{ color: 'var(--primary)', opacity: isIncomeStatsLoading ? 0.5 : 1, transition: 'opacity 0.2s', minHeight: '24px', display: 'flex', alignItems: 'center' }}>
+                      {isIncomeStatsLoading ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                          <span style={{ display: 'inline-block', width: '12px', height: '12px', border: '2px solid var(--border)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                          Đang tải...
+                        </span>
+                      ) : (
+                        formatCurrencyVND(incomeStats.totalPaidAllTime)
+                      )}
+                    </div>
+                  </div>
+                  <div
+                    className="staff-detail-stat-item"
+                    id="depositStatItem"
+                    style={{ cursor: 'pointer', transition: 'all 0.2s ease' }}
+                    title="Click để xem chi tiết"
+                    onClick={() => setDepositDetailsModalOpen(true)}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = 'var(--shadow-md)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  >
+                    <div className="staff-detail-stat-label">
+                      <span className="badge badge-purple" style={{ marginRight: '8px' }}>●</span>
+                      Cọc
+                    </div>
+                    <div className="staff-detail-stat-value" style={{ color: '#9333ea', opacity: isIncomeStatsLoading ? 0.5 : 1, transition: 'opacity 0.2s' }}>
+                      {isIncomeStatsLoading ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ fontSize: '0.75rem' }}>⏳</span>
+                          <span style={{ fontSize: '0.875rem' }}>Đang tải...</span>
+                        </span>
+                      ) : (
+                        formatCurrencyVND(incomeStats.totalDepositAllTime)
+                      )}
+                    </div>
+                  </div>
                 </>
               )}
             </div>
@@ -1415,148 +1428,148 @@ function StaffDetail() {
                 </h3>
               </div>
               <div className="staff-detail-section-content">
-              {teacherClassStats.length > 0 ? (
-                <div className="table-container" style={{ borderRadius: 'var(--radius-lg)', overflow: 'hidden', border: '1px solid var(--border)' }}>
-                  <table className="table-striped" style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ background: 'linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0.03) 100%)' }}>
-                        <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem' }}>Tên lớp</th>
-                        <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem' }}>Số buổi trong tháng</th>
-                        <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem' }}>Tổng tháng</th>
-                        <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem' }}>Đã nhận</th>
-                        <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem' }}>Chưa nhận</th>
-                        {canManageStaff && <th style={{ padding: 'var(--spacing-3)', textAlign: 'center', width: '60px', fontWeight: '600', fontSize: '0.875rem' }}></th>}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {teacherClassStats.map((stat) => {
-                        const statusLabel = stat.isActive ? 'Dạy' : 'Dừng';
-                        const statusColor = stat.isActive ? '#059669' : '#dc2626';
-                        return (
-                          <tr
-                            key={stat.class.id}
-                            className={`teacher-class-row ${stat.isActive ? 'class-active' : 'class-inactive'}`}
-                            data-class-id={stat.class.id}
-                            data-is-active={stat.isActive}
-                            onClick={() => {
-                              // Allow admin to click on stopped classes, or allow clicking on active classes
-                              if (isAdmin || stat.isActive) {
-                                navigate(`/classes/${stat.class.id}`);
-                              }
-                            }}
-                            style={{
-                              cursor: (isAdmin || stat.isActive) ? 'pointer' : 'not-allowed',
-                              transition: 'all 0.2s ease',
-                              opacity: stat.isActive ? 1 : 0.7,
-                              pointerEvents: (isAdmin || stat.isActive) ? 'auto' : 'none',
-                            }}
-                          >
-                            <td style={{ padding: 'var(--spacing-3)' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--primary)' }}>
-                                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-                                </svg>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-1)' }}>
-                                  <div style={{ fontWeight: '600', color: 'var(--text)' }}>{stat.class.name}</div>
-                                  <span
-                                    style={{
-                                      fontSize: '0.75rem',
-                                      fontWeight: '500',
-                                      color: statusColor,
-                                      padding: '2px 6px',
-                                      borderRadius: '4px',
-                                      background: `${statusColor}15`,
-                                      whiteSpace: 'nowrap',
-                                    }}
-                                    title={stat.isActive ? 'Lớp đang dạy' : 'Lớp đã dừng, không còn phụ trách'}
-                                  >
-                                    {statusLabel}
-                                  </span>
-                                </div>
-                              </div>
-                            </td>
-                            <td style={{ padding: 'var(--spacing-3)' }}>
-                              <div style={{ fontWeight: '500', color: 'var(--text)' }}>{stat.monthSessionsCount}</div>
-                            </td>
-                            <td style={{ padding: 'var(--spacing-3)' }}>
-                              <div style={{ fontWeight: '600', color: 'var(--text)' }}>{formatCurrencyVND(stat.totalMonth)}</div>
-                            </td>
-                            <td style={{ padding: 'var(--spacing-3)' }}>
-                              <div style={{ fontWeight: '500', color: '#059669' }}>{formatCurrencyVND(stat.totalPaid)}</div>
-                            </td>
-                            <td style={{ padding: 'var(--spacing-3)' }}>
-                              <div style={{ fontWeight: '500', color: '#dc2626' }}>{formatCurrencyVND(stat.totalUnpaid)}</div>
-                            </td>
-                            {canManageStaff && (
-                              <td style={{ padding: 'var(--spacing-3)', textAlign: 'center' }}>
-                                <button
-                                  className="btn-delete-class"
-                                  data-class-id={stat.class.id}
-                                  data-staff-id={staff.id}
-                                  onClick={async (e) => {
-                                    e.stopPropagation();
-                                    const className = stat.class.name || 'lớp này';
-                                    const staffName = staff.full_name || 'gia sư này';
-                                    
-                                    if (!window.confirm(`Bạn có chắc chắn muốn gỡ "${staffName}" khỏi lớp "${className}"?\n\nLớp sẽ chuyển sang trạng thái "Dừng" nhưng vẫn hiển thị trong danh sách để giữ dữ liệu thống kê.`)) {
-                                      return;
-                                    }
-
-                                    try {
-                                      await removeTeacherFromClass(stat.class.id, id || '');
-                                      toast.success('Đã gỡ gia sư khỏi lớp. Lớp chuyển sang trạng thái "Dừng"');
-                                      // Refresh data
-                                      await refetch();
-                                      // Also refresh classes data
-                                      if (classesData) {
-                                        // Trigger refetch by updating dependency
-                                        window.location.reload(); // Simple refresh for now
-                                      }
-                                    } catch (error: any) {
-                                      toast.error('Không thể gỡ gia sư khỏi lớp: ' + (error.response?.data?.error || error.message));
-                                    }
-                                  }}
-                                  style={{
-                                    width: '32px',
-                                    height: '32px',
-                                    padding: 0,
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    background: 'transparent',
-                                    border: '1px solid var(--danger)',
-                                    borderRadius: 'var(--radius)',
-                                    color: 'var(--danger)',
-                                    cursor: 'pointer',
-                                    transition: 'all 0.2s ease',
-                                  }}
-                                  title="Xóa lớp khỏi danh sách"
-                                >
-                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <polyline points="3 6 5 6 21 6" />
-                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                {teacherClassStats.length > 0 ? (
+                  <div className="table-container" style={{ borderRadius: 'var(--radius-lg)', overflow: 'hidden', border: '1px solid var(--border)' }}>
+                    <table className="table-striped" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ background: 'linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0.03) 100%)' }}>
+                          <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem' }}>Tên lớp</th>
+                          <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem' }}>Số buổi trong tháng</th>
+                          <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem' }}>Tổng tháng</th>
+                          <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem' }}>Đã nhận</th>
+                          <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem' }}>Chưa nhận</th>
+                          {canManageStaff && <th style={{ padding: 'var(--spacing-3)', textAlign: 'center', width: '60px', fontWeight: '600', fontSize: '0.875rem' }}></th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {teacherClassStats.map((stat) => {
+                          const statusLabel = stat.isActive ? 'Dạy' : 'Dừng';
+                          const statusColor = stat.isActive ? '#059669' : '#dc2626';
+                          return (
+                            <tr
+                              key={stat.class.id}
+                              className={`teacher-class-row ${stat.isActive ? 'class-active' : 'class-inactive'}`}
+                              data-class-id={stat.class.id}
+                              data-is-active={stat.isActive}
+                              onClick={() => {
+                                // Allow admin to click on stopped classes, or allow clicking on active classes
+                                if (isAdmin || stat.isActive) {
+                                  navigate(`/classes/${stat.class.id}`);
+                                }
+                              }}
+                              style={{
+                                cursor: (isAdmin || stat.isActive) ? 'pointer' : 'not-allowed',
+                                transition: 'all 0.2s ease',
+                                opacity: stat.isActive ? 1 : 0.7,
+                                pointerEvents: (isAdmin || stat.isActive) ? 'auto' : 'none',
+                              }}
+                            >
+                              <td style={{ padding: 'var(--spacing-3)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--primary)' }}>
+                                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
                                   </svg>
-                                </button>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-1)' }}>
+                                    <div style={{ fontWeight: '600', color: 'var(--text)' }}>{stat.class.name}</div>
+                                    <span
+                                      style={{
+                                        fontSize: '0.75rem',
+                                        fontWeight: '500',
+                                        color: statusColor,
+                                        padding: '2px 6px',
+                                        borderRadius: '4px',
+                                        background: `${statusColor}15`,
+                                        whiteSpace: 'nowrap',
+                                      }}
+                                      title={stat.isActive ? 'Lớp đang dạy' : 'Lớp đã dừng, không còn phụ trách'}
+                                    >
+                                      {statusLabel}
+                                    </span>
+                                  </div>
+                                </div>
                               </td>
-                            )}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="staff-detail-empty-state">
-                  <div className="staff-detail-empty-state-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-                    </svg>
+                              <td style={{ padding: 'var(--spacing-3)' }}>
+                                <div style={{ fontWeight: '500', color: 'var(--text)' }}>{stat.monthSessionsCount}</div>
+                              </td>
+                              <td style={{ padding: 'var(--spacing-3)' }}>
+                                <div style={{ fontWeight: '600', color: 'var(--text)' }}>{formatCurrencyVND(stat.totalMonth)}</div>
+                              </td>
+                              <td style={{ padding: 'var(--spacing-3)' }}>
+                                <div style={{ fontWeight: '500', color: '#059669' }}>{formatCurrencyVND(stat.totalPaid)}</div>
+                              </td>
+                              <td style={{ padding: 'var(--spacing-3)' }}>
+                                <div style={{ fontWeight: '500', color: '#dc2626' }}>{formatCurrencyVND(stat.totalUnpaid)}</div>
+                              </td>
+                              {canManageStaff && (
+                                <td style={{ padding: 'var(--spacing-3)', textAlign: 'center' }}>
+                                  <button
+                                    className="btn-delete-class"
+                                    data-class-id={stat.class.id}
+                                    data-staff-id={staff.id}
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      const className = stat.class.name || 'lớp này';
+                                      const staffName = staff.full_name || 'gia sư này';
+
+                                      if (!window.confirm(`Bạn có chắc chắn muốn gỡ "${staffName}" khỏi lớp "${className}"?\n\nLớp sẽ chuyển sang trạng thái "Dừng" nhưng vẫn hiển thị trong danh sách để giữ dữ liệu thống kê.`)) {
+                                        return;
+                                      }
+
+                                      try {
+                                        await removeTeacherFromClass(stat.class.id, id || '');
+                                        toast.success('Đã gỡ gia sư khỏi lớp. Lớp chuyển sang trạng thái "Dừng"');
+                                        // Refresh data
+                                        await refetch();
+                                        // Also refresh classes data
+                                        if (classesData) {
+                                          // Trigger refetch by updating dependency
+                                          window.location.reload(); // Simple refresh for now
+                                        }
+                                      } catch (error: any) {
+                                        toast.error('Không thể gỡ gia sư khỏi lớp: ' + (error.response?.data?.error || error.message));
+                                      }
+                                    }}
+                                    style={{
+                                      width: '32px',
+                                      height: '32px',
+                                      padding: 0,
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      background: 'transparent',
+                                      border: '1px solid var(--danger)',
+                                      borderRadius: 'var(--radius)',
+                                      color: 'var(--danger)',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.2s ease',
+                                    }}
+                                    title="Xóa lớp khỏi danh sách"
+                                  >
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                      <polyline points="3 6 5 6 21 6" />
+                                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                    </svg>
+                                  </button>
+                                </td>
+                              )}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
-                  <p>Chưa có lớp nào được phân công.</p>
-                </div>
-              )}
+                ) : (
+                  <div className="staff-detail-empty-state">
+                    <div className="staff-detail-empty-state-icon">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                      </svg>
+                    </div>
+                    <p>Chưa có lớp nào được phân công.</p>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1578,128 +1591,128 @@ function StaffDetail() {
                 <span className="text-muted text-sm">Tháng {formatMonthLabel(selectedMonth)}</span>
               </div>
               <div className="staff-detail-section-content">
-              {workItemsLoading && !workItemsData ? (
-                <TableSkeleton rows={3} columns={4} />
-              ) : workItems.length > 0 ? (
-                <div className="table-container" style={{ borderRadius: 'var(--radius-lg)', overflow: 'hidden', border: '1px solid var(--border)', position: 'relative' }}>
-                  {/* Loading overlay khi đang refetch */}
-                  {workItemsLoading && workItemsData && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        background: 'rgba(255, 255, 255, 0.7)',
-                        backdropFilter: 'blur(2px)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 10,
-                        borderRadius: 'var(--radius-lg)',
-                        transition: 'opacity 0.3s ease',
-                      }}
-                    >
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                        <div
-                          style={{
-                            width: '24px',
-                            height: '24px',
-                            border: '3px solid var(--border)',
-                            borderTopColor: 'var(--primary)',
-                            borderRadius: '50%',
-                            animation: 'spin 0.8s linear infinite',
-                          }}
-                        />
-                        <span style={{ fontSize: '0.875rem', color: 'var(--muted)' }}>Đang cập nhật...</span>
-                      </div>
-                    </div>
-                  )}
-                  <table className="table-striped" style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ background: 'linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0.03) 100%)' }}>
-                        <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '200px' }}>Tên công việc</th>
-                        <th style={{ padding: 'var(--spacing-3)', textAlign: 'right', fontWeight: '600', fontSize: '0.875rem', minWidth: '140px' }}>Tổng tháng</th>
-                        <th style={{ padding: 'var(--spacing-3)', textAlign: 'right', fontWeight: '600', fontSize: '0.875rem', minWidth: '140px' }}>Đã nhận</th>
-                        <th style={{ padding: 'var(--spacing-3)', textAlign: 'right', fontWeight: '600', fontSize: '0.875rem', minWidth: '140px' }}>Chưa nhận</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {workItems.map((item, index) => {
-                        const hasAction = item.pageUrl || item.clickAction;
-                        const pageUrl = item.pageUrl || '';
-                        const rowClass = hasAction ? 'work-item-row' : '';
-                        
-                        return (
-                          <tr
-                            key={item.type}
-                            className={rowClass}
-                            data-page-url={hasAction ? pageUrl : undefined}
-                            data-work-item-index={hasAction ? index : undefined}
-                            onClick={() => {
-                              if (hasAction && pageUrl) {
-                                if (pageUrl.startsWith('staff-cskh-detail:')) {
-                                  navigate(`/staff/${id}/cskh`);
-                                } else {
-                                  navigate(`/${pageUrl}`);
-                                }
-                              }
-                            }}
+                {workItemsLoading && !workItemsData ? (
+                  <TableSkeleton rows={3} columns={4} />
+                ) : workItems.length > 0 ? (
+                  <div className="table-container" style={{ borderRadius: 'var(--radius-lg)', overflow: 'hidden', border: '1px solid var(--border)', position: 'relative' }}>
+                    {/* Loading overlay khi đang refetch */}
+                    {workItemsLoading && workItemsData && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          background: 'rgba(255, 255, 255, 0.7)',
+                          backdropFilter: 'blur(2px)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          zIndex: 10,
+                          borderRadius: 'var(--radius-lg)',
+                          transition: 'opacity 0.3s ease',
+                        }}
+                      >
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                          <div
                             style={{
-                              cursor: hasAction ? 'pointer' : 'default',
-                              transition: 'all 0.2s ease',
+                              width: '24px',
+                              height: '24px',
+                              border: '3px solid var(--border)',
+                              borderTopColor: 'var(--primary)',
+                              borderRadius: '50%',
+                              animation: 'spin 0.8s linear infinite',
                             }}
-                            onMouseEnter={(e) => {
-                              if (hasAction) {
-                                e.currentTarget.style.background = 'rgba(59, 130, 246, 0.05)';
-                                e.currentTarget.style.transform = 'translateX(4px)';
-                              } else {
-                                e.currentTarget.style.background = 'var(--bg-secondary)';
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.background = '';
-                              e.currentTarget.style.transform = 'translateX(0)';
-                            }}
-                          >
-                            <td style={{ padding: 'var(--spacing-3)' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--primary)' }}>
-                                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                  <polyline points="14 2 14 8 20 8" />
-                                </svg>
-                                <span style={{ fontWeight: 500, color: hasAction ? 'var(--primary)' : 'var(--text)' }}>
-                                  {item.name}
-                                </span>
-                              </div>
-                            </td>
-                            <td style={{ padding: 'var(--spacing-3)', textAlign: 'right' }}>
-                              <div style={{ fontWeight: 600, color: 'var(--text)' }}>
-                                {formatCurrencyVND(item.total || 0)}
-                              </div>
-                            </td>
-                            <td style={{ padding: 'var(--spacing-3)', textAlign: 'right' }}>
-                              <div style={{ fontWeight: 500, color: '#059669' }}>
-                                {formatCurrencyVND(item.paid || 0)}
-                              </div>
-                            </td>
-                            <td style={{ padding: 'var(--spacing-3)', textAlign: 'right' }}>
-                              <div style={{ fontWeight: 500, color: '#dc2626' }}>
-                                {formatCurrencyVND(item.unpaid || 0)}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="staff-detail-empty-state">
-                  <p>Chưa có công việc nào trong tháng này.</p>
-                </div>
-              )}
+                          />
+                          <span style={{ fontSize: '0.875rem', color: 'var(--muted)' }}>Đang cập nhật...</span>
+                        </div>
+                      </div>
+                    )}
+                    <table className="table-striped" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ background: 'linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0.03) 100%)' }}>
+                          <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '200px' }}>Tên công việc</th>
+                          <th style={{ padding: 'var(--spacing-3)', textAlign: 'right', fontWeight: '600', fontSize: '0.875rem', minWidth: '140px' }}>Tổng tháng</th>
+                          <th style={{ padding: 'var(--spacing-3)', textAlign: 'right', fontWeight: '600', fontSize: '0.875rem', minWidth: '140px' }}>Đã nhận</th>
+                          <th style={{ padding: 'var(--spacing-3)', textAlign: 'right', fontWeight: '600', fontSize: '0.875rem', minWidth: '140px' }}>Chưa nhận</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {workItems.map((item, index) => {
+                          const hasAction = item.pageUrl || item.clickAction;
+                          const pageUrl = item.pageUrl || '';
+                          const rowClass = hasAction ? 'work-item-row' : '';
+
+                          return (
+                            <tr
+                              key={item.type}
+                              className={rowClass}
+                              data-page-url={hasAction ? pageUrl : undefined}
+                              data-work-item-index={hasAction ? index : undefined}
+                              onClick={() => {
+                                if (hasAction && pageUrl) {
+                                  if (pageUrl.startsWith('staff-cskh-detail:')) {
+                                    navigate(`/staff/${id}/cskh`);
+                                  } else {
+                                    navigate(`/${pageUrl}`);
+                                  }
+                                }
+                              }}
+                              style={{
+                                cursor: hasAction ? 'pointer' : 'default',
+                                transition: 'all 0.2s ease',
+                              }}
+                              onMouseEnter={(e) => {
+                                if (hasAction) {
+                                  e.currentTarget.style.background = 'rgba(59, 130, 246, 0.05)';
+                                  e.currentTarget.style.transform = 'translateX(4px)';
+                                } else {
+                                  e.currentTarget.style.background = 'var(--bg-secondary)';
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = '';
+                                e.currentTarget.style.transform = 'translateX(0)';
+                              }}
+                            >
+                              <td style={{ padding: 'var(--spacing-3)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--primary)' }}>
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                    <polyline points="14 2 14 8 20 8" />
+                                  </svg>
+                                  <span style={{ fontWeight: 500, color: hasAction ? 'var(--primary)' : 'var(--text)' }}>
+                                    {item.name}
+                                  </span>
+                                </div>
+                              </td>
+                              <td style={{ padding: 'var(--spacing-3)', textAlign: 'right' }}>
+                                <div style={{ fontWeight: 600, color: 'var(--text)' }}>
+                                  {formatCurrencyVND(item.total || 0)}
+                                </div>
+                              </td>
+                              <td style={{ padding: 'var(--spacing-3)', textAlign: 'right' }}>
+                                <div style={{ fontWeight: 500, color: '#059669' }}>
+                                  {formatCurrencyVND(item.paid || 0)}
+                                </div>
+                              </td>
+                              <td style={{ padding: 'var(--spacing-3)', textAlign: 'right' }}>
+                                <div style={{ fontWeight: 500, color: '#dc2626' }}>
+                                  {formatCurrencyVND(item.unpaid || 0)}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="staff-detail-empty-state">
+                    <p>Chưa có công việc nào trong tháng này.</p>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1737,9 +1750,9 @@ function StaffDetail() {
             </div>
             <div className="staff-detail-section-content">
               {/* Statistics Row */}
-              <div style={{ 
-                padding: 'var(--spacing-4)', 
-                background: 'var(--bg)', 
+              <div style={{
+                padding: 'var(--spacing-4)',
+                background: 'var(--bg)',
                 border: '1px solid var(--border)',
                 borderBottom: 'none',
                 borderTopLeftRadius: 'var(--radius-lg)',
@@ -1769,106 +1782,106 @@ function StaffDetail() {
               </div>
               {bonuses.length > 0 ? (
                 <div className="table-container" style={{ borderRadius: '0 0 var(--radius-lg) var(--radius-lg)', overflow: 'hidden', border: '1px solid var(--border)', borderTop: 'none', background: 'var(--bg)' }}>
-                <table className="table-striped" style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: 'linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0.03) 100%)' }}>
-                      <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '180px' }}>Công việc</th>
-                      <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '140px' }}>Trạng thái</th>
-                      <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '140px' }}>Số tiền</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {bonuses.map((bonus: Bonus) => {
-                      const status = bonus.status || 'unpaid';
-                      const statusText = status === 'paid' ? 'Đã thanh toán' : status === 'deposit' ? 'Cọc' : 'Chờ thanh toán';
-                      const statusClass = status === 'paid' ? 'badge-success' : status === 'deposit' ? 'badge-warning' : 'badge-danger';
-                      
-                      return (
-                        <tr
-                          key={bonus.id}
-                          className="bonus-row"
-                          data-bonus-id={bonus.id}
-                          style={{
-                            transition: 'all 0.2s ease',
-                            cursor: canManageBonuses ? 'pointer' : 'default',
-                          }}
-                          title={canManageBonuses ? 'Click để chỉnh sửa' : ''}
-                          onClick={(e) => {
-                            // Don't trigger if clicking on delete button
-                            if ((e.target as HTMLElement).closest('.btn-icon-delete')) {
-                              return;
-                            }
-                            if (canManageBonuses) {
-                              setEditingBonus(bonus);
-                              setAddBonusModalOpen(true);
-                            }
-                          }}
-                        >
-                          <td style={{ padding: 'var(--spacing-3)', fontWeight: '500', color: 'var(--text)' }}>{bonus.work_type || 'Khác'}</td>
-                          <td style={{ padding: 'var(--spacing-3)' }}>
-                            <span
-                              className={`badge ${statusClass}`}
-                              style={{
-                                fontSize: 'var(--font-size-xs)',
-                                padding: '4px 10px',
-                                fontWeight: '500',
-                              }}
-                              title={statusText}
-                            >
-                              {statusText}
-                            </span>
-                          </td>
-                          <td style={{ padding: 'var(--spacing-3)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-2)' }}>
-                              <div style={{ fontWeight: '600', color: 'var(--text)' }} title={formatCurrencyVND(bonus.amount || 0)}>
-                                {formatCurrencyVND(bonus.amount || 0)}
+                  <table className="table-striped" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ background: 'linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0.03) 100%)' }}>
+                        <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '180px' }}>Công việc</th>
+                        <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '140px' }}>Trạng thái</th>
+                        <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '140px' }}>Số tiền</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bonuses.map((bonus: Bonus) => {
+                        const status = bonus.status || 'unpaid';
+                        const statusText = status === 'paid' ? 'Đã thanh toán' : status === 'deposit' ? 'Cọc' : 'Chờ thanh toán';
+                        const statusClass = status === 'paid' ? 'badge-success' : status === 'deposit' ? 'badge-warning' : 'badge-danger';
+
+                        return (
+                          <tr
+                            key={bonus.id}
+                            className="bonus-row"
+                            data-bonus-id={bonus.id}
+                            style={{
+                              transition: 'all 0.2s ease',
+                              cursor: canManageBonuses ? 'pointer' : 'default',
+                            }}
+                            title={canManageBonuses ? 'Click để chỉnh sửa' : ''}
+                            onClick={(e) => {
+                              // Don't trigger if clicking on delete button
+                              if ((e.target as HTMLElement).closest('.btn-icon-delete')) {
+                                return;
+                              }
+                              if (canManageBonuses) {
+                                setEditingBonus(bonus);
+                                setAddBonusModalOpen(true);
+                              }
+                            }}
+                          >
+                            <td style={{ padding: 'var(--spacing-3)', fontWeight: '500', color: 'var(--text)' }}>{bonus.work_type || 'Khác'}</td>
+                            <td style={{ padding: 'var(--spacing-3)' }}>
+                              <span
+                                className={`badge ${statusClass}`}
+                                style={{
+                                  fontSize: 'var(--font-size-xs)',
+                                  padding: '4px 10px',
+                                  fontWeight: '500',
+                                }}
+                                title={statusText}
+                              >
+                                {statusText}
+                              </span>
+                            </td>
+                            <td style={{ padding: 'var(--spacing-3)' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-2)' }}>
+                                <div style={{ fontWeight: '600', color: 'var(--text)' }} title={formatCurrencyVND(bonus.amount || 0)}>
+                                  {formatCurrencyVND(bonus.amount || 0)}
+                                </div>
+                                {canManageBonuses && (
+                                  <button
+                                    className="btn-icon-delete"
+                                    data-bonus-id={bonus.id}
+                                    title="Xóa"
+                                    style={{
+                                      background: 'transparent',
+                                      border: 'none',
+                                      color: 'var(--danger)',
+                                      cursor: 'pointer',
+                                      padding: '4px',
+                                      borderRadius: 'var(--radius)',
+                                      transition: 'all 0.2s ease',
+                                      flexShrink: 0,
+                                    }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (window.confirm('Bạn có chắc muốn xóa thưởng này?')) {
+                                        deleteBonus(bonus.id)
+                                          .then(() => {
+                                            toast.success('Đã xóa thưởng');
+                                            refetchBonuses();
+                                          })
+                                          .catch((error: any) => {
+                                            toast.error('Không thể xóa thưởng: ' + (error.message || 'Lỗi không xác định'));
+                                          });
+                                      }
+                                    }}
+                                  >
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                      <polyline points="3 6 5 6 21 6" />
+                                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                    </svg>
+                                  </button>
+                                )}
                               </div>
-                              {canManageBonuses && (
-                                <button
-                                  className="btn-icon-delete"
-                                  data-bonus-id={bonus.id}
-                                  title="Xóa"
-                                  style={{
-                                    background: 'transparent',
-                                    border: 'none',
-                                    color: 'var(--danger)',
-                                    cursor: 'pointer',
-                                    padding: '4px',
-                                    borderRadius: 'var(--radius)',
-                                    transition: 'all 0.2s ease',
-                                    flexShrink: 0,
-                                  }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (window.confirm('Bạn có chắc muốn xóa thưởng này?')) {
-                                      deleteBonus(bonus.id)
-                                        .then(() => {
-                                          toast.success('Đã xóa thưởng');
-                                          refetchBonuses();
-                                        })
-                                        .catch((error: any) => {
-                                          toast.error('Không thể xóa thưởng: ' + (error.message || 'Lỗi không xác định'));
-                                        });
-                                    }
-                                  }}
-                                >
-                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <polyline points="3 6 5 6 21 6" />
-                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                  </svg>
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               ) : (
-                <div style={{ 
-                  padding: 'var(--spacing-6)', 
+                <div style={{
+                  padding: 'var(--spacing-6)',
                   textAlign: 'center',
                   background: 'var(--bg)',
                   border: '1px solid var(--border)',
@@ -2450,7 +2463,7 @@ function QREditModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Validate URL if provided
     if (qrLink.trim() && !/^https?:\/\/.+/i.test(qrLink.trim())) {
       toast.warning('Link QR thanh toán không hợp lệ. Vui lòng nhập link bắt đầu bằng http hoặc https.');
@@ -2722,16 +2735,16 @@ function EditStaffModal({
               </svg>
               Họ tên <span style={{ color: 'var(--danger)' }}>*</span>
             </label>
-              <input
-                type="text"
-                id="editStaffFullName"
-                className="form-control-enhanced"
-                value={formData.fullName}
-                onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                placeholder="Nhập họ và tên đầy đủ"
-                autoComplete="name"
-                required
-              />
+            <input
+              type="text"
+              id="editStaffFullName"
+              className="form-control-enhanced"
+              value={formData.fullName}
+              onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+              placeholder="Nhập họ và tên đầy đủ"
+              autoComplete="name"
+              required
+            />
           </div>
           <div className="form-group-enhanced">
             <label htmlFor="editStaffBirthDate" className="form-label-with-icon">
@@ -2971,8 +2984,8 @@ function EditStaffModal({
                 </button>
               </div>
               <small className="form-hint">
-                {loginInfo?.hasPassword 
-                  ? 'Mật khẩu đã được khai báo. Để trống nếu không muốn thay đổi, hoặc nhập mật khẩu mới.' 
+                {loginInfo?.hasPassword
+                  ? 'Mật khẩu đã được khai báo. Để trống nếu không muốn thay đổi, hoặc nhập mật khẩu mới.'
                   : 'Chưa có mật khẩu. Nhập mật khẩu mới nếu muốn thiết lập.'}
               </small>
             </div>
