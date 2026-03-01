@@ -217,7 +217,7 @@ export async function createSession(sessionData: Omit<Session, 'id' | 'created_a
   const year = sessionDate.getFullYear();
   const month = sessionDate.getMonth() + 1;
   const currentMonth = `${year}-${String(month).padStart(2, '0')}`;
-
+  
   // Calculate previous month
   let previousYear = year;
   let previousMonth = month - 1;
@@ -226,7 +226,7 @@ export async function createSession(sessionData: Omit<Session, 'id' | 'created_a
     previousYear = year - 1;
   }
   const previousMonthStr = `${previousYear}-${String(previousMonth).padStart(2, '0')}`;
-
+  
   // Invalidate cache in background (don't wait)
   if (sessionData.teacher_id) {
     invalidateStaffMonthlyStatsForMonths(sessionData.teacher_id, [currentMonth, previousMonthStr]).catch(() => {
@@ -247,26 +247,7 @@ export async function createSession(sessionData: Omit<Session, 'id' | 'created_a
     .single();
 
   if (error) {
-    // FALLBACK: retry without optional columns that may not exist
-    console.warn(`[createSession] Initial insert failed: ${error.message}, retrying with core fields only`);
-    const optionalFields = ['tuition_fee', 'subsidy_original', 'subsidy_modified_by', 'subsidy_modified_at'];
-    const coreData: any = { id };
-    for (const [key, value] of Object.entries(sessionData)) {
-      if (!optionalFields.includes(key)) {
-        coreData[key] = value;
-      }
-    }
-
-    const { data: retryData, error: retryError } = await supabase
-      .from('sessions')
-      .insert(coreData)
-      .select()
-      .single();
-
-    if (retryError) {
-      throw new Error(`Failed to create session: ${retryError.message}`);
-    }
-    return retryData as Session;
+    throw new Error(`Failed to create session: ${error.message}`);
   }
 
   // NOTE: Do NOT call applySessionToStudents here anymore
@@ -288,45 +269,11 @@ export async function updateSession(id: string, updates: Partial<Omit<Session, '
   if (!existing) {
     throw new Error('Session not found');
   }
-
+  
   const { data, error } = await supabase.from('sessions').update(updates).eq('id', id).select().single();
 
   if (error) {
-    // FALLBACK: If update fails, retry with only core fields (optional columns may not exist)
-    console.warn(`[updateSession] Initial update failed: ${error.message}, retrying with core fields only`);
-    const optionalFields = ['tuition_fee', 'subsidy_original', 'subsidy_modified_by', 'subsidy_modified_at'];
-    const coreUpdates: any = {};
-    for (const [key, value] of Object.entries(updates)) {
-      if (!optionalFields.includes(key)) {
-        coreUpdates[key] = value;
-      }
-    }
-
-    const { data: retryData, error: retryError } = await supabase.from('sessions').update(coreUpdates).eq('id', id).select().single();
-    if (retryError) {
-      throw new Error(`Failed to update session: ${retryError.message}`);
-    }
-
-    // Invalidate cache for affected months
-    const sessionDate = new Date(coreUpdates.date || existing.date);
-    const year = sessionDate.getFullYear();
-    const month = sessionDate.getMonth() + 1;
-    const currentMonth = `${year}-${String(month).padStart(2, '0')}`;
-
-    let previousYear = year;
-    let previousMonth = month - 1;
-    if (previousMonth === 0) {
-      previousMonth = 12;
-      previousYear = year - 1;
-    }
-    const previousMonthStr = `${previousYear}-${String(previousMonth).padStart(2, '0')}`;
-
-    const teacherId = coreUpdates.teacher_id || existing.teacher_id;
-    if (teacherId) {
-      invalidateStaffMonthlyStatsForMonths(teacherId, [currentMonth, previousMonthStr]).catch(() => { });
-    }
-
-    return retryData as Session;
+    throw new Error(`Failed to update session: ${error.message}`);
   }
 
   // Invalidate cache for affected months
@@ -334,7 +281,7 @@ export async function updateSession(id: string, updates: Partial<Omit<Session, '
   const year = sessionDate.getFullYear();
   const month = sessionDate.getMonth() + 1;
   const currentMonth = `${year}-${String(month).padStart(2, '0')}`;
-
+  
   let previousYear = year;
   let previousMonth = month - 1;
   if (previousMonth === 0) {
@@ -342,10 +289,10 @@ export async function updateSession(id: string, updates: Partial<Omit<Session, '
     previousYear = year - 1;
   }
   const previousMonthStr = `${previousYear}-${String(previousMonth).padStart(2, '0')}`;
-
+  
   const teacherId = updates.teacher_id || existing.teacher_id;
   if (teacherId) {
-    invalidateStaffMonthlyStatsForMonths(teacherId, [currentMonth, previousMonthStr]).catch(() => { });
+    invalidateStaffMonthlyStatsForMonths(teacherId, [currentMonth, previousMonthStr]).catch(() => {});
   }
 
   return data as Session;
@@ -360,7 +307,7 @@ export async function deleteSession(id: string): Promise<void> {
   if (!existing) {
     throw new Error('Session not found');
   }
-
+  
   // Rollback financials by deleting attendance (which will rollback)
   const { deleteAttendanceBySession } = await import('./attendanceService');
   try {
@@ -369,13 +316,13 @@ export async function deleteSession(id: string): Promise<void> {
     console.error('[deleteSession] Error deleting attendance:', attendanceError);
     // Continue with session deletion even if attendance deletion fails
   }
-
+  
   // Invalidate cache for affected months
   const sessionDate = new Date(existing.date);
   const year = sessionDate.getFullYear();
   const month = sessionDate.getMonth() + 1;
   const currentMonth = `${year}-${String(month).padStart(2, '0')}`;
-
+  
   let previousYear = year;
   let previousMonth = month - 1;
   if (previousMonth === 0) {
@@ -383,9 +330,9 @@ export async function deleteSession(id: string): Promise<void> {
     previousYear = year - 1;
   }
   const previousMonthStr = `${previousYear}-${String(previousMonth).padStart(2, '0')}`;
-
+  
   if (existing.teacher_id) {
-    invalidateStaffMonthlyStatsForMonths(existing.teacher_id, [currentMonth, previousMonthStr]).catch(() => { });
+    invalidateStaffMonthlyStatsForMonths(existing.teacher_id, [currentMonth, previousMonthStr]).catch(() => {});
   }
   const { error } = await supabase.from('sessions').delete().eq('id', id);
 

@@ -3,6 +3,7 @@
  */
 
 import { Router } from 'express';
+import supabase from '../config/database';
 import { getSessions, getSessionsForDateRange, getSessionById, createSession, updateSession, deleteSession } from '../services/sessionsService';
 import { authenticate, optionalAuthenticate, AuthRequest } from '../middleware/auth';
 
@@ -105,9 +106,21 @@ router.post('/', authenticate, async (req, res, next) => {
  * PUT /api/sessions/:id
  * Update an existing session
  * Requires authentication
+ * Giáo viên chỉ được sửa buổi học do mình tạo (teacher_id = link_id)
  */
-router.put('/:id', authenticate, async (req, res, next) => {
+router.put('/:id', authenticate, async (req: AuthRequest, res, next) => {
   try {
+    if (req.user?.role === 'teacher') {
+      const session = await getSessionById(req.params.id);
+      if (!session) {
+        return res.status(404).json({ error: 'Session not found' });
+      }
+      const { data: user } = await supabase.from('users').select('link_id').eq('id', req.user.userId).single();
+      const sessionTeacherId = (session as any).teacher_id || (session as any).teacherId;
+      if (user?.link_id !== sessionTeacherId) {
+        return res.status(403).json({ error: 'Bạn chỉ có thể chỉnh sửa buổi học do mình tạo' });
+      }
+    }
     const session = await updateSession(req.params.id, req.body);
     res.json(session);
   } catch (error) {
@@ -119,9 +132,21 @@ router.put('/:id', authenticate, async (req, res, next) => {
  * DELETE /api/sessions/:id
  * Delete a session
  * Requires authentication
+ * Giáo viên chỉ được xóa buổi học do mình tạo (teacher_id = link_id)
  */
-router.delete('/:id', authenticate, async (req, res, next) => {
+router.delete('/:id', authenticate, async (req: AuthRequest, res, next) => {
   try {
+    if (req.user?.role === 'teacher') {
+      const session = await getSessionById(req.params.id);
+      if (!session) {
+        return res.status(404).json({ error: 'Session not found' });
+      }
+      const { data: user } = await supabase.from('users').select('link_id').eq('id', req.user.userId).single();
+      const sessionTeacherId = (session as any).teacher_id || (session as any).teacherId;
+      if (user?.link_id !== sessionTeacherId) {
+        return res.status(403).json({ error: 'Bạn chỉ có thể xóa buổi học do mình tạo' });
+      }
+    }
     await deleteSession(req.params.id);
     res.status(204).send();
   } catch (error) {

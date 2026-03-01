@@ -61,7 +61,7 @@ export async function getCostById(id: string): Promise<Cost | null> {
 export async function createCost(costData: Omit<Cost, 'id' | 'created_at' | 'updated_at'>): Promise<Cost> {
   // Generate ID for new cost
   const id = `COST${Date.now()}${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
-
+  
   // Ensure month is derived from date if provided
   const month = costData.month || (costData.date ? costData.date.slice(0, 7) : '');
   if (!month) {
@@ -95,23 +95,14 @@ export async function createCost(costData: Omit<Cost, 'id' | 'created_at' | 'upd
       console.warn('Invalid date format, skipping date field:', costData.date);
     }
   }
-
+  
   // Only add status if it's a valid value
   if (costData.status && (costData.status === 'paid' || costData.status === 'pending')) {
     payload.status = costData.status;
   }
 
   console.log('Inserting cost payload:', JSON.stringify(payload, null, 2));
-  let { data, error } = await supabase.from('costs').insert(payload).select().single();
-
-  // If insert fails (e.g., missing date/status columns from unapplied migration), retry with core fields only
-  if (error) {
-    console.warn('Insert with full payload failed, retrying with core fields only:', error.message);
-    const corePayload = { id, month, category: costData.category.trim(), amount: Number(costData.amount) };
-    const retryResult = await supabase.from('costs').insert(corePayload).select().single();
-    data = retryResult.data;
-    error = retryResult.error;
-  }
+  const { data, error } = await supabase.from('costs').insert(payload).select().single();
 
   if (error) {
     console.error('Supabase error creating cost:', error);
@@ -133,16 +124,7 @@ export async function updateCost(id: string, updates: Partial<Omit<Cost, 'id' | 
     payload.month = updates.date.slice(0, 7);
   }
 
-  let { data, error } = await supabase.from('costs').update(payload).eq('id', id).select().single();
-
-  // If update fails (e.g., missing date/status columns from unapplied migration), retry without optional fields
-  if (error) {
-    console.warn('Update with full payload failed, retrying without optional fields:', error.message);
-    const { date, status, ...corePayload } = payload;
-    const retryResult = await supabase.from('costs').update(corePayload).eq('id', id).select().single();
-    data = retryResult.data;
-    error = retryResult.error;
-  }
+  const { data, error } = await supabase.from('costs').update(payload).eq('id', id).select().single();
 
   if (error) {
     throw new Error(`Failed to update cost: ${error.message}`);

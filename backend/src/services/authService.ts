@@ -31,6 +31,7 @@ export interface AuthResult {
     email: string;
     name: string;
     role: string;
+    linkId?: string | null;
   };
 }
 
@@ -91,7 +92,7 @@ export async function login(credentials: LoginCredentials): Promise<AuthResult> 
   // Try email first (exact match, case-insensitive using ilike with pattern)
   const { data: emailUsers, error: emailError } = await supabase
     .from('users')
-    .select('id, email, password, name, role, phone, account_handle')
+    .select('id, email, password, name, role, phone, account_handle, link_id')
     .ilike('email', `%${loginInput}%`)
     .limit(10);
 
@@ -107,7 +108,7 @@ export async function login(credentials: LoginCredentials): Promise<AuthResult> 
   if (!user) {
     const { data: phoneUsers, error: phoneError } = await supabase
       .from('users')
-      .select('id, email, password, name, role, phone, account_handle')
+      .select('id, email, password, name, role, phone, account_handle, link_id')
       .ilike('phone', `%${loginInput}%`)
       .limit(10);
 
@@ -123,7 +124,7 @@ export async function login(credentials: LoginCredentials): Promise<AuthResult> 
     if (!user) {
       const { data: handleUsers, error: handleError } = await supabase
         .from('users')
-        .select('id, email, password, name, role, phone, account_handle')
+        .select('id, email, password, name, role, phone, account_handle, link_id')
         .ilike('account_handle', `%${loginInput}%`)
         .limit(10);
 
@@ -213,6 +214,7 @@ export async function login(credentials: LoginCredentials): Promise<AuthResult> 
       email: user.email,
       name: user.name || '',
       role: user.role,
+      linkId: user.link_id || null,
     },
   };
 }
@@ -286,7 +288,7 @@ export async function register(data: RegisterData): Promise<AuthResult> {
 export async function getUserById(userId: string) {
   const { data: user, error } = await supabase
     .from('users')
-    .select('id, email, name, role, status')
+    .select('id, email, name, role, status, link_id')
     .eq('id', userId)
     .single();
 

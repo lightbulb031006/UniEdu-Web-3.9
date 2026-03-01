@@ -26,8 +26,8 @@ export interface Class {
 
 export async function getClasses(filters: ClassFilters = {}) {
   try {
-    // Select all columns - using select('*') to avoid errors when optional columns like teacher_ids don't exist
-    let query = supabase.from('classes').select('*');
+    // Select columns including denormalized teacher_ids for fast access
+    let query = supabase.from('classes').select('id, name, type, status, max_students, tuition_per_session, scale_amount, max_allowance_per_session, student_tuition_per_session, tuition_package_total, tuition_package_sessions, schedule, custom_teacher_allowances, teacher_ids, created_at, updated_at');
 
     if (filters.status && filters.status !== 'all') {
       if (filters.status === 'stopped') {
@@ -91,8 +91,8 @@ export async function getClasses(filters: ClassFilters = {}) {
 
 export async function getClassById(id: string, options: { includeTeachers?: boolean; user?: { userId: string; role: string; email?: string } } = {}) {
   try {
-    // Select all columns - using select('*') to avoid errors when optional columns don't exist
-    const { data, error } = await supabase.from('classes').select('*').eq('id', id).single();
+    // Select columns including denormalized teacher_ids for fast access
+    const { data, error } = await supabase.from('classes').select('id, name, type, status, max_students, tuition_per_session, scale_amount, max_allowance_per_session, student_tuition_per_session, tuition_package_total, tuition_package_sessions, schedule, custom_teacher_allowances, teacher_ids, created_at, updated_at').eq('id', id).single();
 
     if (error) {
       if ((error as any).code === 'PGRST116') {
@@ -107,13 +107,13 @@ export async function getClassById(id: string, options: { includeTeachers?: bool
     }
 
     const cls = data as any;
-
+    
     // Filter sensitive financial data if user is not admin or staff
     const user = options.user;
     const isAdmin = user?.role === 'admin';
     const isAccountant = user?.role === 'accountant';
     const isStaff = user?.role === 'teacher'; // Teachers can see financial data for their classes
-
+    
     // If no user or user doesn't have permission, remove sensitive fields
     // BUT keep custom_teacher_allowances for getClassDetailData to calculate teacher stats
     // (The allowance values are needed for display, even if user can't see other financial data)
@@ -193,7 +193,7 @@ export async function createClass(classData: Omit<Class, 'id' | 'teacher_ids'> &
 
   // Prepare insert data - map camelCase fields to snake_case for database
   const insertData: any = { id };
-
+  
   // Map camelCase fields to snake_case for database
   const fieldMapping: Record<string, string> = {
     name: 'name',
@@ -214,7 +214,7 @@ export async function createClass(classData: Omit<Class, 'id' | 'teacher_ids'> &
     if (key === 'teacherIds' || key === 'teacher_ids' || key === 'teacherId' || key === 'teacher_id') {
       return;
     }
-
+    
     if (fieldMapping[key] !== undefined) {
       const dbField = fieldMapping[key];
       let value = classFields[key];
@@ -223,15 +223,15 @@ export async function createClass(classData: Omit<Class, 'id' | 'teacher_ids'> &
       }
       // Handle empty string for numeric fields - convert to null
       if ((dbField === 'tuition_package_sessions' ||
-        dbField === 'tuition_package_total' ||
-        dbField === 'student_tuition_per_session' ||
-        dbField === 'tuition_per_session' ||
-        dbField === 'scale_amount' ||
-        dbField === 'max_allowance_per_session') &&
-        value === '') {
+           dbField === 'tuition_package_total' ||
+           dbField === 'student_tuition_per_session' ||
+           dbField === 'tuition_per_session' ||
+           dbField === 'scale_amount' ||
+           dbField === 'max_allowance_per_session') &&
+          value === '') {
         value = null;
       }
-
+      
       insertData[dbField] = value;
     } else if (key === 'schedule' || key === 'customTeacherAllowances') {
       // These are handled separately if needed
@@ -290,7 +290,7 @@ export async function updateClass(id: string, classData: Partial<Class> & { teac
 
   // Prepare update data - only include fields that exist in the database schema
   const updateData: any = {};
-
+  
   // Map camelCase fields to snake_case for database
   const fieldMapping: Record<string, string> = {
     name: 'name',
@@ -314,16 +314,16 @@ export async function updateClass(id: string, classData: Partial<Class> & { teac
         value = 'ended';
       }
       // Handle empty string for numeric fields - convert to null
-      if ((dbField === 'tuition_package_sessions' ||
-        dbField === 'tuition_package_total' ||
-        dbField === 'student_tuition_per_session' ||
-        dbField === 'tuition_per_session' ||
-        dbField === 'scale_amount' ||
-        dbField === 'max_allowance_per_session') &&
-        value === '') {
+      if ((dbField === 'tuition_package_sessions' || 
+           dbField === 'tuition_package_total' || 
+           dbField === 'student_tuition_per_session' ||
+           dbField === 'tuition_per_session' ||
+           dbField === 'scale_amount' ||
+           dbField === 'max_allowance_per_session') && 
+          value === '') {
         value = null;
       }
-
+      
       updateData[dbField] = value;
     } else if (key === 'schedule' || key === 'customTeacherAllowances') {
       // These are handled separately
@@ -459,12 +459,12 @@ export async function removeTeacherFromClass(classId: string, teacherId: string)
 
   if (classData) {
     const currentAllowances = (classData.custom_teacher_allowances as Record<string, number>) || {};
-
+    
     // Ensure allowance entry exists for history tracking
     if (!currentAllowances.hasOwnProperty(teacherId) || currentAllowances[teacherId] === null || currentAllowances[teacherId] === undefined) {
       const defaultAllowance = classData.tuition_per_session || 0;
       currentAllowances[teacherId] = defaultAllowance;
-
+      
       // Update class to keep the allowance entry
       await supabase
         .from('classes')
@@ -531,8 +531,8 @@ export async function getClassStudentsWithRemainingSessions(classId: string) {
   const classDefaultTuition = classData?.student_tuition_per_session || 0;
   const classPackageTotal = classData?.tuition_package_total || 0;
   const classPackageSessions = classData?.tuition_package_sessions || 0;
-  const classCalculatedTuition = classDefaultTuition > 0
-    ? classDefaultTuition
+  const classCalculatedTuition = classDefaultTuition > 0 
+    ? classDefaultTuition 
     : (classPackageTotal > 0 && classPackageSessions > 0 ? classPackageTotal / classPackageSessions : 0);
 
   // Process each student_class record
@@ -547,8 +547,8 @@ export async function getClassStudentsWithRemainingSessions(classId: string) {
     const studentFeeTotal = sc.student_fee_total || 0;
     const studentFeeSessions = sc.student_fee_sessions || 0;
     const calculatedFromFee = studentFeeTotal > 0 && studentFeeSessions > 0 ? studentFeeTotal / studentFeeSessions : 0;
-    const tuitionPerSession = studentTuitionPerSession > 0
-      ? studentTuitionPerSession
+    const tuitionPerSession = studentTuitionPerSession > 0 
+      ? studentTuitionPerSession 
       : (calculatedFromFee > 0 ? calculatedFromFee : classCalculatedTuition);
 
     return {
@@ -660,7 +660,7 @@ export async function addStudentToClass(studentId: string, classId: string) {
   // Create student_classes record
   const id = `SC${Date.now()}${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
   const startDate = new Date().toISOString().slice(0, 10);
-
+  
   const { data, error } = await supabase
     .from('student_classes')
     .insert([
@@ -678,12 +678,12 @@ export async function addStudentToClass(studentId: string, classId: string) {
   if (error) {
     console.error('Failed to add student to class:', error);
     console.error('Insert data:', { id, student_id: studentId, class_id: classId, start_date: startDate, status: 'active' });
-
+    
     // Handle unique constraint violation
     if (error.code === '23505') {
       throw new Error('Học sinh đã có trong lớp này');
     }
-
+    
     throw new Error(`Không thể thêm học sinh vào lớp: ${error.message}`);
   }
 
@@ -708,7 +708,7 @@ export async function removeStudentFromClass(studentId: string, classId: string,
 export async function moveStudentToClass(studentId: string, fromClassId: string, toClassId: string, refundRemaining: boolean = true) {
   // First, remove student from current class (with optional refund)
   await removeStudentFromClass(studentId, fromClassId, refundRemaining);
-
+  
   // Then, add student to new class
   // Check if student is already in the new class
   const { data: existing } = await supabase
@@ -857,7 +857,7 @@ export async function getClassDetailData(classId: string, user?: { userId: strin
 
   const teacherStats = (teachers || []).map((teacher: any) => {
     const teacherSessions = (sessions || []).filter((s: any) => s.teacher_id === teacher.id);
-
+    
     // Calculate unpaid amount from unpaid sessions in the last 30 days
     const unpaidAmount = teacherSessions
       .filter((s: any) => {
@@ -880,7 +880,7 @@ export async function getClassDetailData(classId: string, user?: { userId: strin
           const studentPaidCount = Number(s.student_paid_count || 0);
           const scaleAmount = Number((classData as any).scale_amount || 0);
           const maxPerSession = Number((classData as any).max_allowance_per_session || 0);
-
+          
           allowance = baseAllowance * coefficient * studentPaidCount + scaleAmount;
           if (maxPerSession > 0 && allowance > maxPerSession) {
             allowance = maxPerSession;

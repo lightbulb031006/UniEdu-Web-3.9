@@ -81,6 +81,7 @@ router.get('/me', authenticate, async (req: any, res, next) => {
       email: user.email,
       name: user.name,
       role: user.role,
+      linkId: (user as any).link_id || null,
     });
   } catch (error) {
     next(error);
