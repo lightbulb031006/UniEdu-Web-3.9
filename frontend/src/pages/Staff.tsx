@@ -1,12 +1,14 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDataLoading } from '../hooks/useDataLoading';
-import { fetchTeachers, Teacher } from '../services/teachersService';
+import { fetchTeachers, createTeacher, Teacher } from '../services/teachersService';
 import { getStaffUnpaidAmounts } from '../services/staffService';
 import { useAuthStore } from '../store/authStore';
 import { hasRole, userHasStaffRole } from '../utils/permissions';
 import { formatCurrencyVND, formatNumber } from '../utils/formatters';
 import { SkeletonLoader } from '../components/SkeletonLoader';
+import { toast } from '../utils/toast';
+import Modal from '../components/Modal';
 
 /**
  * Staff Page Component - Nhân sự
@@ -46,6 +48,21 @@ function Staff() {
   const [search, setSearch] = useState('');
   const [province, setProvince] = useState('all');
   const [status, setStatus] = useState('all');
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addFormData, setAddFormData] = useState({
+    fullName: '',
+    birthDate: '',
+    birthYear: new Date().getFullYear() - 25,
+    university: '',
+    highSchool: '',
+    province: '',
+    email: '',
+    phone: '',
+    specialization: '',
+    photoUrl: '',
+    status: 'active' as 'active' | 'inactive',
+    roles: [] as string[],
+  });
 
   const { data, isLoading, error, refetch } = useDataLoading(
     () => fetchTeachers(),
@@ -58,12 +75,12 @@ function Staff() {
 
   // Ensure teachers is always an array
   const teachers = Array.isArray(data) ? data : [];
-  
+
   // Check if user is tutor (teacher staff role)
   const isTutor = userHasStaffRole('teacher', user, teachers);
   const isAdmin = hasRole('admin');
   const isAccountant = hasRole('accountant');
-  
+
   // Redirect teacher (tutor) away from staff list page - only admin and accountant can access
   useEffect(() => {
     if (user?.role === 'teacher' && isTutor && !isAdmin && !isAccountant) {
@@ -81,7 +98,7 @@ function Staff() {
     const staffIds = teachers.map((t) => t.id);
     return await getStaffUnpaidAmounts(staffIds);
   }, [teachers]);
-  
+
   const { data: unpaidAmountsData, isLoading: isLoadingUnpaid, refetch: refetchUnpaidAmounts } = useDataLoading(
     fetchUnpaidAmountsFn,
     [teachers.length > 0 ? teachers.map(t => t.id).join(',') : ''],
@@ -93,9 +110,9 @@ function Staff() {
       refetchInterval: 30 * 1000, // Tự động refetch mỗi 30 giây
     }
   );
-  
+
   const unpaidAmounts = unpaidAmountsData || {};
-  
+
   // Refetch unpaid amounts when component becomes visible (user navigates back from detail page)
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -104,23 +121,23 @@ function Staff() {
         refetchUnpaidAmounts();
       }
     };
-    
+
     const handleFocus = () => {
       if (teachers.length > 0) {
         // Refetch when window gains focus (user quay lại từ window khác)
         refetchUnpaidAmounts();
       }
     };
-    
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', handleFocus);
-    
+
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleFocus);
     };
   }, [refetchUnpaidAmounts, teachers.length]);
-  
+
   // Refetch when navigating to this page (using location change)
   const location = window.location;
   useEffect(() => {
@@ -189,6 +206,54 @@ function Staff() {
     navigate(`/staff/${staffId}`);
   };
 
+  const handleOpenAddModal = () => {
+    setAddFormData({
+      fullName: '',
+      birthDate: '',
+      birthYear: new Date().getFullYear() - 25,
+      university: '',
+      highSchool: '',
+      province: '',
+      email: '',
+      phone: '',
+      specialization: '',
+      photoUrl: '',
+      status: 'active',
+      roles: [],
+    });
+    setShowAddModal(true);
+  };
+
+  const handleAddSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const teacherData: any = {
+        fullName: addFormData.fullName.trim(),
+        province: addFormData.province.trim(),
+        status: addFormData.status,
+      };
+      if (addFormData.birthDate) {
+        teacherData.birthDate = addFormData.birthDate;
+      } else if (addFormData.birthYear) {
+        teacherData.birthYear = addFormData.birthYear;
+      }
+      if (addFormData.university) teacherData.university = addFormData.university.trim();
+      if (addFormData.highSchool) teacherData.highSchool = addFormData.highSchool.trim();
+      if (addFormData.email) teacherData.email = addFormData.email.trim();
+      if (addFormData.phone) teacherData.phone = addFormData.phone.trim();
+      if (addFormData.specialization) teacherData.specialization = addFormData.specialization.trim();
+      if (addFormData.photoUrl) teacherData.photoUrl = addFormData.photoUrl.trim();
+      if (addFormData.roles && addFormData.roles.length > 0) teacherData.roles = addFormData.roles;
+
+      await createTeacher(teacherData);
+      setShowAddModal(false);
+      toast.success('Đã thêm nhân sự mới');
+      refetch();
+    } catch (err: any) {
+      toast.error('Lỗi khi thêm nhân sự: ' + (err.response?.data?.error || err.message || 'Lỗi không xác định'));
+    }
+  };
+
   if (error) {
     return (
       <div className="page-container" style={{ padding: 'var(--spacing-6)' }}>
@@ -207,7 +272,7 @@ function Staff() {
     <div className="page-container" style={{ padding: 'var(--spacing-6)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-4)' }}>
         <h2>Nhân sự</h2>
-        <button className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
+        <button className="btn btn-primary" onClick={handleOpenAddModal} style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
@@ -372,6 +437,179 @@ function Staff() {
           </div>
         )}
       </div>
+
+      {/* Add Staff Modal */}
+      <Modal
+        title="Thêm nhân sự mới"
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        size="md"
+      >
+        <form onSubmit={handleAddSubmit}>
+          <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
+            <label htmlFor="staffFullName" className="form-label">Họ và tên *</label>
+            <input
+              type="text"
+              id="staffFullName"
+              className="form-control"
+              value={addFormData.fullName}
+              onChange={(e) => setAddFormData({ ...addFormData, fullName: e.target.value })}
+              required
+              placeholder="Nhập họ và tên đầy đủ"
+            />
+          </div>
+
+          <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
+            <label htmlFor="staffBirthDate" className="form-label">Ngày tháng năm sinh *</label>
+            <input
+              type="date"
+              id="staffBirthDate"
+              className="form-control"
+              value={addFormData.birthDate}
+              onChange={(e) => {
+                const date = e.target.value;
+                setAddFormData({
+                  ...addFormData,
+                  birthDate: date,
+                  birthYear: date ? new Date(date).getFullYear() : addFormData.birthYear,
+                });
+              }}
+              max={new Date(new Date().setFullYear(new Date().getFullYear() - 18)).toISOString().split('T')[0]}
+              required
+            />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--spacing-3)', marginBottom: 'var(--spacing-3)' }}>
+            <div className="form-group">
+              <label htmlFor="staffUniversity" className="form-label">Đại học</label>
+              <input
+                type="text"
+                id="staffUniversity"
+                className="form-control"
+                value={addFormData.university}
+                onChange={(e) => setAddFormData({ ...addFormData, university: e.target.value })}
+                placeholder="Tên trường đại học (tùy chọn)"
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="staffHighSchool" className="form-label">Trường THPT *</label>
+              <input
+                type="text"
+                id="staffHighSchool"
+                className="form-control"
+                value={addFormData.highSchool}
+                onChange={(e) => setAddFormData({ ...addFormData, highSchool: e.target.value })}
+                required
+                placeholder="Tên trường THPT"
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--spacing-3)', marginBottom: 'var(--spacing-3)' }}>
+            <div className="form-group">
+              <label htmlFor="staffEmail" className="form-label">Email *</label>
+              <input
+                type="email"
+                id="staffEmail"
+                className="form-control"
+                value={addFormData.email}
+                onChange={(e) => setAddFormData({ ...addFormData, email: e.target.value })}
+                required
+                placeholder="email@example.com"
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="staffPhone" className="form-label">Số điện thoại *</label>
+              <input
+                type="tel"
+                id="staffPhone"
+                className="form-control"
+                value={addFormData.phone}
+                onChange={(e) => setAddFormData({ ...addFormData, phone: e.target.value })}
+                required
+                placeholder="0912345678"
+              />
+            </div>
+          </div>
+
+          <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
+            <label htmlFor="staffSpecialization" className="form-label">Mô tả chuyên môn *</label>
+            <textarea
+              id="staffSpecialization"
+              className="form-control"
+              rows={4}
+              value={addFormData.specialization}
+              onChange={(e) => setAddFormData({ ...addFormData, specialization: e.target.value })}
+              required
+              placeholder="Mô tả chi tiết về môn dạy, kinh nghiệm, thế mạnh..."
+            />
+          </div>
+
+          <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
+            <label htmlFor="staffProvince" className="form-label">Tỉnh thành *</label>
+            <input
+              type="text"
+              id="staffProvince"
+              className="form-control"
+              value={addFormData.province}
+              onChange={(e) => setAddFormData({ ...addFormData, province: e.target.value })}
+              required
+              placeholder="Tỉnh/Thành phố"
+            />
+          </div>
+
+          <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
+            <label htmlFor="staffPhotoUrl" className="form-label">Link ảnh đại diện</label>
+            <input
+              type="url"
+              id="staffPhotoUrl"
+              className="form-control"
+              value={addFormData.photoUrl}
+              onChange={(e) => setAddFormData({ ...addFormData, photoUrl: e.target.value })}
+              placeholder="https://example.com/photo.jpg"
+            />
+          </div>
+
+          <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
+            <label className="form-label">Vai trò</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-2)' }}>
+              {Object.entries(STAFF_ROLE_LABELS).map(([role, label]) => (
+                <label key={role} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: 'var(--font-size-sm)' }}>
+                  <input
+                    type="checkbox"
+                    checked={addFormData.roles.includes(role)}
+                    onChange={(e) => {
+                      const newRoles = e.target.checked
+                        ? [...addFormData.roles, role]
+                        : addFormData.roles.filter((r) => r !== role);
+                      setAddFormData({ ...addFormData, roles: newRoles });
+                    }}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
+            <label htmlFor="staffStatus" className="form-label">Trạng thái</label>
+            <select
+              id="staffStatus"
+              className="form-control"
+              value={addFormData.status}
+              onChange={(e) => setAddFormData({ ...addFormData, status: e.target.value as 'active' | 'inactive' })}
+            >
+              <option value="active">Đang hoạt động</option>
+              <option value="inactive">Ngừng hoạt động</option>
+            </select>
+          </div>
+
+          <div className="form-actions" style={{ display: 'flex', gap: 'var(--spacing-2)', justifyContent: 'flex-end', marginTop: 'var(--spacing-4)' }}>
+            <button type="button" className="btn btn-secondary" onClick={() => setShowAddModal(false)}>Hủy</button>
+            <button type="submit" className="btn btn-primary">Tạo mới</button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }
