@@ -57,14 +57,14 @@ const isVercelOrigin = (origin: string): boolean => {
 
 // Helper function to check if origin is custom domain (unicornsedu.com)
 const isCustomDomain = (origin: string): boolean => {
-  return origin.includes('unicornsedu.com');
+  return origin.includes('unicornsedu.com') || origin.includes('unicorns.id.vn');
 };
 
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
-    
+
     // In production, allow Vercel preview URLs, custom domain, and configured FRONTEND_URL
     if (env.NODE_ENV === 'production') {
       if (allowedOrigins.includes(origin) || isVercelOrigin(origin) || isCustomDomain(origin)) {
@@ -76,7 +76,7 @@ app.use(cors({
         return callback(null, true);
       }
     }
-    
+
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
@@ -139,21 +139,21 @@ function killProcessOnPort(port: number): boolean {
     const { execSync } = require('child_process');
     const isWindows = process.platform === 'win32';
     let killed = false;
-    
+
     if (isWindows) {
       // Windows: Find process using port
       try {
         const result = execSync(`netstat -ano | findstr :${port}`, { encoding: 'utf-8' });
         const lines = result.trim().split('\n');
         const pids = new Set<string>();
-        
+
         for (const line of lines) {
           const match = line.match(/\s+(\d+)\s*$/);
           if (match) {
             pids.add(match[1]);
           }
         }
-        
+
         // Kill each process
         for (const pid of pids) {
           try {
@@ -236,7 +236,7 @@ function startServer() {
       logger.error(`❌ Port ${PORT} is already in use!`);
       logger.warn(`Attempting to kill process on port ${PORT}...`);
       const killed = killProcessOnPort(PORT);
-      
+
       if (killed) {
         logger.info(`Waiting 2 seconds for port to be released...`);
         setTimeout(() => {
