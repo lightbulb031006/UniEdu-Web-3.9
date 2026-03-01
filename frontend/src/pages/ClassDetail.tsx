@@ -42,7 +42,7 @@ function ClassDetail() {
   // Collapsible sections state
   const [studentsExpanded, setStudentsExpanded] = useState(true);
   const [sessionsExpanded, setSessionsExpanded] = useState(true);
-  
+
   // Tab state for Sessions/Surveys section
   const [activeTab, setActiveTab] = useState<'sessions' | 'surveys'>('sessions');
 
@@ -66,13 +66,13 @@ function ClassDetail() {
   const [isEditingHeaderTuitionFee, setIsEditingHeaderTuitionFee] = useState<boolean>(false);
   const [editingHeaderTuitionFeeValue, setEditingHeaderTuitionFeeValue] = useState<number>(0);
   const [isHeaderTuitionFeeManuallyEdited, setIsHeaderTuitionFeeManuallyEdited] = useState<boolean>(false);
-  
+
   // State for Edit Session Modal header tuition fee
   const [editHeaderTuitionFee, setEditHeaderTuitionFee] = useState<number>(0);
   const [isEditingEditHeaderTuitionFee, setIsEditingEditHeaderTuitionFee] = useState<boolean>(false);
   const [editingEditHeaderTuitionFeeValue, setEditingEditHeaderTuitionFeeValue] = useState<number>(0);
   const [isEditHeaderTuitionFeeManuallyEdited, setIsEditHeaderTuitionFeeManuallyEdited] = useState<boolean>(false);
-  
+
   // Callback to handle estimated tuition fee changes from EditSessionModal
   const handleEditEstimatedTuitionFeeChange = useCallback((fee: number) => {
     // Only update if not manually edited AND if we don't have a value from DB yet
@@ -272,12 +272,12 @@ function ClassDetail() {
   const canManageTeacherList = canManage;
   // Show financial details only if authenticated and admin
   const showClassFinancialDetails = isAuthenticated && isAdmin;
-  
+
   // Payment status management permissions
   const userStaffRoles = isAuthenticated ? getUserStaffRoles(currentUser, classTeachers) : [];
   const hasCskhPrivileges = isAuthenticated && userHasStaffRole('cskh_sale', currentUser, classTeachers);
   const canManagePaymentStatus = isAuthenticated && (isAdmin || hasRole('accountant') || hasCskhPrivileges);
-  
+
   // Session management permissions
   // Teacher role hoặc staff role 'teacher' đều có thể tạo/chỉnh sửa session
   const isTutor = isAuthenticated && (currentUser?.role === 'teacher' || userHasStaffRole('teacher', currentUser, classTeachers));
@@ -347,7 +347,7 @@ function ClassDetail() {
       const sessionMonth = s.date.slice(0, 7); // YYYY-MM
       return sessionMonth === selectedMonth;
     });
-    
+
     // Sort by created_at (newest first), then by date and time
     return filtered.sort((a, b) => {
       // First sort by created_at (newest first)
@@ -416,7 +416,7 @@ function ClassDetail() {
   // Get enrolled students with remaining sessions
   const enrolledStudents = useMemo(() => {
     if (!classData) return [];
-    
+
     // If we have students with remaining data, use that
     if (studentsWithRemainingData && Array.isArray(studentsWithRemainingData) && studentsWithRemainingData.length > 0) {
       return studentsWithRemainingData.map((item) => {
@@ -437,7 +437,7 @@ function ClassDetail() {
         };
       });
     }
-    
+
     // Fallback to regular students list
     return students.filter((s) => {
       const studentClassIds = s.classIds || (s.classId ? [s.classId] : []);
@@ -481,9 +481,9 @@ function ClassDetail() {
         : (editingSession as any).tuition_fee !== undefined && (editingSession as any).tuition_fee !== null
           ? Number((editingSession as any).tuition_fee)
           : 0;
-      
+
       const newTuitionFee = sessionTuitionFee > 0 ? sessionTuitionFee : 0;
-      
+
       // Always sync with editingSession to ensure UI matches DB
       // When loading from DB, set the flag to prevent estimatedTuitionFee from overriding
       // This ensures the DB value takes precedence over calculated estimate
@@ -987,8 +987,8 @@ function ClassDetail() {
                   e.stopPropagation();
                   setEditScheduleModalOpen(true);
                 }}
-                style={{ 
-                  opacity: 0, 
+                style={{
+                  opacity: 0,
                   transition: 'opacity 0.2s ease-in-out',
                   cursor: 'pointer',
                 }}
@@ -1142,7 +1142,7 @@ function ClassDetail() {
                       <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '100px' }}>Năm sinh</th>
                       <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '120px' }}>Tỉnh</th>
                       {showClassFinancialDetails && (
-                      <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '120px' }}>Còn lại</th>
+                        <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '120px' }}>Còn lại</th>
                       )}
                       <th style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '120px' }}>Trạng thái</th>
                       {canManageStudents && (
@@ -1199,15 +1199,15 @@ function ClassDetail() {
                             <span style={{ color: 'var(--muted)' }}>{student.province || '-'}</span>
                           </td>
                           {showClassFinancialDetails && (
-                          <td style={{ padding: 'var(--spacing-3)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-1)' }}>
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--primary)', flexShrink: 0 }}>
-                                <circle cx="12" cy="12" r="10" />
-                                <polyline points="12 6 12 12 16 14" />
-                              </svg>
-                              <span style={{ fontWeight: '500', color: 'var(--text)' }}>{remainingSummary}</span>
-                            </div>
-                          </td>
+                            <td style={{ padding: 'var(--spacing-3)' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-1)' }}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--primary)', flexShrink: 0 }}>
+                                  <circle cx="12" cy="12" r="10" />
+                                  <polyline points="12 6 12 12 16 14" />
+                                </svg>
+                                <span style={{ fontWeight: '500', color: 'var(--text)' }}>{remainingSummary}</span>
+                              </div>
+                            </td>
                           )}
                           <td style={{ padding: 'var(--spacing-3)' }}>
                             <span
@@ -1229,11 +1229,11 @@ function ClassDetail() {
                               <div style={{ display: 'flex', gap: 'var(--spacing-2)', justifyContent: 'center' }}>
                                 <button
                                   className="btn-edit-icon"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEditingStudent(student);
-                                  setEditStudentModalOpen(true);
-                                }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingStudent(student);
+                                    setEditStudentModalOpen(true);
+                                  }}
                                   title="Sửa thông tin"
                                   style={{
                                     width: '32px',
@@ -1288,7 +1288,7 @@ function ClassDetail() {
                                     if (window.confirm(`Xóa học sinh này khỏi lớp? (Học sinh sẽ không bị xóa hoàn toàn, chỉ được gỡ khỏi lớp này)`)) {
                                       try {
                                         await removeStudentFromClass(id!, student.id, true);
-                                        
+
                                         // Record action history
                                         try {
                                           await recordAction({
@@ -1301,7 +1301,7 @@ function ClassDetail() {
                                         } catch (err) {
                                           // Silently fail - action history is not critical
                                         }
-                                        
+
                                         toast.success('Đã xóa học sinh khỏi lớp');
                                         refetch();
                                       } catch (error: any) {
@@ -1480,690 +1480,690 @@ function ClassDetail() {
             {/* Tab Content */}
             {activeTab === 'sessions' ? (
               <div>
-            {/* Session Toolbar with Month Navigation */}
-            <div className="session-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-4)', flexWrap: 'wrap', gap: 'var(--spacing-2)' }}>
-              <div style={{ fontSize: '0.875rem', color: 'var(--muted)' }}>Tổng số buổi: {monthSessions.length}</div>
-              <div className="session-month-nav" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 'var(--spacing-1)' }}>
-                <button
-                  type="button"
-                  className="session-month-btn"
-                  id="sessionMonthPrev"
-                  onClick={() => handleMonthChange(-1)}
-                  title="Tháng trước"
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'var(--bg)';
-                    e.currentTarget.style.borderColor = 'var(--primary)';
-                    e.currentTarget.style.color = 'var(--primary)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'var(--surface)';
-                    e.currentTarget.style.borderColor = 'var(--border)';
-                    e.currentTarget.style.color = 'var(--text)';
-                  }}
-                  style={{
-                    padding: '4px 8px',
-                    borderRadius: 'var(--radius)',
-                    border: '1px solid var(--border)',
-                    background: 'var(--surface)',
-                    color: 'var(--text)',
-                    cursor: 'pointer',
-                    fontSize: 'var(--font-size-sm)',
-                    minWidth: '32px',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'all 0.2s ease',
-                  }}
-                >
-                  ◀
-                </button>
-                <button
-                  type="button"
-                  className="session-month-label-btn"
-                  id="sessionMonthLabelBtn"
-                  onClick={() => setMonthPopupOpen(!monthPopupOpen)}
-                  title="Chọn tháng/năm"
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'var(--bg)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'transparent';
-                  }}
-                  style={{
-                    border: 'none',
-                    background: 'transparent',
-                    cursor: 'pointer',
-                    padding: '4px 8px',
-                    borderRadius: 'var(--radius)',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'background 0.2s ease',
-                  }}
-                >
-                  <span className="session-month-label" id="sessionMonthLabel" style={{ fontWeight: '500', fontSize: 'var(--font-size-sm)', whiteSpace: 'nowrap' }}>{monthLabel}</span>
-                </button>
-                <button
-                  type="button"
-                  className="session-month-btn"
-                  id="sessionMonthNext"
-                  onClick={() => handleMonthChange(1)}
-                  title="Tháng sau"
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'var(--bg)';
-                    e.currentTarget.style.borderColor = 'var(--primary)';
-                    e.currentTarget.style.color = 'var(--primary)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'var(--surface)';
-                    e.currentTarget.style.borderColor = 'var(--border)';
-                    e.currentTarget.style.color = 'var(--text)';
-                  }}
-                  style={{
-                    padding: '4px 8px',
-                    borderRadius: 'var(--radius)',
-                    border: '1px solid var(--border)',
-                    background: 'var(--surface)',
-                    color: 'var(--text)',
-                    cursor: 'pointer',
-                    fontSize: 'var(--font-size-sm)',
-                    minWidth: '32px',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'all 0.2s ease',
-                  }}
-                >
-                  ▶
-                </button>
-                {/* Month Popup */}
-                {monthPopupOpen && (
-                  <div
-                    id="sessionMonthPopup"
-                    className="session-month-popup"
-                    style={{
-                      position: 'absolute',
-                      top: '100%',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      marginTop: '6px',
-                      background: 'var(--surface)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius)',
-                      boxShadow: 'var(--shadow-sm)',
-                      padding: '6px 8px 8px',
-                      zIndex: 30,
-                      minWidth: '200px',
-                    }}
-                  >
-                    <div className="session-month-popup-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px', fontSize: 'var(--font-size-xs)' }}>
-                      <button
-                        type="button"
-                        className="session-month-year-btn"
-                        id="sessionYearPrev"
-                        onClick={() => handleYearChange(-1)}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = 'var(--bg)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = 'transparent';
-                        }}
-                        style={{
-                          border: 'none',
-                          background: 'transparent',
-                          cursor: 'pointer',
-                          padding: '2px 4px',
-                          borderRadius: 'var(--radius)',
-                          transition: 'background 0.2s ease',
-                        }}
-                      >
-                        ‹
-                      </button>
-                      <span className="session-month-year-label" id="sessionYearLabel" style={{ fontWeight: '500' }}>{year}</span>
-                      <button
-                        type="button"
-                        className="session-month-year-btn"
-                        id="sessionYearNext"
-                        onClick={() => handleYearChange(1)}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = 'var(--bg)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = 'transparent';
-                        }}
-                        style={{
-                          border: 'none',
-                          background: 'transparent',
-                          cursor: 'pointer',
-                          padding: '2px 4px',
-                          borderRadius: 'var(--radius)',
-                          transition: 'background 0.2s ease',
-                        }}
-                      >
-                        ›
-                      </button>
-                    </div>
-                    <div
-                      className="session-month-grid"
+                {/* Session Toolbar with Month Navigation */}
+                <div className="session-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-4)', flexWrap: 'wrap', gap: 'var(--spacing-2)' }}>
+                  <div style={{ fontSize: '0.875rem', color: 'var(--muted)' }}>Tổng số buổi: {monthSessions.length}</div>
+                  <div className="session-month-nav" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 'var(--spacing-1)' }}>
+                    <button
+                      type="button"
+                      className="session-month-btn"
+                      id="sessionMonthPrev"
+                      onClick={() => handleMonthChange(-1)}
+                      title="Tháng trước"
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'var(--bg)';
+                        e.currentTarget.style.borderColor = 'var(--primary)';
+                        e.currentTarget.style.color = 'var(--primary)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'var(--surface)';
+                        e.currentTarget.style.borderColor = 'var(--border)';
+                        e.currentTarget.style.color = 'var(--text)';
+                      }}
                       style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-                        gap: '4px',
+                        padding: '4px 8px',
+                        borderRadius: 'var(--radius)',
+                        border: '1px solid var(--border)',
+                        background: 'var(--surface)',
+                        color: 'var(--text)',
+                        cursor: 'pointer',
+                        fontSize: 'var(--font-size-sm)',
+                        minWidth: '32px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.2s ease',
                       }}
                     >
-                      {monthNames.map((label, idx) => {
-                        const val = String(idx + 1).padStart(2, '0');
-                        const isActive = val === month;
-                        return (
+                      ◀
+                    </button>
+                    <button
+                      type="button"
+                      className="session-month-label-btn"
+                      id="sessionMonthLabelBtn"
+                      onClick={() => setMonthPopupOpen(!monthPopupOpen)}
+                      title="Chọn tháng/năm"
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'var(--bg)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'transparent';
+                      }}
+                      style={{
+                        border: 'none',
+                        background: 'transparent',
+                        cursor: 'pointer',
+                        padding: '4px 8px',
+                        borderRadius: 'var(--radius)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'background 0.2s ease',
+                      }}
+                    >
+                      <span className="session-month-label" id="sessionMonthLabel" style={{ fontWeight: '500', fontSize: 'var(--font-size-sm)', whiteSpace: 'nowrap' }}>{monthLabel}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="session-month-btn"
+                      id="sessionMonthNext"
+                      onClick={() => handleMonthChange(1)}
+                      title="Tháng sau"
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'var(--bg)';
+                        e.currentTarget.style.borderColor = 'var(--primary)';
+                        e.currentTarget.style.color = 'var(--primary)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'var(--surface)';
+                        e.currentTarget.style.borderColor = 'var(--border)';
+                        e.currentTarget.style.color = 'var(--text)';
+                      }}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: 'var(--radius)',
+                        border: '1px solid var(--border)',
+                        background: 'var(--surface)',
+                        color: 'var(--text)',
+                        cursor: 'pointer',
+                        fontSize: 'var(--font-size-sm)',
+                        minWidth: '32px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      ▶
+                    </button>
+                    {/* Month Popup */}
+                    {monthPopupOpen && (
+                      <div
+                        id="sessionMonthPopup"
+                        className="session-month-popup"
+                        style={{
+                          position: 'absolute',
+                          top: '100%',
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          marginTop: '6px',
+                          background: 'var(--surface)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 'var(--radius)',
+                          boxShadow: 'var(--shadow-sm)',
+                          padding: '6px 8px 8px',
+                          zIndex: 30,
+                          minWidth: '200px',
+                        }}
+                      >
+                        <div className="session-month-popup-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px', fontSize: 'var(--font-size-xs)' }}>
                           <button
-                            key={val}
                             type="button"
-                            className={`session-month-cell${isActive ? ' active' : ''}`}
-                            data-month={val}
-                            onClick={() => handleMonthSelect(val)}
+                            className="session-month-year-btn"
+                            id="sessionYearPrev"
+                            onClick={() => handleYearChange(-1)}
                             onMouseEnter={(e) => {
-                              if (!isActive) {
-                                e.currentTarget.style.background = 'var(--bg)';
-                              }
+                              e.currentTarget.style.background = 'var(--bg)';
                             }}
                             onMouseLeave={(e) => {
-                              if (!isActive) {
-                                e.currentTarget.style.background = 'transparent';
-                              }
+                              e.currentTarget.style.background = 'transparent';
                             }}
                             style={{
-                              borderRadius: 'var(--radius)',
-                              border: isActive ? '1px solid var(--primary)' : '1px solid transparent',
-                              background: isActive ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
-                              color: isActive ? 'var(--primary)' : 'var(--text)',
+                              border: 'none',
+                              background: 'transparent',
                               cursor: 'pointer',
-                              padding: '3px 0',
-                              fontSize: 'var(--font-size-xs)',
-                              fontWeight: isActive ? '600' : '400',
-                              transition: 'all 0.2s ease',
+                              padding: '2px 4px',
+                              borderRadius: 'var(--radius)',
+                              transition: 'background 0.2s ease',
                             }}
                           >
-                            {label}
+                            ‹
                           </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-              {canCreateSession && (
-                <div className="session-toolbar-actions" style={{ display: 'flex', gap: 'var(--spacing-2)' }}>
-                  <button
-                    className="btn btn-primary btn-add-icon"
-                    id="addSessionBtn"
-                    title="Thêm buổi học"
-                    onClick={() => {
-                      setAddSessionModalOpen(true);
-                    }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-1)' }}
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <line x1="12" y1="5" x2="12" y2="19" />
-                      <line x1="5" y1="12" x2="19" y2="12" />
-                    </svg>
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Bulk Actions */}
-            {canBulkUpdateStatus && selectedSessions.size > 0 && (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 'var(--spacing-3)',
-                  marginBottom: 'var(--spacing-4)',
-                  padding: 'var(--spacing-3)',
-                  background: 'var(--bg-secondary)',
-                  borderRadius: 'var(--radius)',
-                  border: '1px solid var(--border)',
-                }}
-              >
-                <span style={{ fontSize: '0.875rem', color: 'var(--text)', fontWeight: '500' }}>
-                  Đã chọn: {selectedSessions.size} buổi
-                </span>
-                <button
-                  type="button"
-                  className="btn btn-sm btn-primary"
-                  onClick={() => setBulkSessionStatusModalOpen(true)}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 'var(--spacing-1)' }}>
-                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                    <polyline points="22 4 12 14.01 9 11.01" />
-                  </svg>
-                  Chuyển trạng thái thanh toán
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm btn-outline"
-                  onClick={() => setSelectedSessions(new Set())}
-                >
-                  Bỏ chọn tất cả
-                </button>
-              </div>
-            )}
-
-            {/* Sessions Table */}
-            {monthSessions.length > 0 ? (
-              <>
-                <div className="table-container" style={{ borderRadius: 'var(--radius-lg)', overflow: 'hidden', border: '1px solid var(--border)' }}>
-                  <table className="table-striped sessions-table" id="sessionsTable" style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: 'linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0.03) 100%)' }}>
-                      {canSelectSessions ? (
-                        <th style={{ width: '50px', textAlign: 'center', padding: 'var(--spacing-3)' }}>
-                          <input
-                            type="checkbox"
-                            checked={selectedSessions.size > 0 && selectedSessions.size === monthSessions.length}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedSessions(new Set(monthSessions.map((s) => s.id)));
-                              } else {
-                                setSelectedSessions(new Set());
-                              }
+                          <span className="session-month-year-label" id="sessionYearLabel" style={{ fontWeight: '500' }}>{year}</span>
+                          <button
+                            type="button"
+                            className="session-month-year-btn"
+                            id="sessionYearNext"
+                            onClick={() => handleYearChange(1)}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = 'var(--bg)';
                             }}
-                            style={{ cursor: 'pointer' }}
-                            title="Chọn tất cả"
-                          />
-                        </th>
-                      ) : (
-                        <th style={{ width: '50px', textAlign: 'center', padding: 'var(--spacing-3)' }}>#</th>
-                      )}
-                      <th className="session-time-header" style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '160px' }} title="Thời gian buổi học">Thời gian</th>
-                      <th className="session-notes-header" style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '300px' }}>Nhận xét</th>
-                      <th className="session-info-header" style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '200px' }} title="Thông tin buổi học">Thông tin</th>
-                      {canShowDelete && (
-                        <th className="session-actions-header" style={{ width: '60px', textAlign: 'center', padding: 'var(--spacing-3)' }}></th>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {monthSessions.map((session) => {
-                      // Get teacher - check both camelCase and snake_case
-                      const teacherId = (session as any).teacherId || session.teacher_id;
-                      const teacher = teacherId ? classTeachers.find((t) => t.id === teacherId) : null;
-                      
-                      // Get coefficient - handle both 0 and undefined/null
-                      const coefficient = (session as any).coefficient !== undefined && (session as any).coefficient !== null 
-                        ? (session as any).coefficient 
-                        : session.coefficient !== undefined && session.coefficient !== null
-                          ? session.coefficient
-                          : 1;
-                      
-                      // Get paidCount - check both camelCase and snake_case
-                      const paidCount = (session as any).studentPaidCount !== undefined 
-                        ? (session as any).studentPaidCount 
-                        : session.studentPaidCount !== undefined
-                          ? session.studentPaidCount
-                          : (session as any).student_paid_count !== undefined
-                            ? (session as any).student_paid_count
-                            : 0;
-                      
-                      // Get payment status
-                      const paymentStatus = (session as any).paymentStatus || session.payment_status || 'unpaid';
-                      
-                      const formatDateWithWeekday = (dateStr: string) => {
-                        if (!dateStr) return '-';
-                        try {
-                          const date = new Date(dateStr + 'T00:00:00');
-                          const weekdays = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
-                          const weekday = weekdays[date.getDay()];
-                          const day = String(date.getDate()).padStart(2, '0');
-                          const month = String(date.getMonth() + 1).padStart(2, '0');
-                          const year = date.getFullYear();
-                          return `${weekday} : ${day}/${month}/${year}`;
-                        } catch {
-                          return dateStr;
-                        }
-                      };
-                      const formatTimeRange = (startTime?: string, endTime?: string) => {
-                        if (!startTime || !endTime) {
-                          // Fallback to duration if available
-                          const duration = (session as any).duration || session.duration;
-                          if (duration) return `${duration}h`;
-                          return '-';
-                        }
-                        return `${startTime} → ${endTime}`;
-                      };
-                      const paymentStatusLabels: Record<string, string> = {
-                        paid: 'Đã thanh toán',
-                        unpaid: 'Chưa thanh toán',
-                        deposit: 'Cọc',
-                      };
-                      const paymentStatusClasses: Record<string, string> = {
-                        paid: 'badge-success',
-                        unpaid: 'badge-danger',
-                        deposit: 'badge-warning',
-                      };
-                      // Check payment status management permission in this scope
-                      const canManagePaymentStatusLocal = isAdmin || hasRole('accountant') || userHasStaffRole('cskh_sale', currentUser, classTeachers);
-                      const sessionDate = (session as any).date || session.date || '';
-                      const sessionStartTime = (session as any).startTime || session.start_time;
-                      const sessionEndTime = (session as any).endTime || session.end_time;
-                      const dateFormatted = formatDateWithWeekday(sessionDate);
-                      const timeFormatted = formatTimeRange(sessionStartTime, sessionEndTime);
-                      const isSelected = selectedSessions.has(session.id);
-                      return (
-                        <tr
-                          key={session.id}
-                          className="session-row"
-                          data-session-id={session.id}
-                          data-payment-status={paymentStatus}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = 'transparent';
+                            }}
+                            style={{
+                              border: 'none',
+                              background: 'transparent',
+                              cursor: 'pointer',
+                              padding: '2px 4px',
+                              borderRadius: 'var(--radius)',
+                              transition: 'background 0.2s ease',
+                            }}
+                          >
+                            ›
+                          </button>
+                        </div>
+                        <div
+                          className="session-month-grid"
                           style={{
-                            cursor: canEditSession ? 'pointer' : 'default',
-                            transition: 'all 0.2s ease',
-                            background: isSelected ? 'rgba(59, 130, 246, 0.1)' : '',
-                          }}
-                          onClick={(e) => {
-                            // Don't open modal if clicking on buttons, checkboxes, or other interactive elements
-                            const target = e.target as HTMLElement;
-                            if (
-                              target.tagName === 'BUTTON' ||
-                              target.tagName === 'INPUT' ||
-                              target.closest('button') ||
-                              target.closest('input') ||
-                              target.closest('.btn-delete-icon')
-                            ) {
-                              return;
-                            }
-                            // Open edit modal when clicking on row (if can edit session)
-                            if (canEditSession) {
-                              setEditingSession(session);
-                              setEditSessionModalOpen(true);
-                            }
-                          }}
-                          onMouseEnter={(e) => {
-                            if (canManage && !isSelected) {
-                              e.currentTarget.style.background = 'var(--bg-secondary)';
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (!isSelected) {
-                              e.currentTarget.style.background = '';
-                            } else {
-                              e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)';
-                            }
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                            gap: '4px',
                           }}
                         >
-                          {canSelectSessions ? (
-                            <td
-                              onClick={(e) => e.stopPropagation()}
-                              style={{ textAlign: 'center', padding: 'var(--spacing-3)' }}
-                            >
-                              <input
-                                type="checkbox"
-                                className="session-checkbox"
-                                checked={isSelected}
-                                onChange={(e) => {
-                                  e.stopPropagation();
-                                  const newSelected = new Set(selectedSessions);
-                                  if (e.target.checked) {
-                                    newSelected.add(session.id);
-                                  } else {
-                                    newSelected.delete(session.id);
-                                  }
-                                  setSelectedSessions(newSelected);
-                                }}
-                                style={{ cursor: 'pointer' }}
-                                title="Chọn dòng này"
-                              />
-                            </td>
-                          ) : (
-                            <td style={{ textAlign: 'center', color: 'var(--muted)', fontWeight: '600', padding: 'var(--spacing-3)' }}>
-                              {monthSessions.indexOf(session) + 1}
-                            </td>
-                          )}
-                          <td className="session-time-cell" style={{ padding: 'var(--spacing-3)' }} title="Thời gian buổi học">
-                            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text)', lineHeight: 1.5, textAlign: 'center' }}>
-                              <div style={{ fontWeight: '500', marginBottom: 'var(--spacing-1)' }}>{dateFormatted}</div>
-                              <div style={{ color: 'var(--muted)', fontSize: 'var(--font-size-xs)' }}>{timeFormatted}</div>
-                            </div>
-                          </td>
-                          <td className="session-notes-cell" style={{ padding: 'var(--spacing-3)' }}>
-                            {((session as any).notes || session.notes) ? (
-                              <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text)', lineHeight: 1.6, whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}>
-                                {(session as any).notes || session.notes}
-                              </div>
-                            ) : (
-                              <span style={{ fontStyle: 'italic', fontSize: 'var(--font-size-sm)', color: 'var(--muted)' }}>Không có ghi chú</span>
-                            )}
-                          </td>
-                          <td className="session-info-cell" style={{ padding: 'var(--spacing-3)' }} title="Thông tin buổi học">
-                            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text)', lineHeight: 1.6, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 'var(--spacing-1)' }}>
-                              <div style={{ fontWeight: '500', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--spacing-1)' }}>
-                                {teacher ? (
-                                  <>
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--primary)', flexShrink: 0 }}>
-                                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                                      <circle cx="12" cy="7" r="4" />
-                                    </svg>
-                                    <span>{teacher.fullName || teacher.full_name}</span>
-                                  </>
-                                ) : (
-                                  <span style={{ color: 'var(--muted)' }}>-</span>
-                                )}
-                              </div>
-                              <div>
-                                <span
-                                  className={`badge ${paymentStatusClasses[paymentStatus] || 'badge-muted'}`}
-                                  onClick={async (e) => {
-                                    if (!canManagePaymentStatusLocal) return;
-                                    e.stopPropagation();
-                                    // Cycle through payment statuses: unpaid -> paid -> deposit -> unpaid
-                                    const statusOrder = ['unpaid', 'paid', 'deposit'];
-                                    const currentIndex = statusOrder.indexOf(paymentStatus);
-                                    const nextIndex = (currentIndex + 1) % statusOrder.length;
-                                    const newStatus = statusOrder[nextIndex];
-                                    
-                                    try {
-                                      const oldStatus = session.payment_status;
-                                      await updateSession(session.id, {
-                                        payment_status: newStatus as 'paid' | 'unpaid' | 'deposit',
-                                      });
-                                      
-                                      // Record action history
-                                      try {
-                                        await recordAction({
-                                          entityType: 'session',
-                                          entityId: session.id,
-                                          actionType: 'update',
-                                          beforeValue: { ...session, payment_status: oldStatus },
-                                          afterValue: { ...session, payment_status: newStatus },
-                                          changedFields: { payment_status: { old: oldStatus, new: newStatus } },
-                                          description: `Cập nhật trạng thái thanh toán buổi học ngày ${formatDate(session.date)} từ "${paymentStatusLabels[oldStatus || 'unpaid']}" sang "${paymentStatusLabels[newStatus]}"`,
-                                        });
-                                      } catch (err) {
-                                        // Silently fail - action history is not critical
-                                      }
-                                      
-                                      toast.success(`Đã chuyển sang: ${paymentStatusLabels[newStatus]}`);
-                                      refetch();
-                                    } catch (error: any) {
-                                      toast.error('Không thể cập nhật trạng thái: ' + (error.response?.data?.error || error.message));
-                                    }
-                                  }}
-                                  style={{
-                                    fontSize: 'var(--font-size-xs)',
-                                    padding: '2px 8px',
-                                    borderRadius: 'var(--radius)',
-                                    background:
-                                      paymentStatus === 'paid'
-                                        ? 'rgba(16, 185, 129, 0.1)'
-                                        : paymentStatus === 'deposit'
-                                          ? 'rgba(251, 191, 36, 0.1)'
-                                          : 'rgba(220, 38, 38, 0.1)',
-                                    color: paymentStatus === 'paid' ? '#10b981' : paymentStatus === 'deposit' ? '#f59e0b' : '#dc2626',
-                                    cursor: canManagePaymentStatusLocal ? 'pointer' : 'default',
-                                    transition: 'all 0.2s ease',
-                                  }}
-                                  onMouseEnter={(e) => {
-                                    if (canManagePaymentStatusLocal) {
-                                      e.currentTarget.style.opacity = '0.8';
-                                      e.currentTarget.style.transform = 'scale(1.05)';
-                                    }
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    if (canManagePaymentStatusLocal) {
-                                      e.currentTarget.style.opacity = '1';
-                                      e.currentTarget.style.transform = 'scale(1)';
-                                    }
-                                  }}
-                                  aria-label={`Trạng thái: ${paymentStatusLabels[paymentStatus] || 'Không xác định'}${canManagePaymentStatusLocal ? ' (Click để chuyển đổi)' : ''}`}
-                                  title={canManagePaymentStatusLocal ? 'Click để chuyển đổi trạng thái thanh toán' : undefined}
-                                >
-                                  {paymentStatus === 'paid' ? '✓ ' : paymentStatus === 'deposit' ? '● ' : ''}
-                                  {paymentStatusLabels[paymentStatus] || 'Không xác định'}
-                                </span>
-                              </div>
-                              <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--spacing-2)', fontSize: 'var(--font-size-xs)', color: 'var(--muted)' }}>
-                                <span title={`Hệ số ${coefficient}`} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="12" height="12">
-                                    <path d="M16 4H8l6 8-6 8h8" />
-                                  </svg>
-                                  <span>{coefficient}</span>
-                                </span>
-                                <span title={`${paidCount} học sinh đã gia hạn`} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="12" height="12">
-                                    <circle cx="9" cy="7" r="4" />
-                                    <path d="M16 21v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1" />
-                                    <path d="M21 21v-1a3 3 0 0 0-2.4-2.9" />
-                                    <path d="M16 3a3 3 0 0 1 2.4 2.9" />
-                                  </svg>
-                                  <span>{paidCount}</span>
-                                </span>
-                              </div>
-                            </div>
-                          </td>
-                          {canShowDelete && (
-                            <td
-                              className="session-actions"
-                              onClick={(e) => e.stopPropagation()}
-                              style={{ textAlign: 'center', padding: 'var(--spacing-3)' }}
-                            >
+                          {monthNames.map((label, idx) => {
+                            const val = String(idx + 1).padStart(2, '0');
+                            const isActive = val === month;
+                            return (
                               <button
-                                className="btn-delete-icon"
-                                onClick={async () => {
-                                  if (!window.confirm('Bạn có chắc chắn muốn xóa buổi học này?')) return;
-                                  try {
-                                    const sessionToDelete = { ...session };
-                                    await deleteSession(session.id);
-                                    
-                                    // Record action history
-                                    try {
-                                      await recordAction({
-                                        entityType: 'session',
-                                        entityId: session.id,
-                                        actionType: 'delete',
-                                        beforeValue: sessionToDelete,
-                                        description: `Xóa buổi học ngày ${formatDate(session.date)} của lớp ${classes.find(c => c.id === session.class_id)?.name || session.class_id}`,
-                                      });
-                                    } catch (err) {
-                                      // Silently fail - action history is not critical
-                                    }
-                                    
-                                    toast.success('Đã xóa buổi học');
-                                    refetch();
-                                  } catch (error: any) {
-                                    toast.error('Không thể xóa buổi học: ' + (error.response?.data?.error || error.message));
+                                key={val}
+                                type="button"
+                                className={`session-month-cell${isActive ? ' active' : ''}`}
+                                data-month={val}
+                                onClick={() => handleMonthSelect(val)}
+                                onMouseEnter={(e) => {
+                                  if (!isActive) {
+                                    e.currentTarget.style.background = 'var(--bg)';
                                   }
                                 }}
-                                title="Xóa buổi học"
+                                onMouseLeave={(e) => {
+                                  if (!isActive) {
+                                    e.currentTarget.style.background = 'transparent';
+                                  }
+                                }}
                                 style={{
-                                  background: 'none',
-                                  border: 'none',
-                                  color: 'var(--danger)',
+                                  borderRadius: 'var(--radius)',
+                                  border: isActive ? '1px solid var(--primary)' : '1px solid transparent',
+                                  background: isActive ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                                  color: isActive ? 'var(--primary)' : 'var(--text)',
                                   cursor: 'pointer',
-                                  padding: 'var(--spacing-1)',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
+                                  padding: '3px 0',
+                                  fontSize: 'var(--font-size-xs)',
+                                  fontWeight: isActive ? '600' : '400',
+                                  transition: 'all 0.2s ease',
                                 }}
                               >
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
-                                  <polyline points="3 6 5 6 21 6" />
-                                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                </svg>
+                                {label}
                               </button>
-                            </td>
-                          )}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <div className="class-detail-stats-grid" style={{ marginTop: 'var(--spacing-4)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--spacing-4)' }}>
-                <div className="class-detail-stat-item" style={{ padding: 'var(--spacing-3)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: '0.875rem', color: 'var(--muted)', marginBottom: 'var(--spacing-1)' }}>Tổng số buổi</div>
-                  <div style={{ fontSize: '1.25rem', fontWeight: '600', color: 'var(--text)' }}>{monthSessions.length}</div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {canCreateSession && (
+                    <div className="session-toolbar-actions" style={{ display: 'flex', gap: 'var(--spacing-2)' }}>
+                      <button
+                        className="btn btn-primary btn-add-icon"
+                        id="addSessionBtn"
+                        title="Thêm buổi học"
+                        onClick={() => {
+                          setAddSessionModalOpen(true);
+                        }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-1)' }}
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <line x1="12" y1="5" x2="12" y2="19" />
+                          <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                      </button>
+                    </div>
+                  )}
                 </div>
-                {showClassFinancialDetails && (
-                  <div className="class-detail-stat-item" style={{ padding: 'var(--spacing-3)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)' }}>
-                    <div style={{ fontSize: '0.875rem', color: 'var(--muted)', marginBottom: 'var(--spacing-1)' }}>Tổng trợ cấp</div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: '600', color: 'var(--primary)' }}>
-                      {formatCurrencyVND(
-                        monthSessions.reduce((sum, s) => {
-                          const allowance = (s as any).allowanceAmount || s.allowance_amount || 0;
-                          return sum + allowance;
-                        }, 0)
+
+                {/* Bulk Actions */}
+                {canBulkUpdateStatus && selectedSessions.size > 0 && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 'var(--spacing-3)',
+                      marginBottom: 'var(--spacing-4)',
+                      padding: 'var(--spacing-3)',
+                      background: 'var(--bg-secondary)',
+                      borderRadius: 'var(--radius)',
+                      border: '1px solid var(--border)',
+                    }}
+                  >
+                    <span style={{ fontSize: '0.875rem', color: 'var(--text)', fontWeight: '500' }}>
+                      Đã chọn: {selectedSessions.size} buổi
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-primary"
+                      onClick={() => setBulkSessionStatusModalOpen(true)}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 'var(--spacing-1)' }}>
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                        <polyline points="22 4 12 14.01 9 11.01" />
+                      </svg>
+                      Chuyển trạng thái thanh toán
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline"
+                      onClick={() => setSelectedSessions(new Set())}
+                    >
+                      Bỏ chọn tất cả
+                    </button>
+                  </div>
+                )}
+
+                {/* Sessions Table */}
+                {monthSessions.length > 0 ? (
+                  <>
+                    <div className="table-container" style={{ borderRadius: 'var(--radius-lg)', overflow: 'hidden', border: '1px solid var(--border)' }}>
+                      <table className="table-striped sessions-table" id="sessionsTable" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ background: 'linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0.03) 100%)' }}>
+                            {canSelectSessions ? (
+                              <th style={{ width: '50px', textAlign: 'center', padding: 'var(--spacing-3)' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedSessions.size > 0 && selectedSessions.size === monthSessions.length}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedSessions(new Set(monthSessions.map((s) => s.id)));
+                                    } else {
+                                      setSelectedSessions(new Set());
+                                    }
+                                  }}
+                                  style={{ cursor: 'pointer' }}
+                                  title="Chọn tất cả"
+                                />
+                              </th>
+                            ) : (
+                              <th style={{ width: '50px', textAlign: 'center', padding: 'var(--spacing-3)' }}>#</th>
+                            )}
+                            <th className="session-time-header" style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '160px' }} title="Thời gian buổi học">Thời gian</th>
+                            <th className="session-notes-header" style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '300px' }}>Nhận xét</th>
+                            <th className="session-info-header" style={{ padding: 'var(--spacing-3)', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem', minWidth: '200px' }} title="Thông tin buổi học">Thông tin</th>
+                            {canShowDelete && (
+                              <th className="session-actions-header" style={{ width: '60px', textAlign: 'center', padding: 'var(--spacing-3)' }}></th>
+                            )}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {monthSessions.map((session) => {
+                            // Get teacher - check both camelCase and snake_case
+                            const teacherId = (session as any).teacherId || session.teacher_id;
+                            const teacher = teacherId ? classTeachers.find((t) => t.id === teacherId) : null;
+
+                            // Get coefficient - handle both 0 and undefined/null
+                            const coefficient = (session as any).coefficient !== undefined && (session as any).coefficient !== null
+                              ? (session as any).coefficient
+                              : session.coefficient !== undefined && session.coefficient !== null
+                                ? session.coefficient
+                                : 1;
+
+                            // Get paidCount - check both camelCase and snake_case
+                            const paidCount = (session as any).studentPaidCount !== undefined
+                              ? (session as any).studentPaidCount
+                              : session.studentPaidCount !== undefined
+                                ? session.studentPaidCount
+                                : (session as any).student_paid_count !== undefined
+                                  ? (session as any).student_paid_count
+                                  : 0;
+
+                            // Get payment status
+                            const paymentStatus = (session as any).paymentStatus || session.payment_status || 'unpaid';
+
+                            const formatDateWithWeekday = (dateStr: string) => {
+                              if (!dateStr) return '-';
+                              try {
+                                const date = new Date(dateStr + 'T00:00:00');
+                                const weekdays = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
+                                const weekday = weekdays[date.getDay()];
+                                const day = String(date.getDate()).padStart(2, '0');
+                                const month = String(date.getMonth() + 1).padStart(2, '0');
+                                const year = date.getFullYear();
+                                return `${weekday} : ${day}/${month}/${year}`;
+                              } catch {
+                                return dateStr;
+                              }
+                            };
+                            const formatTimeRange = (startTime?: string, endTime?: string) => {
+                              if (!startTime || !endTime) {
+                                // Fallback to duration if available
+                                const duration = (session as any).duration || session.duration;
+                                if (duration) return `${duration}h`;
+                                return '-';
+                              }
+                              return `${startTime} → ${endTime}`;
+                            };
+                            const paymentStatusLabels: Record<string, string> = {
+                              paid: 'Đã thanh toán',
+                              unpaid: 'Chưa thanh toán',
+                              deposit: 'Cọc',
+                            };
+                            const paymentStatusClasses: Record<string, string> = {
+                              paid: 'badge-success',
+                              unpaid: 'badge-danger',
+                              deposit: 'badge-warning',
+                            };
+                            // Check payment status management permission in this scope
+                            const canManagePaymentStatusLocal = isAdmin || hasRole('accountant') || userHasStaffRole('cskh_sale', currentUser, classTeachers);
+                            const sessionDate = (session as any).date || session.date || '';
+                            const sessionStartTime = (session as any).startTime || session.start_time;
+                            const sessionEndTime = (session as any).endTime || session.end_time;
+                            const dateFormatted = formatDateWithWeekday(sessionDate);
+                            const timeFormatted = formatTimeRange(sessionStartTime, sessionEndTime);
+                            const isSelected = selectedSessions.has(session.id);
+                            return (
+                              <tr
+                                key={session.id}
+                                className="session-row"
+                                data-session-id={session.id}
+                                data-payment-status={paymentStatus}
+                                style={{
+                                  cursor: canEditSession ? 'pointer' : 'default',
+                                  transition: 'all 0.2s ease',
+                                  background: isSelected ? 'rgba(59, 130, 246, 0.1)' : '',
+                                }}
+                                onClick={(e) => {
+                                  // Don't open modal if clicking on buttons, checkboxes, or other interactive elements
+                                  const target = e.target as HTMLElement;
+                                  if (
+                                    target.tagName === 'BUTTON' ||
+                                    target.tagName === 'INPUT' ||
+                                    target.closest('button') ||
+                                    target.closest('input') ||
+                                    target.closest('.btn-delete-icon')
+                                  ) {
+                                    return;
+                                  }
+                                  // Open edit modal when clicking on row (if can edit session)
+                                  if (canEditSession) {
+                                    setEditingSession(session);
+                                    setEditSessionModalOpen(true);
+                                  }
+                                }}
+                                onMouseEnter={(e) => {
+                                  if (canManage && !isSelected) {
+                                    e.currentTarget.style.background = 'var(--bg-secondary)';
+                                  }
+                                }}
+                                onMouseLeave={(e) => {
+                                  if (!isSelected) {
+                                    e.currentTarget.style.background = '';
+                                  } else {
+                                    e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)';
+                                  }
+                                }}
+                              >
+                                {canSelectSessions ? (
+                                  <td
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{ textAlign: 'center', padding: 'var(--spacing-3)' }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      className="session-checkbox"
+                                      checked={isSelected}
+                                      onChange={(e) => {
+                                        e.stopPropagation();
+                                        const newSelected = new Set(selectedSessions);
+                                        if (e.target.checked) {
+                                          newSelected.add(session.id);
+                                        } else {
+                                          newSelected.delete(session.id);
+                                        }
+                                        setSelectedSessions(newSelected);
+                                      }}
+                                      style={{ cursor: 'pointer' }}
+                                      title="Chọn dòng này"
+                                    />
+                                  </td>
+                                ) : (
+                                  <td style={{ textAlign: 'center', color: 'var(--muted)', fontWeight: '600', padding: 'var(--spacing-3)' }}>
+                                    {monthSessions.indexOf(session) + 1}
+                                  </td>
+                                )}
+                                <td className="session-time-cell" style={{ padding: 'var(--spacing-3)' }} title="Thời gian buổi học">
+                                  <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text)', lineHeight: 1.5, textAlign: 'center' }}>
+                                    <div style={{ fontWeight: '500', marginBottom: 'var(--spacing-1)' }}>{dateFormatted}</div>
+                                    <div style={{ color: 'var(--muted)', fontSize: 'var(--font-size-xs)' }}>{timeFormatted}</div>
+                                  </div>
+                                </td>
+                                <td className="session-notes-cell" style={{ padding: 'var(--spacing-3)' }}>
+                                  {((session as any).notes || session.notes) ? (
+                                    <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text)', lineHeight: 1.6, whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}>
+                                      {(session as any).notes || session.notes}
+                                    </div>
+                                  ) : (
+                                    <span style={{ fontStyle: 'italic', fontSize: 'var(--font-size-sm)', color: 'var(--muted)' }}>Không có ghi chú</span>
+                                  )}
+                                </td>
+                                <td className="session-info-cell" style={{ padding: 'var(--spacing-3)' }} title="Thông tin buổi học">
+                                  <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text)', lineHeight: 1.6, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 'var(--spacing-1)' }}>
+                                    <div style={{ fontWeight: '500', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--spacing-1)' }}>
+                                      {teacher ? (
+                                        <>
+                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--primary)', flexShrink: 0 }}>
+                                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                                            <circle cx="12" cy="7" r="4" />
+                                          </svg>
+                                          <span>{teacher.fullName || teacher.full_name}</span>
+                                        </>
+                                      ) : (
+                                        <span style={{ color: 'var(--muted)' }}>-</span>
+                                      )}
+                                    </div>
+                                    <div>
+                                      <span
+                                        className={`badge ${paymentStatusClasses[paymentStatus] || 'badge-muted'}`}
+                                        onClick={async (e) => {
+                                          if (!canManagePaymentStatusLocal) return;
+                                          e.stopPropagation();
+                                          // Cycle through payment statuses: unpaid -> paid -> deposit -> unpaid
+                                          const statusOrder = ['unpaid', 'paid', 'deposit'];
+                                          const currentIndex = statusOrder.indexOf(paymentStatus);
+                                          const nextIndex = (currentIndex + 1) % statusOrder.length;
+                                          const newStatus = statusOrder[nextIndex];
+
+                                          try {
+                                            const oldStatus = session.payment_status;
+                                            await updateSession(session.id, {
+                                              payment_status: newStatus as 'paid' | 'unpaid' | 'deposit',
+                                            });
+
+                                            // Record action history
+                                            try {
+                                              await recordAction({
+                                                entityType: 'session',
+                                                entityId: session.id,
+                                                actionType: 'update',
+                                                beforeValue: { ...session, payment_status: oldStatus },
+                                                afterValue: { ...session, payment_status: newStatus },
+                                                changedFields: { payment_status: { old: oldStatus, new: newStatus } },
+                                                description: `Cập nhật trạng thái thanh toán buổi học ngày ${formatDate(session.date)} từ "${paymentStatusLabels[oldStatus || 'unpaid']}" sang "${paymentStatusLabels[newStatus]}"`,
+                                              });
+                                            } catch (err) {
+                                              // Silently fail - action history is not critical
+                                            }
+
+                                            toast.success(`Đã chuyển sang: ${paymentStatusLabels[newStatus]}`);
+                                            refetch();
+                                          } catch (error: any) {
+                                            toast.error('Không thể cập nhật trạng thái: ' + (error.response?.data?.error || error.message));
+                                          }
+                                        }}
+                                        style={{
+                                          fontSize: 'var(--font-size-xs)',
+                                          padding: '2px 8px',
+                                          borderRadius: 'var(--radius)',
+                                          background:
+                                            paymentStatus === 'paid'
+                                              ? 'rgba(16, 185, 129, 0.1)'
+                                              : paymentStatus === 'deposit'
+                                                ? 'rgba(251, 191, 36, 0.1)'
+                                                : 'rgba(220, 38, 38, 0.1)',
+                                          color: paymentStatus === 'paid' ? '#10b981' : paymentStatus === 'deposit' ? '#f59e0b' : '#dc2626',
+                                          cursor: canManagePaymentStatusLocal ? 'pointer' : 'default',
+                                          transition: 'all 0.2s ease',
+                                        }}
+                                        onMouseEnter={(e) => {
+                                          if (canManagePaymentStatusLocal) {
+                                            e.currentTarget.style.opacity = '0.8';
+                                            e.currentTarget.style.transform = 'scale(1.05)';
+                                          }
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          if (canManagePaymentStatusLocal) {
+                                            e.currentTarget.style.opacity = '1';
+                                            e.currentTarget.style.transform = 'scale(1)';
+                                          }
+                                        }}
+                                        aria-label={`Trạng thái: ${paymentStatusLabels[paymentStatus] || 'Không xác định'}${canManagePaymentStatusLocal ? ' (Click để chuyển đổi)' : ''}`}
+                                        title={canManagePaymentStatusLocal ? 'Click để chuyển đổi trạng thái thanh toán' : undefined}
+                                      >
+                                        {paymentStatus === 'paid' ? '✓ ' : paymentStatus === 'deposit' ? '● ' : ''}
+                                        {paymentStatusLabels[paymentStatus] || 'Không xác định'}
+                                      </span>
+                                    </div>
+                                    <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--spacing-2)', fontSize: 'var(--font-size-xs)', color: 'var(--muted)' }}>
+                                      <span title={`Hệ số ${coefficient}`} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="12" height="12">
+                                          <path d="M16 4H8l6 8-6 8h8" />
+                                        </svg>
+                                        <span>{coefficient}</span>
+                                      </span>
+                                      <span title={`${paidCount} học sinh đã gia hạn`} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="12" height="12">
+                                          <circle cx="9" cy="7" r="4" />
+                                          <path d="M16 21v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1" />
+                                          <path d="M21 21v-1a3 3 0 0 0-2.4-2.9" />
+                                          <path d="M16 3a3 3 0 0 1 2.4 2.9" />
+                                        </svg>
+                                        <span>{paidCount}</span>
+                                      </span>
+                                    </div>
+                                  </div>
+                                </td>
+                                {canShowDelete && (
+                                  <td
+                                    className="session-actions"
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{ textAlign: 'center', padding: 'var(--spacing-3)' }}
+                                  >
+                                    <button
+                                      className="btn-delete-icon"
+                                      onClick={async () => {
+                                        if (!window.confirm('Bạn có chắc chắn muốn xóa buổi học này?')) return;
+                                        try {
+                                          const sessionToDelete = { ...session };
+                                          await deleteSession(session.id);
+
+                                          // Record action history
+                                          try {
+                                            await recordAction({
+                                              entityType: 'session',
+                                              entityId: session.id,
+                                              actionType: 'delete',
+                                              beforeValue: sessionToDelete,
+                                              description: `Xóa buổi học ngày ${formatDate(session.date)} của lớp ${classes.find(c => c.id === session.class_id)?.name || session.class_id}`,
+                                            });
+                                          } catch (err) {
+                                            // Silently fail - action history is not critical
+                                          }
+
+                                          toast.success('Đã xóa buổi học');
+                                          refetch();
+                                        } catch (error: any) {
+                                          toast.error('Không thể xóa buổi học: ' + (error.response?.data?.error || error.message));
+                                        }
+                                      }}
+                                      title="Xóa buổi học"
+                                      style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        color: 'var(--danger)',
+                                        cursor: 'pointer',
+                                        padding: 'var(--spacing-1)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                      }}
+                                    >
+                                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
+                                        <polyline points="3 6 5 6 21 6" />
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                      </svg>
+                                    </button>
+                                  </td>
+                                )}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="class-detail-stats-grid" style={{ marginTop: 'var(--spacing-4)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--spacing-4)' }}>
+                      <div className="class-detail-stat-item" style={{ padding: 'var(--spacing-3)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)' }}>
+                        <div style={{ fontSize: '0.875rem', color: 'var(--muted)', marginBottom: 'var(--spacing-1)' }}>Tổng số buổi</div>
+                        <div style={{ fontSize: '1.25rem', fontWeight: '600', color: 'var(--text)' }}>{monthSessions.length}</div>
+                      </div>
+                      {showClassFinancialDetails && (
+                        <div className="class-detail-stat-item" style={{ padding: 'var(--spacing-3)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)' }}>
+                          <div style={{ fontSize: '0.875rem', color: 'var(--muted)', marginBottom: 'var(--spacing-1)' }}>Tổng trợ cấp</div>
+                          <div style={{ fontSize: '1.25rem', fontWeight: '600', color: 'var(--primary)' }}>
+                            {formatCurrencyVND(
+                              monthSessions.reduce((sum, s) => {
+                                const allowance = (s as any).allowanceAmount || s.allowance_amount || 0;
+                                return sum + allowance;
+                              }, 0)
+                            )}
+                          </div>
+                        </div>
                       )}
                     </div>
+                    {canManage && (
+                      <div style={{ marginTop: 'var(--spacing-4)', padding: 'var(--spacing-3)', background: 'var(--bg)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)', color: 'var(--muted)', fontSize: 'var(--font-size-sm)' }}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <circle cx="12" cy="12" r="10" />
+                            <path d="M12 16v-4" />
+                            <path d="M12 8h.01" />
+                          </svg>
+                          <span>Chọn một buổi để xem chi tiết hoặc chỉnh sửa trong popup.</span>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div style={{ padding: 'var(--spacing-8)', textAlign: 'center' }}>
+                    <svg
+                      width="64"
+                      height="64"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      style={{ opacity: 0.3, color: 'var(--muted)', marginBottom: 'var(--spacing-4)' }}
+                    >
+                      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                    </svg>
+                    <p style={{ margin: 0, color: 'var(--muted)', fontSize: '1rem', fontWeight: '500', marginBottom: 'var(--spacing-3)' }}>
+                      Chưa có buổi học trong tháng này.
+                    </p>
+                    {canManage && (
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => {
+                          setAddSessionModalOpen(true);
+                        }}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--spacing-1)' }}
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <line x1="12" y1="5" x2="12" y2="19" />
+                          <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                        Thêm buổi học
+                      </button>
+                    )}
                   </div>
                 )}
-              </div>
-              {canManage && (
-                <div style={{ marginTop: 'var(--spacing-4)', padding: 'var(--spacing-3)', background: 'var(--bg)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)', color: 'var(--muted)', fontSize: 'var(--font-size-sm)' }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="12" r="10" />
-                      <path d="M12 16v-4" />
-                      <path d="M12 8h.01" />
-                    </svg>
-                    <span>Chọn một buổi để xem chi tiết hoặc chỉnh sửa trong popup.</span>
-                  </div>
-                </div>
-              )}
-              </>
-            ) : (
-              <div style={{ padding: 'var(--spacing-8)', textAlign: 'center' }}>
-                <svg
-                  width="64"
-                  height="64"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  style={{ opacity: 0.3, color: 'var(--muted)', marginBottom: 'var(--spacing-4)' }}
-                >
-                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-                </svg>
-                <p style={{ margin: 0, color: 'var(--muted)', fontSize: '1rem', fontWeight: '500', marginBottom: 'var(--spacing-3)' }}>
-                  Chưa có buổi học trong tháng này.
-                </p>
-                {canManage && (
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => {
-                      setAddSessionModalOpen(true);
-                    }}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--spacing-1)' }}
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <line x1="12" y1="5" x2="12" y2="19" />
-                      <line x1="5" y1="12" x2="19" y2="12" />
-                    </svg>
-                    Thêm buổi học
-                  </button>
-                )}
-              </div>
-            )}
               </div>
             ) : (
               <div>
@@ -2250,10 +2250,10 @@ function ClassDetail() {
                 }}
               />
             ) : (
-              <span 
-                style={{ 
-                  fontSize: '0.875rem', 
-                  fontWeight: '600', 
+              <span
+                style={{
+                  fontSize: '0.875rem',
+                  fontWeight: '600',
                   color: '#10b981',
                   marginLeft: 'var(--spacing-2)',
                   cursor: 'pointer',
@@ -2285,55 +2285,55 @@ function ClassDetail() {
             classData={classData}
             teachers={classTeachers}
             students={enrolledStudents}
-                headerTuitionFee={headerTuitionFee}
-                onEstimatedTuitionFeeChange={(fee) => {
-                  // Only update if not manually edited
-                  if (!isHeaderTuitionFeeManuallyEdited) {
-                    setHeaderTuitionFee(fee);
-                  }
-                }}
-                onSessionCreated={handleSessionCreated}
+            headerTuitionFee={headerTuitionFee}
+            onEstimatedTuitionFeeChange={(fee) => {
+              // Only update if not manually edited
+              if (!isHeaderTuitionFeeManuallyEdited) {
+                setHeaderTuitionFee(fee);
+              }
+            }}
+            onSessionCreated={handleSessionCreated}
             onSuccess={() => {
               setAddSessionModalOpen(false);
-                  setHeaderTuitionFee(0);
-                  setIsEditingHeaderTuitionFee(false);
-                  setIsHeaderTuitionFeeManuallyEdited(false);
+              setHeaderTuitionFee(0);
+              setIsEditingHeaderTuitionFee(false);
+              setIsHeaderTuitionFeeManuallyEdited(false);
               refetch();
             }}
-                onClose={() => {
-                  setAddSessionModalOpen(false);
-                  setHeaderTuitionFee(0);
-                  setIsEditingHeaderTuitionFee(false);
-                  setIsHeaderTuitionFeeManuallyEdited(false);
-                }}
+            onClose={() => {
+              setAddSessionModalOpen(false);
+              setHeaderTuitionFee(0);
+              setIsEditingHeaderTuitionFee(false);
+              setIsHeaderTuitionFeeManuallyEdited(false);
+            }}
           />
         )}
       </Modal>
 
       {/* Edit Class Modal */}
       {editClassModalOpen && classData && (
-          <EditClassModal
-            isOpen={editClassModalOpen}
-            onClose={() => {
-              setEditClassModalOpen(false);
-            }}
-            classData={classData}
-            teachers={allTeachers.length > 0 ? allTeachers : (classData?.teachers || [])}
-            classTeachers={classTeachers}
-            categories={categories}
-            mode="edit"
-            onSave={async () => {
-              await refetchClass();
-              setEditClassModalOpen(false);
-            }}
-            onOpenTeacherModal={() => {
-              // Load all teachers if not already loaded
-              if (allTeachers.length === 0) {
-                loadAllTeachers();
-              }
-              setEditTeacherModalOpen(true);
-            }}
-          />
+        <EditClassModal
+          isOpen={editClassModalOpen}
+          onClose={() => {
+            setEditClassModalOpen(false);
+          }}
+          classData={classData}
+          teachers={allTeachers.length > 0 ? allTeachers : (classData?.teachers || [])}
+          classTeachers={classTeachers}
+          categories={categories}
+          mode="edit"
+          onSave={async () => {
+            await refetchClass();
+            setEditClassModalOpen(false);
+          }}
+          onOpenTeacherModal={() => {
+            // Load all teachers if not already loaded
+            if (allTeachers.length === 0) {
+              loadAllTeachers();
+            }
+            setEditTeacherModalOpen(true);
+          }}
+        />
       )}
 
       {/* Edit Teacher Modal */}
@@ -2429,23 +2429,23 @@ function ClassDetail() {
                 onBlur={async (e) => {
                   // Lưu giá trị vào database ngay khi blur (giống logic trợ cấp)
                   const newValue = editingEditHeaderTuitionFeeValue;
-                  
+
                   if (newValue !== editHeaderTuitionFee) {
                     try {
                       // Lưu vào database ngay lập tức
                       const tuitionFeeValue = newValue > 0 ? newValue : null;
                       const updatedSession = await updateSession(editingSession.id, { tuition_fee: tuitionFeeValue });
-                      
+
                       // Lấy giá trị từ response của server để đảm bảo đồng bộ
                       const savedTuitionFee = (updatedSession as any).tuition_fee !== undefined && (updatedSession as any).tuition_fee !== null
                         ? Number((updatedSession as any).tuition_fee)
                         : (updatedSession as any).tuitionFee !== undefined && (updatedSession as any).tuitionFee !== null
                           ? Number((updatedSession as any).tuitionFee)
                           : 0;
-                      
+
                       // Cập nhật state với giá trị từ server
                       setEditHeaderTuitionFee(savedTuitionFee);
-                      
+
                       // Cập nhật editingSession với giá trị từ server để đồng bộ UI
                       // Đảm bảo cả tuition_fee và tuitionFee đều được set
                       const sessionWithTuitionFee = {
@@ -2453,17 +2453,17 @@ function ClassDetail() {
                         tuition_fee: savedTuitionFee > 0 ? savedTuitionFee : null,
                         tuitionFee: savedTuitionFee > 0 ? savedTuitionFee : null,
                       };
-                      
+
                       setEditingSession(sessionWithTuitionFee);
-                      
+
                       // Reset flag để cho phép sync lại từ editingSession nếu cần
                       // Nhưng vẫn giữ flag để không bị auto-update từ estimatedTuitionFee
                       setIsEditHeaderTuitionFeeManuallyEdited(true);
-                      
+
                       if (handleSessionUpdated) {
                         handleSessionUpdated(sessionWithTuitionFee);
                       }
-                      
+
                       toast.success('Đã cập nhật học phí');
                     } catch (error: any) {
                       toast.error('Không thể cập nhật học phí: ' + (error.response?.data?.error || error.message));
@@ -2475,42 +2475,42 @@ function ClassDetail() {
                 }}
                 onKeyDown={async (e) => {
                   const target = e.currentTarget as HTMLElement;
-                  
+
                   if (e.key === 'Enter') {
                     e.preventDefault();
                     // Lưu giá trị vào database ngay khi nhấn Enter (giống logic trợ cấp)
                     const newValue = editingEditHeaderTuitionFeeValue;
-                    
+
                     if (newValue !== editHeaderTuitionFee) {
                       try {
                         // Lưu vào database ngay lập tức
                         const tuitionFeeValue = newValue > 0 ? newValue : null;
                         const updatedSession = await updateSession(editingSession.id, { tuition_fee: tuitionFeeValue });
-                        
+
                         // Lấy giá trị từ response của server để đảm bảo đồng bộ
                         const savedTuitionFee = (updatedSession as any).tuition_fee !== undefined && (updatedSession as any).tuition_fee !== null
                           ? Number((updatedSession as any).tuition_fee)
                           : (updatedSession as any).tuitionFee !== undefined && (updatedSession as any).tuitionFee !== null
                             ? Number((updatedSession as any).tuitionFee)
                             : 0;
-                        
+
                         // Cập nhật state với giá trị từ server
                         setEditHeaderTuitionFee(savedTuitionFee);
-                        
+
                         // Cập nhật editingSession với giá trị từ server để đồng bộ UI
                         const sessionWithTuitionFee = {
                           ...updatedSession,
                           tuition_fee: savedTuitionFee > 0 ? savedTuitionFee : null,
                           tuitionFee: savedTuitionFee > 0 ? savedTuitionFee : null,
                         };
-                        
+
                         setEditingSession(sessionWithTuitionFee);
                         setIsEditHeaderTuitionFeeManuallyEdited(true);
-                        
+
                         if (handleSessionUpdated) {
                           handleSessionUpdated(sessionWithTuitionFee);
                         }
-                        
+
                         toast.success('Đã cập nhật học phí');
                       } catch (error: any) {
                         toast.error('Không thể cập nhật học phí: ' + (error.response?.data?.error || error.message));
@@ -2539,10 +2539,10 @@ function ClassDetail() {
                 }}
               />
             ) : (
-              <span 
-                style={{ 
-                  fontSize: '0.875rem', 
-                  fontWeight: '600', 
+              <span
+                style={{
+                  fontSize: '0.875rem',
+                  fontWeight: '600',
                   color: '#10b981',
                   marginLeft: 'var(--spacing-2)',
                   cursor: 'pointer',
@@ -2722,7 +2722,7 @@ function BulkSessionStatusModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Filter sessions that need updating
     const sessionsToUpdate = sessions.filter(
       (session) =>
@@ -2827,11 +2827,11 @@ function AddStudentToClassModal({
         // Get other classes for this student
         const otherClasses = classesData
           ? classesData
-              .filter((c) => {
-                const studentClass = c.students?.find((sc: any) => sc.studentId === student.id);
-                return studentClass && c.id !== classId && studentClass.status !== 'inactive';
-              })
-              .map((c) => c.name)
+            .filter((c) => {
+              const studentClass = c.students?.find((sc: any) => sc.studentId === student.id);
+              return studentClass && c.id !== classId && studentClass.status !== 'inactive';
+            })
+            .map((c) => c.name)
           : [];
         return {
           ...student,
@@ -2862,7 +2862,7 @@ function AddStudentToClassModal({
     setLoading(true);
     try {
       await addStudentToClass(classId, studentId);
-      
+
       // Record action history
       try {
         const student = students.find(s => s.id === studentId);
@@ -2876,7 +2876,7 @@ function AddStudentToClassModal({
       } catch (err) {
         // Silently fail - action history is not critical
       }
-      
+
       toast.success('Đã thêm học sinh vào lớp');
       setSearchQuery('');
       setShowResults(false);
@@ -3186,11 +3186,11 @@ function AddSessionModal({
   const isAdmin = hasRole('admin');
   const hasCskhPrivileges = userHasStaffRole('cskh_sale', currentUser, teachers);
   const canManagePaymentStatus = isAdmin || hasRole('accountant') || hasCskhPrivileges;
-  
+
   const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [startTime, setStartTime] = useState<string>('18:00');
   const [endTime, setEndTime] = useState<string>('20:00');
-  
+
   // Refs for date and time inputs
   const dateInputRef = React.useRef<HTMLInputElement>(null);
   const startTimeInputRef = React.useRef<HTMLInputElement>(null);
@@ -3201,7 +3201,7 @@ function AddSessionModal({
   const [notes, setNotes] = useState<string>('');
   const [paymentStatus, setPaymentStatus] = useState<'paid' | 'unpaid' | 'deposit'>('unpaid');
   const [loading, setLoading] = useState(false);
-  
+
   // Attendance state using hook - MUST be initialized before estimatedTuitionFee
   const initialAttendanceState = useMemo(() => {
     const state: Record<string, { status: AttendanceStatus; remark: string }> = {};
@@ -3214,7 +3214,7 @@ function AddSessionModal({
     });
     return state;
   }, [students]);
-  
+
   const {
     attendance,
     toggleAttendance: baseToggleAttendance,
@@ -3222,7 +3222,7 @@ function AddSessionModal({
     getAttendanceSummary,
     getEligibleCount,
   } = useAttendance(initialAttendanceState);
-  
+
   // Use session financials hook to calculate tuition fee and allowance
   const { estimatedTuitionFee, allowancePreview, allowanceFormula } = useSessionFinancials(
     students,
@@ -3231,25 +3231,25 @@ function AddSessionModal({
     coefficient,
     classData
   );
-  
+
   // Notify parent component when estimated tuition fee changes
   useEffect(() => {
     if (onEstimatedTuitionFeeChange) {
       onEstimatedTuitionFeeChange(estimatedTuitionFee);
     }
   }, [estimatedTuitionFee, onEstimatedTuitionFeeChange]);
-  
+
   // Use headerTuitionFee as the tuition fee value (synced from parent)
   const tuitionFee = headerTuitionFee > 0 ? headerTuitionFee : undefined;
-  
+
   // Custom toggle with validation for "excused" status
   const toggleAttendance = useCallback((studentId: string) => {
     const student = students.find(s => s.id === studentId);
     if (!student) return;
-    
+
     const currentStatus = attendance[studentId]?.status || 'absent';
     const nextStatus = currentStatus === 'present' ? 'excused' : currentStatus === 'excused' ? 'absent' : 'present';
-    
+
     // Check if trying to set to "excused" when student has no wallet balance
     // Cho phép chọn Phép khi số dư > 0 (số buổi còn lại không cần dương)
     if (nextStatus === 'excused') {
@@ -3275,7 +3275,7 @@ function AddSessionModal({
 
   // Get attendance summary for display
   const attendanceSummary = useMemo(() => getAttendanceSummary(), [attendance, getAttendanceSummary]);
-  
+
   // Calculate duration
   const duration = useMemo(() => {
     if (!startTime || !endTime) return null;
@@ -3306,7 +3306,7 @@ function AddSessionModal({
     try {
       // Calculate allowance amount using hook (already calculated above as allowancePreview)
       const calculatedAllowance = allowancePreview > 0 ? allowancePreview : undefined;
-      
+
       // Create temporary session object for optimistic update
       const tempSessionId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
       const tempSession: any = {
@@ -3324,11 +3324,11 @@ function AddSessionModal({
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
-      
+
       // Optimistic update: add session to UI immediately
       // Note: We need to access parent's optimistic state, so we'll use onSuccess callback
       // For now, we'll create the session first and let onSuccess handle the refetch
-      
+
       // Create session first
       const newSession = await createSession({
         class_id: classId,
@@ -3342,7 +3342,7 @@ function AddSessionModal({
         allowance_amount: calculatedAllowance !== undefined && calculatedAllowance > 0 ? calculatedAllowance : undefined,
         tuition_fee: tuitionFee && tuitionFee > 0 ? tuitionFee : undefined,
       });
-      
+
       // Record action history
       try {
         await recordAction({
@@ -3355,7 +3355,7 @@ function AddSessionModal({
       } catch (err) {
         // Silently fail - action history is not critical
       }
-      
+
       // Then save attendance records
       if (students.length > 0) {
         const attendanceData = students.map((student) => {
@@ -3366,15 +3366,20 @@ function AddSessionModal({
             remark: att.remark || undefined,
           };
         });
-        
-        await saveAttendanceForSession(newSession.id, attendanceData);
+
+        try {
+          await saveAttendanceForSession(newSession.id, attendanceData);
+        } catch (attendanceError: any) {
+          console.error('Error saving attendance:', attendanceError);
+          toast.error('Buổi học đã được tạo nhưng lưu điểm danh thất bại: ' + (attendanceError.response?.data?.error || attendanceError.message));
+        }
       }
-      
+
       // Optimistic update: add session to UI immediately
       if (onSessionCreated) {
         onSessionCreated(newSession);
       }
-      
+
       toast.success('Đã thêm buổi học mới');
       onSuccess();
     } catch (error: any) {
@@ -3387,7 +3392,7 @@ function AddSessionModal({
   return (
     <form onSubmit={handleSubmit}>
       <div style={{ marginBottom: 'var(--spacing-4)' }}>
-        <label 
+        <label
           htmlFor="add-session-date"
           style={{ display: 'block', marginBottom: 'var(--spacing-2)', fontWeight: '500', cursor: 'pointer' }}
           onClick={(e) => {
@@ -3423,8 +3428,8 @@ function AddSessionModal({
           Thời gian *
         </label>
         <div className="session-time-row" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div 
-            className="session-time-field" 
+          <div
+            className="session-time-field"
             style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
             onClick={(e) => {
               if (!(e.target as HTMLElement).closest('input')) {
@@ -3457,8 +3462,8 @@ function AddSessionModal({
             />
           </div>
           <span className="session-time-separator" style={{ fontSize: '18px', color: 'var(--muted)' }}>→</span>
-          <div 
-            className="session-time-field" 
+          <div
+            className="session-time-field"
             style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
             onClick={(e) => {
               if (!(e.target as HTMLElement).closest('input')) {
@@ -3518,7 +3523,7 @@ function AddSessionModal({
           );
         })()}
       </div>
-      
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-3)', marginBottom: 'var(--spacing-4)' }}>
         {teachers.length > 0 && (
           <div>
@@ -3583,7 +3588,7 @@ function AddSessionModal({
           </div>
         </div>
       </div>
-      
+
       {/* Allowance Preview */}
       <div style={{ marginBottom: 'var(--spacing-4)' }}>
         <label style={{ display: 'block', marginBottom: 'var(--spacing-2)', fontWeight: '500' }}>
@@ -3623,7 +3628,7 @@ function AddSessionModal({
           )}
         </div>
       </div>
-      
+
       {/* Payment Status */}
       {canManagePaymentStatus && (
         <div style={{ marginBottom: 'var(--spacing-4)' }}>
@@ -3650,7 +3655,7 @@ function AddSessionModal({
           </div>
         </div>
       )}
-      
+
       <div style={{ marginBottom: 'var(--spacing-4)' }}>
         <label style={{ display: 'block', marginBottom: 'var(--spacing-2)', fontWeight: '500' }}>
           Nhận xét *
@@ -3681,7 +3686,7 @@ function AddSessionModal({
           </div>
         )}
       </div>
-      
+
       {/* Attendance Table */}
       {students.length > 0 ? (
         <div style={{ marginBottom: 'var(--spacing-4)' }}>
@@ -3795,15 +3800,15 @@ function EditSessionModal({
   canManagePaymentStatus?: boolean;
   canEditAllowanceManually?: boolean;
 }) {
-  
+
   const currentUser = useAuthStore((state) => state.user);
   const isAdmin = hasRole('admin');
-  
+
   // Initialize state with empty/default values - will be populated by useEffect
   const [date, setDate] = useState<string>('');
   const [startTime, setStartTime] = useState<string>('18:00');
   const [endTime, setEndTime] = useState<string>('20:00');
-  
+
   // Refs for date and time inputs
   const dateInputRef = React.useRef<HTMLInputElement>(null);
   const startTimeInputRef = React.useRef<HTMLInputElement>(null);
@@ -3814,12 +3819,12 @@ function EditSessionModal({
   const [notes, setNotes] = useState<string>('');
   const [paymentStatus, setPaymentStatus] = useState<string>('unpaid');
   const [allowanceAmount, setAllowanceAmount] = useState<number | null>(null);
-  
+
   const [editingAllowance, setEditingAllowance] = useState(false);
   const [allowanceInputValue, setAllowanceInputValue] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [loadingAttendance, setLoadingAttendance] = useState(true);
-  
+
   // Attendance state using hook
   const {
     attendance,
@@ -3829,7 +3834,7 @@ function EditSessionModal({
     getAttendanceSummary,
     getEligibleCount,
   } = useAttendance({});
-  
+
   // Use ref to track current loading session to prevent duplicate fetches
   const loadingSessionIdRef = useRef<string | null>(null);
 
@@ -3837,10 +3842,10 @@ function EditSessionModal({
   const toggleAttendance = useCallback((studentId: string) => {
     const student = students.find(s => s.id === studentId);
     if (!student) return;
-    
+
     const currentStatus = attendance[studentId]?.status || 'absent';
     const nextStatus = currentStatus === 'present' ? 'excused' : currentStatus === 'excused' ? 'absent' : 'present';
-    
+
     // Check if trying to set to "excused" when student has no wallet balance
     // Cho phép chọn Phép khi số dư > 0 (số buổi còn lại không cần dương)
     if (nextStatus === 'excused') {
@@ -3870,19 +3875,19 @@ function EditSessionModal({
     if (!session || !session.id) {
       return;
     }
-    
+
     // Prefill date (from session, no class default)
     const sessionDate = session.date || new Date().toISOString().slice(0, 10);
     setDate(sessionDate);
-    
+
     // Prefill start time (from session, no class default)
     const sessionStartTime = (session as any).startTime || session.start_time || '18:00';
     setStartTime(sessionStartTime);
-    
+
     // Prefill end time (from session, no class default)
     const sessionEndTime = (session as any).endTime || session.end_time || '20:00';
     setEndTime(sessionEndTime);
-    
+
     // Prefill teacher ID (from session, fallback to class teacherIds)
     const sessionTeacherId = (session as any).teacherId || session.teacher_id;
     if (sessionTeacherId) {
@@ -3895,7 +3900,7 @@ function EditSessionModal({
         setTeacherId(teachers[0].id);
       }
     }
-    
+
     // Prefill coefficient (from session, default to 1)
     const sessionCoefficient = (session as any).coefficient !== undefined && (session as any).coefficient !== null
       ? (session as any).coefficient
@@ -3905,15 +3910,15 @@ function EditSessionModal({
     const finalCoefficient = sessionCoefficient !== null ? sessionCoefficient : 1;
     setCoefficient(finalCoefficient);
     setCoefficientInputValue(String(finalCoefficient));
-    
+
     // Prefill notes (from session, default to empty)
     const sessionNotes = session.notes !== undefined && session.notes !== null ? session.notes : '';
     setNotes(sessionNotes);
-    
+
     // Prefill payment status (from session, default to 'unpaid')
     const sessionPaymentStatus = (session as any).paymentStatus || session.payment_status || 'unpaid';
     setPaymentStatus(sessionPaymentStatus);
-    
+
     // Prefill allowance amount (from session, no class default - calculated dynamically)
     let sessionAllowanceAmount: number | null = null;
     if ((session as any).allowanceAmount !== undefined && (session as any).allowanceAmount !== null) {
@@ -3921,20 +3926,20 @@ function EditSessionModal({
     } else if (session.allowance_amount !== undefined && session.allowance_amount !== null) {
       sessionAllowanceAmount = Number(session.allowance_amount);
     }
-    
+
     // Set allowance amount (including 0 as valid value)
     setAllowanceAmount(sessionAllowanceAmount);
     setAllowanceInputValue(sessionAllowanceAmount !== null && !isNaN(sessionAllowanceAmount) ? sessionAllowanceAmount.toString() : '');
     setEditingAllowance(false);
-    
+
     // Tuition fee is now managed by parent component via headerTuitionFee prop
     // No need to set local state here
   }, [session?.id, classData?.teacherIds, teachers]);
-  
+
   // Fetch existing attendance - combined reset and load logic
   useEffect(() => {
     const sessionId = session?.id;
-    
+
     // Don't fetch if session.id is not available or students are not ready
     if (!sessionId || !Array.isArray(students) || students.length === 0) {
       setLoadingAttendance(false);
@@ -3942,30 +3947,30 @@ function EditSessionModal({
       loadingSessionIdRef.current = null;
       return;
     }
-    
+
     // Prevent duplicate fetches for the same session
     if (loadingSessionIdRef.current === sessionId) {
       return;
     }
-    
+
     // Mark this session as loading
     loadingSessionIdRef.current = sessionId;
-    
+
     const loadAttendance = async () => {
       // Reset attendance to empty first to prevent showing stale data
       setAttendance({});
       setLoadingAttendance(true);
-      
+
       try {
         const existingAttendance = await fetchAttendanceBySession(sessionId);
-        
+
         // Check if session is still the same (user might have changed session while loading)
         if (loadingSessionIdRef.current !== sessionId) {
           return;
         }
-        
+
         const attendanceMap: Record<string, { status: AttendanceStatus; remark: string }> = {};
-        
+
         // Initialize with existing attendance (check if it's an array)
         if (Array.isArray(existingAttendance)) {
           existingAttendance.forEach((att) => {
@@ -3977,7 +3982,7 @@ function EditSessionModal({
             };
           });
         }
-        
+
         // Add students not in attendance (default to present if they have remaining sessions)
         if (Array.isArray(students)) {
           students.forEach((student) => {
@@ -3990,16 +3995,16 @@ function EditSessionModal({
             }
           });
         }
-        
+
         setAttendance(attendanceMap);
       } catch (error) {
         console.error('[EditSessionModal] Failed to load attendance:', error);
-        
+
         // Check if session is still the same
         if (loadingSessionIdRef.current !== sessionId) {
           return;
         }
-        
+
         // Initialize with default values
         const defaultAttendance: Record<string, { status: AttendanceStatus; remark: string }> = {};
         if (Array.isArray(students)) {
@@ -4020,9 +4025,9 @@ function EditSessionModal({
         }
       }
     };
-    
+
     loadAttendance();
-    
+
     // Cleanup: reset ref if component unmounts or session changes
     return () => {
       if (loadingSessionIdRef.current === sessionId) {
@@ -4030,7 +4035,7 @@ function EditSessionModal({
       }
     };
   }, [session?.id, students, setAttendance]);
-  
+
   // Use session financials hook to calculate allowance and tuition fee
   const { estimatedTuitionFee, allowancePreview: calculatedAllowancePreview, allowanceFormula } = useSessionFinancials(
     students,
@@ -4039,7 +4044,7 @@ function EditSessionModal({
     coefficient,
     classData
   );
-  
+
   // Notify parent component when estimated tuition fee changes
   // Use ref to track previous value and avoid infinite loops
   const prevEstimatedTuitionFeeRef = React.useRef<number>(estimatedTuitionFee);
@@ -4049,7 +4054,7 @@ function EditSessionModal({
       onEstimatedTuitionFeeChange(estimatedTuitionFee);
     }
   }, [estimatedTuitionFee, onEstimatedTuitionFeeChange]);
-  
+
   // Use headerTuitionFee as the tuition fee value (synced from parent)
   // Always use headerTuitionFee value (even if 0) to preserve manual edits
   const tuitionFee = headerTuitionFee;
@@ -4109,7 +4114,7 @@ function EditSessionModal({
     try {
       // Calculate allowance amount using hook (already calculated above)
       const calculatedAllowance = calculatedAllowancePreview > 0 ? calculatedAllowancePreview : undefined;
-      
+
       // Update session
       const updateData: any = {
         class_id: classId,
@@ -4121,7 +4126,7 @@ function EditSessionModal({
         notes: notes.trim(),
         payment_status: canManagePaymentStatus ? paymentStatus : undefined,
       };
-      
+
       // Include allowance_amount: use manual value if set, otherwise use calculated value
       if (allowanceAmount !== null && allowanceAmount !== undefined && allowanceAmount >= 0) {
         // Manual override
@@ -4130,7 +4135,7 @@ function EditSessionModal({
         // Auto-calculated based on attendance
         updateData.allowance_amount = calculatedAllowance;
       }
-      
+
       // Include tuition_fee if admin - always save headerTuitionFee value
       // The headerTuitionFee is synced from parent and reflects any manual edits
       if (isAdmin) {
@@ -4143,13 +4148,13 @@ function EditSessionModal({
           updateData.tuition_fee = null;
         }
       }
-      
+
       // Get old session data for action history
       const oldSession = { ...session };
-      
+
       // Update session
       const updatedSession = await updateSession(session.id, updateData);
-      
+
       // Record action history
       try {
         const changedFields: Record<string, { old: any; new: any }> = {};
@@ -4160,7 +4165,7 @@ function EditSessionModal({
         if (oldSession.payment_status !== updateData.payment_status) changedFields.payment_status = { old: oldSession.payment_status, new: updateData.payment_status };
         if (oldSession.allowance_amount !== updateData.allowance_amount) changedFields.allowance_amount = { old: oldSession.allowance_amount, new: updateData.allowance_amount };
         if (oldSession.tuition_fee !== updateData.tuition_fee) changedFields.tuition_fee = { old: oldSession.tuition_fee, new: updateData.tuition_fee };
-        
+
         await recordAction({
           entityType: 'session',
           entityId: session.id,
@@ -4173,7 +4178,7 @@ function EditSessionModal({
       } catch (err) {
         // Silently fail - action history is not critical
       }
-      
+
       // Update attendance records
       // When editing a session, skip financial processing to avoid affecting student balances
       if (students.length > 0) {
@@ -4185,11 +4190,11 @@ function EditSessionModal({
             remark: att.remark || undefined,
           };
         });
-        
+
         // Skip financial processing when editing (session already exists and financials were calculated on creation)
         await saveAttendanceForSession(session.id, attendanceData, true);
       }
-      
+
       // Optimistic update: update session in UI immediately
       // Ensure the updated session includes the tuition_fee value
       const sessionWithTuitionFee = {
@@ -4197,11 +4202,11 @@ function EditSessionModal({
         tuition_fee: updateData.tuition_fee,
         tuitionFee: updateData.tuition_fee,
       };
-      
+
       if (onSessionUpdated && sessionWithTuitionFee) {
         onSessionUpdated(sessionWithTuitionFee);
       }
-      
+
       toast.success('Đã cập nhật buổi học');
       onSuccess();
     } catch (error: any) {
@@ -4214,7 +4219,7 @@ function EditSessionModal({
   return (
     <form onSubmit={handleSubmit}>
       <div style={{ marginBottom: 'var(--spacing-4)' }}>
-        <label 
+        <label
           htmlFor="edit-session-date"
           style={{ display: 'block', marginBottom: 'var(--spacing-2)', fontWeight: '500', cursor: 'pointer' }}
           onClick={(e) => {
@@ -4250,8 +4255,8 @@ function EditSessionModal({
           Thời gian *
         </label>
         <div className="session-time-row" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div 
-            className="session-time-field" 
+          <div
+            className="session-time-field"
             style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
             onClick={(e) => {
               if (!(e.target as HTMLElement).closest('input')) {
@@ -4284,8 +4289,8 @@ function EditSessionModal({
             />
           </div>
           <span className="session-time-separator" style={{ fontSize: '18px', color: 'var(--muted)' }}>→</span>
-          <div 
-            className="session-time-field" 
+          <div
+            className="session-time-field"
             style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
             onClick={(e) => {
               if (!(e.target as HTMLElement).closest('input')) {
@@ -4327,9 +4332,9 @@ function EditSessionModal({
           const endMinutes = endH * 60 + endM;
           if (endMinutes <= startMinutes) {
             return (
-          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--danger)', marginTop: 'var(--spacing-1)' }}>
-            ⚠️ Giờ kết thúc phải lớn hơn giờ bắt đầu
-          </div>
+              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--danger)', marginTop: 'var(--spacing-1)' }}>
+                ⚠️ Giờ kết thúc phải lớn hơn giờ bắt đầu
+              </div>
             );
           }
           const diff = endMinutes - startMinutes;
@@ -4574,7 +4579,7 @@ function EditSessionModal({
           </div>
         </div>
       )}
-      
+
       <div style={{ marginBottom: 'var(--spacing-4)' }}>
         <label style={{ display: 'block', marginBottom: 'var(--spacing-2)', fontWeight: '500' }}>
           Nhận xét *
@@ -4751,29 +4756,29 @@ function EditTeacherModal({
     const updatedArray = Array.from(updatedIds);
     const previousIds = new Set(classData.teacherIds || (classData.teacherId ? [classData.teacherId] : []));
     const currentAllowances = { ...((classData as any).customTeacherAllowances || {}) };
-    
+
     // Build updated allowances: keep existing + add new teachers with default value
     const updatedAllowances: Record<string, number> = {};
     const defaultAllowance = classData.tuitionPerSession || 0;
-    
+
     updatedArray.forEach((teacherId) => {
       // If teacher already has an allowance entry, keep it
-      if (currentAllowances.hasOwnProperty(teacherId) && 
-          currentAllowances[teacherId] !== null && 
-          currentAllowances[teacherId] !== undefined) {
+      if (currentAllowances.hasOwnProperty(teacherId) &&
+        currentAllowances[teacherId] !== null &&
+        currentAllowances[teacherId] !== undefined) {
         updatedAllowances[teacherId] = currentAllowances[teacherId];
       } else {
         // New teacher: add with default allowance
         updatedAllowances[teacherId] = defaultAllowance;
       }
     });
-    
+
     // IMPORTANT: Also keep allowances for removed teachers (for history tracking)
     Object.keys(currentAllowances).forEach((teacherId) => {
       // If teacher was removed but has an allowance entry, keep it for history
-      if (!updatedArray.includes(teacherId) && 
-          currentAllowances[teacherId] !== null && 
-          currentAllowances[teacherId] !== undefined) {
+      if (!updatedArray.includes(teacherId) &&
+        currentAllowances[teacherId] !== null &&
+        currentAllowances[teacherId] !== undefined) {
         updatedAllowances[teacherId] = currentAllowances[teacherId];
       }
     });
@@ -4794,7 +4799,7 @@ function EditTeacherModal({
       const updateData = await syncTeachers(newIds);
       const oldClassData = { ...classData };
       await updateClass(classId, updateData);
-      
+
       // Record action history
       try {
         const removedTeacher = allTeachers.find(t => t.id === teacherId);
@@ -4809,14 +4814,14 @@ function EditTeacherModal({
       } catch (err) {
         // Silently fail - action history is not critical
       }
-      
+
       toast.success('Đã gỡ gia sư khỏi lớp');
-      
+
       // Invalidate class cache to ensure fresh data on refetch
       const cacheKey = `class-${classId}`;
       sessionStorage.removeItem(cacheKey);
       localStorage.removeItem(cacheKey);
-      
+
       // Invalidate staff detail cache for the teacher that was just removed
       // This ensures StaffDetail page updates immediately
       for (let year = 2020; year <= 2030; year++) {
@@ -4827,12 +4832,12 @@ function EditTeacherModal({
           sessionStorage.removeItem(cacheKey);
         }
       }
-      
+
       // Dispatch event to trigger refetch in StaffDetail if it's open
       window.dispatchEvent(new CustomEvent('teacher-class-updated', {
         detail: { teacherId, classId, action: 'removed' }
       }));
-      
+
       onSuccess();
     } catch (error: any) {
       toast.error('Không thể gỡ gia sư khỏi lớp: ' + (error.response?.data?.error || error.message));
@@ -4851,7 +4856,7 @@ function EditTeacherModal({
       const updateData = await syncTeachers(newIds);
       const oldClassData = { ...classData };
       await updateClass(classId, updateData);
-      
+
       // Record action history
       try {
         const addedTeacher = allTeachers.find(t => t.id === teacherId);
@@ -4866,15 +4871,15 @@ function EditTeacherModal({
       } catch (err) {
         // Silently fail - action history is not critical
       }
-      
+
       setSearchQuery('');
       toast.success('Đã thêm gia sư vào lớp');
-      
+
       // Invalidate class cache to ensure fresh data on refetch
       const cacheKey = `class-${classId}`;
       sessionStorage.removeItem(cacheKey);
       localStorage.removeItem(cacheKey);
-      
+
       // Invalidate staff detail cache for the teacher that was just added
       // This ensures StaffDetail page updates immediately
       for (let year = 2020; year <= 2030; year++) {
@@ -4885,12 +4890,12 @@ function EditTeacherModal({
           sessionStorage.removeItem(cacheKey);
         }
       }
-      
+
       // Dispatch event to trigger refetch in StaffDetail if it's open
       window.dispatchEvent(new CustomEvent('teacher-class-updated', {
         detail: { teacherId, classId, action: 'added' }
       }));
-      
+
       onSuccess();
     } catch (error: any) {
       toast.error('Không thể thêm gia sư vào lớp: ' + (error.response?.data?.error || error.message));
@@ -5076,10 +5081,10 @@ function EditScheduleModal({
             time: `${startTime}-${endTime}`,
           };
         });
-      
+
       const oldSchedule = classData?.schedule;
       await updateClass(classId, { schedule: formattedSchedule });
-      
+
       // Record action history
       try {
         await recordAction({
@@ -5094,7 +5099,7 @@ function EditScheduleModal({
       } catch (err) {
         // Silently fail - action history is not critical
       }
-      
+
       toast.success('Đã cập nhật lịch học');
       onSuccess();
     } catch (error: any) {
@@ -5226,7 +5231,7 @@ export function EditClassModal({
   onCreateClass?: (data: any) => Promise<{ id: string } | void>;
 }) {
   // Removed excessive logging to prevent re-render loops
-  
+
   const [formData, setFormData] = useState({
     name: '',
     type: '',
@@ -5263,7 +5268,7 @@ export function EditClassModal({
   // Priority: classTeachers prop > teachers prop > classData.teachers
   const selectedTeachers = useMemo(() => {
     if (formData.teacherIds.length === 0) return [];
-    
+
     // Priority 1: Use classTeachers prop if available
     if (classTeachers && Array.isArray(classTeachers) && classTeachers.length > 0) {
       const filtered = classTeachers.filter((t: any) => formData.teacherIds.includes(t.id));
@@ -5271,7 +5276,7 @@ export function EditClassModal({
         return filtered;
       }
     }
-    
+
     // Priority 2: Filter from teachers prop
     if (teachers && Array.isArray(teachers) && teachers.length > 0) {
       const filtered = teachers.filter((t: any) => formData.teacherIds.includes(t.id));
@@ -5279,7 +5284,7 @@ export function EditClassModal({
         return filtered;
       }
     }
-    
+
     // Priority 3: Use classData.teachers if available
     if (classData && (classData as any).teachers && Array.isArray((classData as any).teachers)) {
       const filtered = (classData as any).teachers.filter((t: any) => formData.teacherIds.includes(t.id));
@@ -5287,7 +5292,7 @@ export function EditClassModal({
         return filtered;
       }
     }
-    
+
     return [];
   }, [teachers, formData.teacherIds, classTeachers, classData]);
 
@@ -5301,7 +5306,7 @@ export function EditClassModal({
   const handleRemoveTeacher = (teacherId: string) => {
     setFormData({ ...formData, teacherIds: formData.teacherIds.filter(id => id !== teacherId) });
   };
-  
+
   // Prefill formData when modal opens or classData changes
   useEffect(() => {
     if (!isOpen) {
@@ -5346,7 +5351,7 @@ export function EditClassModal({
     // Edit mode - prefill from classData
     const teacherIds = classData.teacherIds || (classData.teacherId ? [classData.teacherId] : []);
     const normalizedTeacherIds = Array.isArray(teacherIds) ? teacherIds : [teacherIds].filter(Boolean);
-    
+
     // Handle tuitionPackageSessions - can be number, string, or empty
     let tuitionPackageSessionsValue: number | '' = '';
     if (classData.tuitionPackageSessions !== undefined && classData.tuitionPackageSessions !== null) {
@@ -5357,7 +5362,7 @@ export function EditClassModal({
         tuitionPackageSessionsValue = isNaN(parsed) ? '' : parsed;
       }
     }
-    
+
     const newFormData = {
       name: classData.name || '',
       type: classData.type || '',
@@ -5371,7 +5376,7 @@ export function EditClassModal({
       tuitionPackageTotal: classData.tuitionPackageTotal ?? 0,
       tuitionPackageSessions: tuitionPackageSessionsValue,
     };
-    
+
     setFormData(newFormData);
     setTeacherSearchQuery('');
   }, [isOpen, classData?.id, mode, categories.length]);
@@ -5451,8 +5456,8 @@ export function EditClassModal({
         classDataToSave.tuitionPackageTotal = formData.tuitionPackageTotal;
       }
       if (formData.tuitionPackageSessions !== '' && formData.tuitionPackageSessions > 0) {
-        classDataToSave.tuitionPackageSessions = typeof formData.tuitionPackageSessions === 'number' 
-          ? formData.tuitionPackageSessions 
+        classDataToSave.tuitionPackageSessions = typeof formData.tuitionPackageSessions === 'number'
+          ? formData.tuitionPackageSessions
           : Number(formData.tuitionPackageSessions);
       }
 
@@ -5465,7 +5470,7 @@ export function EditClassModal({
       } else if (mode === 'edit' && classData) {
         const oldClassData = { ...classData };
         await updateClass(classData.id, classDataToSave);
-        
+
         // Record action history for update
         try {
           const changedFields: Record<string, { old: any; new: any }> = {};
@@ -5474,7 +5479,7 @@ export function EditClassModal({
           if (oldClassData.status !== classDataToSave.status) changedFields.status = { old: oldClassData.status, new: classDataToSave.status };
           if (oldClassData.maxStudents !== classDataToSave.maxStudents) changedFields.maxStudents = { old: oldClassData.maxStudents, new: classDataToSave.maxStudents };
           if (oldClassData.tuitionPerSession !== classDataToSave.tuitionPerSession) changedFields.tuitionPerSession = { old: oldClassData.tuitionPerSession, new: classDataToSave.tuitionPerSession };
-          
+
           await recordAction({
             entityType: 'class',
             entityId: classData.id,
@@ -5565,7 +5570,7 @@ export function EditClassModal({
           <label className="form-label" style={{ marginBottom: 'var(--spacing-2)' }}>
             Gia sư * (có thể chọn nhiều)
           </label>
-          
+
           {/* Current Teachers List */}
           <div style={{ marginBottom: 'var(--spacing-3)' }}>
             <h4 style={{ marginBottom: 'var(--spacing-2)', fontSize: '0.875rem', fontWeight: '600' }}>
@@ -6148,7 +6153,7 @@ function MoveStudentModal({
       setLoading(true);
       try {
         await removeStudentFromClass(currentClassId, student.id, true);
-        
+
         // Record action history
         try {
           await recordAction({
@@ -6161,7 +6166,7 @@ function MoveStudentModal({
         } catch (err) {
           // Silently fail - action history is not critical
         }
-        
+
         toast.success('Đã gỡ học sinh khỏi lớp');
         onSuccess();
       } catch (error: any) {
@@ -6185,7 +6190,7 @@ function MoveStudentModal({
     setLoading(true);
     try {
       await moveStudentToClass(currentClassId, student.id, selectedClassId, true);
-      
+
       // Record action history
       try {
         await recordAction({
@@ -6205,7 +6210,7 @@ function MoveStudentModal({
       } catch (err) {
         // Silently fail - action history is not critical
       }
-      
+
       toast.success(`Đã chuyển học sinh sang lớp "${targetClass.name}"`);
       onSuccess();
     } catch (error: any) {
@@ -6310,7 +6315,7 @@ function TeacherAllowanceModal({
 
       const oldClassData = { ...classData };
       await updateClass(classId, payload);
-      
+
       // Record action history
       try {
         await recordAction({
@@ -6325,7 +6330,7 @@ function TeacherAllowanceModal({
       } catch (err) {
         // Silently fail - action history is not critical
       }
-      
+
       toast.success('Đã cập nhật trợ cấp');
       onSuccess();
     } catch (error: any) {
