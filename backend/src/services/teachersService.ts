@@ -84,6 +84,36 @@ export async function createTeacher(teacherData: Omit<Teacher, 'id'> & Record<st
     throw new Error(formatSupabaseError(error, 'create teacher'));
   }
 
+  // If accountHandle or accountPassword is provided, create a user account for login
+  const accountHandle = (teacherData as any).accountHandle || (teacherData as any).account_handle;
+  const accountPassword = (teacherData as any).accountPassword || (teacherData as any).account_password;
+
+  if (accountHandle || accountPassword) {
+    const userPayload: Record<string, unknown> = {
+      role: 'teacher',
+      link_id: id,
+      name: insertPayload.full_name || `Teacher ${id}`,
+      status: 'active',
+    };
+
+    if (accountHandle && String(accountHandle).trim()) {
+      userPayload.account_handle = String(accountHandle).trim();
+    }
+
+    // Store password as-is (plaintext for admin-managed accounts)
+    userPayload.password = accountPassword ? String(accountPassword) : 'ChangeMe1!';
+
+    // Use teacher email or generate placeholder
+    const emailVal = email ? String(email).trim().toLowerCase() : '';
+    userPayload.email = emailVal || `teacher-${id}@placeholder.local`;
+
+    const { error: userError } = await supabase.from('users').insert(userPayload);
+    if (userError) {
+      console.error('Failed to create user account for new teacher:', userError);
+      // Don't throw - teacher was already created successfully
+    }
+  }
+
   return data as Teacher;
 }
 

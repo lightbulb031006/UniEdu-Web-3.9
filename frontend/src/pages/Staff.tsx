@@ -62,6 +62,8 @@ function Staff() {
     photoUrl: '',
     status: 'active' as 'active' | 'inactive',
     roles: [] as string[],
+    accountHandle: '',
+    accountPassword: '',
   });
 
   const { data, isLoading, error, refetch } = useDataLoading(
@@ -220,6 +222,8 @@ function Staff() {
       photoUrl: '',
       status: 'active',
       roles: [],
+      accountHandle: '',
+      accountPassword: '',
     });
     setShowAddModal(true);
   };
@@ -244,6 +248,8 @@ function Staff() {
       if (addFormData.specialization) teacherData.specialization = addFormData.specialization.trim();
       if (addFormData.photoUrl) teacherData.photoUrl = addFormData.photoUrl.trim();
       if (addFormData.roles && addFormData.roles.length > 0) teacherData.roles = addFormData.roles;
+      if (addFormData.accountHandle) teacherData.accountHandle = addFormData.accountHandle.trim();
+      if (addFormData.accountPassword) teacherData.accountPassword = addFormData.accountPassword;
 
       await createTeacher(teacherData);
       setShowAddModal(false);
@@ -602,6 +608,35 @@ function Staff() {
               <option value="active">Đang hoạt động</option>
               <option value="inactive">Ngừng hoạt động</option>
             </select>
+          </div>
+
+          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 'var(--spacing-3)', marginTop: 'var(--spacing-3)' }}>
+            <label className="form-label" style={{ fontWeight: '600', fontSize: 'var(--font-size-base)' }}>🔐 Tài khoản đăng nhập</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--spacing-3)', marginTop: 'var(--spacing-2)' }}>
+              <div className="form-group">
+                <label htmlFor="staffAccountHandle" className="form-label">Tên đăng nhập</label>
+                <input
+                  type="text"
+                  id="staffAccountHandle"
+                  className="form-control"
+                  value={addFormData.accountHandle}
+                  onChange={(e) => setAddFormData({ ...addFormData, accountHandle: e.target.value })}
+                  placeholder="VD: giaovien1"
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="staffAccountPassword" className="form-label">Mật khẩu</label>
+                <input
+                  type="text"
+                  id="staffAccountPassword"
+                  className="form-control"
+                  value={addFormData.accountPassword}
+                  onChange={(e) => setAddFormData({ ...addFormData, accountPassword: e.target.value })}
+                  placeholder="VD: DangHMPT2006"
+                />
+              </div>
+            </div>
+            <small className="text-muted" style={{ fontSize: 'var(--font-size-xs)' }}>Để trống nếu chưa muốn tạo tài khoản đăng nhập</small>
           </div>
 
           <div className="form-actions" style={{ display: 'flex', gap: 'var(--spacing-2)', justifyContent: 'flex-end', marginTop: 'var(--spacing-4)' }}>
