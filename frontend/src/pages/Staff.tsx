@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDataLoading } from '../hooks/useDataLoading';
-import { fetchTeachers, createTeacher, Teacher } from '../services/teachersService';
+import { fetchTeachers, createTeacher, deleteTeacher, Teacher } from '../services/teachersService';
 import { getStaffUnpaidAmounts } from '../services/staffService';
 import { useAuthStore } from '../store/authStore';
 import { hasRole, userHasStaffRole } from '../utils/permissions';
@@ -206,6 +206,19 @@ function Staff() {
 
   const handleStaffClick = (staffId: string) => {
     navigate(`/staff/${staffId}`);
+  };
+
+  const handleDeleteStaff = async (staffId: string, staffName: string) => {
+    if (!window.confirm(`Bạn có chắc chắn muốn xóa nhân sự "${staffName}"? Hành động này không thể hoàn tác.`)) {
+      return;
+    }
+    try {
+      await deleteTeacher(staffId);
+      toast.success(`Đã xóa nhân sự "${staffName}"`);
+      refetch();
+    } catch (err: any) {
+      toast.error(`Lỗi khi xóa nhân sự: ${err.message || 'Unknown error'}`);
+    }
   };
 
   const handleOpenAddModal = () => {
@@ -425,15 +438,27 @@ function Staff() {
                         )}
                       </td>
                       <td style={{ padding: 'var(--spacing-3)', textAlign: 'center' }}>
-                        <button
-                          className="btn btn-sm btn-outline"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleStaffClick(staff.id);
-                          }}
-                        >
-                          Xem chi tiết
-                        </button>
+                        <div style={{ display: 'flex', gap: 'var(--spacing-2)', justifyContent: 'center' }}>
+                          <button
+                            className="btn btn-sm btn-outline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStaffClick(staff.id);
+                            }}
+                          >
+                            Xem chi tiết
+                          </button>
+                          <button
+                            className="btn btn-sm"
+                            style={{ background: '#dc2626', color: 'white', border: 'none' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteStaff(staff.id, staff.fullName || staff.name || 'Không tên');
+                            }}
+                          >
+                            Xóa
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
