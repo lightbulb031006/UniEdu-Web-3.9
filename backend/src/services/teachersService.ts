@@ -46,8 +46,39 @@ export async function getTeacherById(id: string) {
   return data as Teacher | null;
 }
 
-export async function createTeacher(teacherData: Omit<Teacher, 'id'>) {
-  const { data, error } = await supabase.from('teachers').insert([teacherData]).select().single();
+export async function createTeacher(teacherData: Omit<Teacher, 'id'> & Record<string, unknown>) {
+  // Generate a unique ID (T + timestamp)
+  const id = `T${Date.now()}`;
+
+  // Map camelCase fields from frontend to snake_case DB columns
+  const insertPayload: Record<string, unknown> = {
+    id,
+    full_name: teacherData.full_name || (teacherData as any).fullName || '',
+    status: teacherData.status || 'active',
+  };
+
+  // Optional fields - accept both camelCase and snake_case
+  const email = teacherData.email;
+  const phone = teacherData.phone;
+  const birthDate = teacherData.birth_date || (teacherData as any).birthDate;
+  const university = teacherData.university;
+  const highSchool = teacherData.high_school || (teacherData as any).highSchool;
+  const province = teacherData.province;
+  const specialization = teacherData.specialization;
+  const photoUrl = teacherData.photo_url || (teacherData as any).photoUrl;
+  const roles = teacherData.roles;
+
+  if (email) insertPayload.email = email;
+  if (phone) insertPayload.phone = phone;
+  if (birthDate) insertPayload.birth_date = birthDate;
+  if (university) insertPayload.university = university;
+  if (highSchool) insertPayload.high_school = highSchool;
+  if (province) insertPayload.province = province;
+  if (specialization) insertPayload.specialization = specialization;
+  if (photoUrl) insertPayload.photo_url = photoUrl;
+  if (roles && Array.isArray(roles) && roles.length > 0) insertPayload.roles = roles;
+
+  const { data, error } = await supabase.from('teachers').insert([insertPayload]).select().single();
 
   if (error) {
     throw new Error(formatSupabaseError(error, 'create teacher'));
