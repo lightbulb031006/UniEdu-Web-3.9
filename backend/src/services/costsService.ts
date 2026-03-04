@@ -61,7 +61,7 @@ export async function getCostById(id: string): Promise<Cost | null> {
 export async function createCost(costData: Omit<Cost, 'id' | 'created_at' | 'updated_at'>): Promise<Cost> {
   // Generate ID for new cost
   const id = `COST${Date.now()}${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
-  
+
   // Ensure month is derived from date if provided
   const month = costData.month || (costData.date ? costData.date.slice(0, 7) : '');
   if (!month) {
@@ -76,33 +76,45 @@ export async function createCost(costData: Omit<Cost, 'id' | 'created_at' | 'upd
     throw new Error('Amount must be a valid number (có thể dương hoặc âm)');
   }
 
-  // Build payload with only required fields first
-  const payload: any = {
+  // Build core payload (columns that always exist)
+  const corePayload: any = {
     id,
     month,
     category: costData.category.trim(),
     amount: Number(costData.amount),
   };
 
+  // Build full payload with optional date/status columns
+  const fullPayload: any = { ...corePayload };
+
   // Add optional fields if provided (only if they have values)
-  // Note: Only add if the field exists in the request to avoid database errors
   if (costData.date && costData.date.trim()) {
     try {
       // Validate date format
       new Date(costData.date);
-      payload.date = costData.date.trim();
+      fullPayload.date = costData.date.trim();
     } catch (e) {
       console.warn('Invalid date format, skipping date field:', costData.date);
     }
   }
-  
+
   // Only add status if it's a valid value
   if (costData.status && (costData.status === 'paid' || costData.status === 'pending')) {
-    payload.status = costData.status;
+    fullPayload.status = costData.status;
   }
 
-  console.log('Inserting cost payload:', JSON.stringify(payload, null, 2));
-  const { data, error } = await supabase.from('costs').insert(payload).select().single();
+  console.log('Inserting cost payload:', JSON.stringify(fullPayload, null, 2));
+
+  // Try inserting with all fields first
+  let { data, error } = await supabase.from('costs').insert(fullPayload).select().single();
+
+  // If insert fails (e.g., date/status columns don't exist yet), retry with core fields only
+  if (error) {
+    console.warn('Full insert failed, retrying with core fields only:', error.message);
+    const retryResult = await supabase.from('costs').insert(corePayload).select().single();
+    data = retryResult.data;
+    error = retryResult.error;
+  }
 
   if (error) {
     console.error('Supabase error creating cost:', error);
