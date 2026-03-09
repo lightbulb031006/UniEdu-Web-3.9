@@ -1,0 +1,117 @@
+﻿
+> uniedu-frontend@4.6.1 build
+> vite build
+
+[36mvite v5.4.21 [32mbuilding for production...[36m[39m
+transforming...
+[32mΓ£ô[39m 166 modules transformed.
+rendering chunks...
+node.exe : [1m[33m[pl
+ugin:vite:reporter][39
+m[22m [33m[plugin 
+vite:reporter] 
+At line:1 char:1
++ & "D:\tool\language\N
+odejs/node.exe" "D:\too
+l\language\Nodejs/node_
+mo ...
++ ~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: ([1m[33m[plu   
+ gi...vite:reporter    
+] :String) [], Rem    
+oteException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+(!) D:/UniEdu-Web-3.9-m
+ain/frontend/src/servic
+es/teachersService.ts 
+is dynamically 
+imported by D:/UniEdu-W
+eb-3.9-main/frontend/sr
+c/components/Layout.tsx
+ but also statically 
+imported by D:/UniEdu-W
+eb-3.9-main/frontend/sr
+c/components/AuthModal.
+tsx, D:/UniEdu-Web-3.9-
+main/frontend/src/compo
+nents/Layout.tsx, D:/Un
+iEdu-Web-3.9-main/front
+end/src/components/Prot
+ectedRoute.tsx, D:/UniE
+du-Web-3.9-main/fronten
+d/src/pages/ClassDetail
+.tsx, D:/UniEdu-Web-3.9
+-main/frontend/src/page
+s/Classes.tsx, D:/UniEd
+u-Web-3.9-main/frontend
+/src/pages/Dashboard.ts
+x, D:/UniEdu-Web-3.9-ma
+in/frontend/src/pages/H
+ome.tsx, D:/UniEdu-Web-
+3.9-main/frontend/src/p
+ages/LessonPlans.tsx, D
+:/UniEdu-Web-3.9-main/f
+rontend/src/pages/Sched
+ule.tsx, D:/UniEdu-Web-
+3.9-main/frontend/src/p
+ages/Staff.tsx, D:/UniE
+du-Web-3.9-main/fronten
+d/src/pages/StaffCSKHDe
+tail.tsx, D:/UniEdu-Web
+-3.9-main/frontend/src/
+pages/StaffDetail.tsx, 
+D:/UniEdu-Web-3.9-main/
+frontend/src/pages/Stud
+entDetail.tsx, D:/UniEd
+u-Web-3.9-main/frontend
+/src/pages/Students.tsx
+, D:/UniEdu-Web-3.9-mai
+n/frontend/src/pages/Te
+achers.tsx, dynamic 
+import will not move 
+module into another 
+chunk.
+[39m
+computing gzip size...
+[2mdist/[22m[32mindex.html                               [39m[1m[2m  1.08 kB[22m[1m[22m[2m Γöé gzip:  0.59 kB[22m
+[2mdist/[22m[32massets/logo-unicorn-W40DCsqB.png         [39m[1m[2m443.71 kB[22m[1m[22m
+[2mdist/[22m[35massets/index-APhzYbYC.css                [39m[1m[2m207.81 kB[22m[1m[22m[2m Γöé gzip: 33.26 kB[22m
+[2mdist/[22m[36massets/useDebounce-B6rD7pLD.js           [39m[1m[2m  0.20 kB[22m[1m[22m[2m Γöé gzip:  0.17 kB[22m
+[2mdist/[22m[36massets/categoriesService-qWZ0WIHL.js     [39m[1m[2m  0.42 kB[22m[1m[22m[2m Γöé gzip:  0.24 kB[22m
+[2mdist/[22m[36massets/formatters-C8wCBXGd.js            [39m[1m[2m  0.66 kB[22m[1m[22m[2m Γöé gzip:  0.38 kB[22m
+[2mdist/[22m[36massets/staffService-DdAC3VM4.js          [39m[1m[2m  0.90 kB[22m[1m[22m[2m Γöé gzip:  0.40 kB[22m
+[2mdist/[22m[36massets/actionHistoryService-BDDpiEoF.js  [39m[1m[2m  1.17 kB[22m[1m[22m[2m Γöé gzip:  0.50 kB[22m
+[2mdist/[22m[36massets/sessionsService-VnG0KXD8.js       [39m[1m[2m  1.52 kB[22m[1m[22m[2m Γöé gzip:  0.60 kB[22m
+[2mdist/[22m[36massets/toast-C2qE1mBB.js                 [39m[1m[2m  2.44 kB[22m[1m[22m[2m Γöé gzip:  0.91 kB[22m
+[2mdist/[22m[36massets/authService-BWwkvAc4.js           [39m[1m[2m  2.60 kB[22m[1m[22m[2m Γöé gzip:  1.08 kB[22m
+[2mdist/[22m[36massets/studentsService-C88R1uU-.js       [39m[1m[2m  3.08 kB[22m[1m[22m[2m Γöé gzip:  0.97 kB[22m
+[2mdist/[22m[36massets/CurrencyInput-B4K_3K3k.js         [39m[1m[2m  3.24 kB[22m[1m[22m[2m Γöé gzip:  1.65 kB[22m
+[2mdist/[22m[36massets/Categories-Da-IWpQe.js            [39m[1m[2m  3.94 kB[22m[1m[22m[2m Γöé gzip:  1.54 kB[22m
+[2mdist/[22m[36massets/Register-Dv1mdYi2.js              [39m[1m[2m  4.65 kB[22m[1m[22m[2m Γöé gzip:  1.76 kB[22m
+[2mdist/[22m[36massets/Schedule-BrCpfFw0.js              [39m[1m[2m  5.92 kB[22m[1m[22m[2m Γöé gzip:  2.11 kB[22m
+[2mdist/[22m[36massets/Costs-Su_LiPbO.js                 [39m[1m[2m  9.32 kB[22m[1m[22m[2m Γöé gzip:  3.02 kB[22m
+[2mdist/[22m[36massets/ActionHistory-CFhptN8T.js         [39m[1m[2m 11.15 kB[22m[1m[22m[2m Γöé gzip:  3.48 kB[22m
+[2mdist/[22m[36massets/Classes-DnUWlhIa.js               [39m[1m[2m 11.67 kB[22m[1m[22m[2m Γöé gzip:  3.33 kB[22m
+[2mdist/[22m[36massets/Teachers-DwWskTYl.js              [39m[1m[2m 13.59 kB[22m[1m[22m[2m Γöé gzip:  3.51 kB[22m
+[2mdist/[22m[36massets/Staff-vzSWXYnD.js                 [39m[1m[2m 15.07 kB[22m[1m[22m[2m Γöé gzip:  4.46 kB[22m
+[2mdist/[22m[36massets/Payments-C46Rlpv5.js              [39m[1m[2m 15.94 kB[22m[1m[22m[2m Γöé gzip:  3.92 kB[22m
+[2mdist/[22m[36massets/Coding-erKxyU9k.js                [39m[1m[2m 17.01 kB[22m[1m[22m[2m Γöé gzip:  4.40 kB[22m
+[2mdist/[22m[36massets/StaffCSKHDetail-BK3IjDh2.js       [39m[1m[2m 18.01 kB[22m[1m[22m[2m Γöé gzip:  4.70 kB[22m
+[2mdist/[22m[36massets/Students-DDU73iaq.js              [39m[1m[2m 26.28 kB[22m[1m[22m[2m Γöé gzip:  5.90 kB[22m
+[2mdist/[22m[36massets/Dashboard-BHxsDjxg.js             [39m[1m[2m 49.51 kB[22m[1m[22m[2m Γöé gzip: 10.24 kB[22m
+[2mdist/[22m[36massets/StudentDetail-YvAiR-vT.js         [39m[1m[2m 58.53 kB[22m[1m[22m[2m Γöé gzip: 11.60 kB[22m
+[2mdist/[22m[36massets/StaffDetail-DOC9kpGL.js           [39m[1m[2m 86.16 kB[22m[1m[22m[2m Γöé gzip: 16.68 kB[22m
+[2mdist/[22m[36massets/Home-CkTZlaTK.js                  [39m[1m[2m 89.97 kB[22m[1m[22m[2m Γöé gzip: 21.46 kB[22m
+[2mdist/[22m[36massets/index-BLdXgI7e.js                 [39m[1m[2m 97.97 kB[22m[1m[22m[2m Γöé gzip: 31.03 kB[22m
+[2mdist/[22m[36massets/ClassDetail-yIYvNkqb.js           [39m[1m[2m153.60 kB[22m[1m[22m[2m Γöé gzip: 31.43 kB[22m
+[2mdist/[22m[36massets/react-vendor-DXU67m9n.js          [39m[1m[2m162.94 kB[22m[1m[22m[2m Γöé gzip: 53.21 kB[22m
+[2mdist/[22m[36massets/LessonPlans-Dqh7dOYZ.js           [39m[1m[2m177.94 kB[22m[1m[22m[2m Γöé gzip: 34.45 kB[22m
+[32mΓ£ô built in 2.84s[39m

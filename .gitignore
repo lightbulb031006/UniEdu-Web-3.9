@@ -1,0 +1,75 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Build outputs
+dist/
+build/
+*/dist/
+*/build/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+*/.env
+*/.env.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Cursor / Agents (local, không đẩy lên git)
+.cursor/
+.agents/
+skills-lock.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage/
+.nyc_output/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Backend specific
+backend/dist/
+backend/.env
+
+# Frontend specific
+frontend/dist/
+frontend/.env
+
+# Backup files (not needed in git)
+backup/
+a/
+
+# Build artifacts
+*.map
+*.d.ts
+backend/dist/
+
+# Backup files (not needed in git)
+backup/
+a/
+
+# Build artifacts
+*.map
+*.d.ts
+backend/dist/
+frontend/dist/

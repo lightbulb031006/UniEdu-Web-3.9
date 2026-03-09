@@ -1,0 +1,92 @@
+﻿src/App.tsx(73,21): error TS2322: Type '{ initialAuthMode: string; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'initialAuthMode' does not exist on type 'IntrinsicAttributes'.
+src/components/ProtectedRoute.tsx(114,26): error TS2551: Property 'teacher_ids' does not exist on type 'Class & { teachers?: { id: string; fullName: string; email?: string | undefined; phone?: string | undefined; roles?: string[] | undefined; }[] | undefined; }'. Did you mean 'teacherIds'?
+src/components/ProtectedRoute.tsx(114,65): error TS2551: Property 'teacher_ids' does not exist on type 'Class & { teachers?: { id: string; fullName: string; email?: string | undefined; phone?: string | undefined; roles?: string[] | undefined; }[] | undefined; }'. Did you mean 'teacherIds'?
+src/components/ProtectedRoute.tsx(115,35): error TS2551: Property 'teacher_ids' does not exist on type 'Class & { teachers?: { id: string; fullName: string; email?: string | undefined; phone?: string | undefined; roles?: string[] | undefined; }[] | undefined; }'. Did you mean 'teacherIds'?
+src/components/SurveyTab.tsx(167,33): error TS7006: Parameter 't' implicitly has an 'any' type.
+src/pages/ActionHistory.tsx(51,5): error TS2322: Type '""' is not assignable to type '"delete" | "create" | "update" | "undo" | undefined'.
+src/pages/Categories.tsx(130,18): error TS18047: 'categories' is possibly 'null'.
+src/pages/Categories.tsx(137,19): error TS18047: 'categories' is possibly 'null'.
+src/pages/ClassDetail.tsx(434,50): error TS2339: Property 'wallet_balance' does not exist on type '{ id: string; full_name: string; birth_year?: number | undefined; province?: string | undefined; status?: string | undefined; }'.
+src/pages/ClassDetail.tsx(443,35): error TS2339: Property 'tuitionPerSession' does not exist on type 'ClassStudentWithRemaining'.
+src/pages/ClassDetail.tsx(526,45): error TS7006: Parameter 't' implicitly has an 'any' type.
+src/pages/ClassDetail.tsx(530,30): error TS2339: Property 'unpaidAmount' does not exist on type '{ teacher: { id: string; fullName: string; email?: string | undefined; phone?: string | undefined; }; allowance: number; totalReceived: number; }'.
+src/pages/ClassDetail.tsx(540,31): error TS7006: Parameter 'teacher' implicitly has an 'any' type.
+src/pages/ClassDetail.tsx(831,36): error TS7031: Binding element 'teacher' implicitly has an 'any' type.
+src/pages/ClassDetail.tsx(831,45): error TS7031: Binding element 'allowance' implicitly has an 'any' type.
+src/pages/ClassDetail.tsx(831,56): error TS7031: Binding element 'unpaidAmount' implicitly has an 'any' type.
+src/pages/ClassDetail.tsx(1307,120): error TS2339: Property 'name' does not exist on type '{ id: string; fullName: string; birthYear: number | undefined; province: string | undefined; status: string; remainingSessions: number; totalAttended: number; tuitionPerSession: any; wallet_balance: number; walletBalance: number; } | { ...; }'.
+  Property 'name' does not exist on type '{ id: string; fullName: string; birthYear: number | undefined; province: string | undefined; status: string; remainingSessions: number; totalAttended: number; tuitionPerSession: any; wallet_balance: number; walletBalance: number; }'.
+src/pages/ClassDetail.tsx(1308,83): error TS2339: Property 'name' does not exist on type '{ id: string; fullName: string; birthYear: number | undefined; province: string | undefined; status: string; remainingSessions: number; totalAttended: number; tuitionPerSession: any; wallet_balance: number; walletBalance: number; } | { ...; }'.
+  Property 'name' does not exist on type '{ id: string; fullName: string; birthYear: number | undefined; province: string | undefined; status: string; remainingSessions: number; totalAttended: number; tuitionPerSession: any; wallet_balance: number; walletBalance: number; }'.
+src/pages/ClassDetail.tsx(1799,71): error TS7006: Parameter 't' implicitly has an 'any' type.
+src/pages/ClassDetail.tsx(2075,111): error TS2304: Cannot find name 'classes'.
+src/pages/ClassDetail.tsx(2075,124): error TS7006: Parameter 'c' implicitly has an 'any' type.
+src/pages/ClassDetail.tsx(2450,87): error TS2322: Type 'number | null' is not assignable to type 'number | undefined'.
+  Type 'null' is not assignable to type 'number | undefined'.
+src/pages/ClassDetail.tsx(2501,89): error TS2322: Type 'number | null' is not assignable to type 'number | undefined'.
+  Type 'null' is not assignable to type 'number | undefined'.
+src/pages/ClassDetail.tsx(2844,40): error TS2339: Property 'students' does not exist on type 'Class'.
+src/pages/ClassDetail.tsx(2881,25): error TS2552: Cannot find name 'students'. Did you mean 'student'?
+src/pages/ClassDetail.tsx(2881,39): error TS7006: Parameter 's' implicitly has an 'any' type.
+src/pages/ClassDetail.tsx(4106,35): error TS2339: Property 'present' does not exist on type 'AttendanceRecord'.
+src/pages/ClassDetail.tsx(5591,39): error TS7006: Parameter 'teacher' implicitly has an 'any' type.
+src/pages/ClassDetail.tsx(5929,9): error TS2353: Object literal may only specify known properties, and 'gender' does not exist in type 'Partial<Student>'.
+src/pages/LessonPlans.tsx(598,7): error TS2552: Cannot find name 'refetch'. Did you mean 'fetch'?
+src/pages/LessonPlans.tsx(609,28): error TS2552: Cannot find name 'lessonPlans'. Did you mean 'LessonPlans'?
+src/pages/LessonPlans.tsx(609,45): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/pages/LessonPlans.tsx(622,13): error TS2322: Type 'null' is not assignable to type 'Record<string, { old: any; new: any; }> | undefined'.
+src/pages/LessonPlans.tsx(631,7): error TS2552: Cannot find name 'refetch'. Did you mean 'fetch'?
+src/pages/LessonPlans.tsx(711,7): error TS18048: 'tag' is possibly 'undefined'.
+src/pages/LessonPlans.tsx(789,13): error TS2322: Type '() => void' is not assignable to type '() => Promise<void>'.
+  Type 'void' is not assignable to type 'Promise<void>'.
+src/pages/LessonPlans.tsx(790,13): error TS2322: Type '() => void' is not assignable to type '() => Promise<void>'.
+  Type 'void' is not assignable to type 'Promise<void>'.
+src/pages/LessonPlans.tsx(791,13): error TS2322: Type '() => void' is not assignable to type '() => Promise<void>'.
+  Type 'void' is not assignable to type 'Promise<void>'.
+src/pages/LessonPlans.tsx(932,27): error TS2322: Type 'null' is not assignable to type 'Record<string, { old: any; new: any; }> | undefined'.
+src/pages/LessonPlans.tsx(971,27): error TS2322: Type 'null' is not assignable to type 'Record<string, { old: any; new: any; }> | undefined'.
+src/pages/LessonPlans.tsx(993,15): error TS2322: Type '(string | undefined)[]' is not assignable to type 'string[]'.
+  Type 'string | undefined' is not assignable to type 'string'.
+    Type 'undefined' is not assignable to type 'string'.
+src/pages/LessonPlans.tsx(1013,15): error TS2322: Type '() => void' is not assignable to type '() => Promise<void>'.
+  Type 'void' is not assignable to type 'Promise<void>'.
+src/pages/LessonPlans.tsx(1053,17): error TS2322: Type '() => void' is not assignable to type '() => Promise<void>'.
+  Type 'void' is not assignable to type 'Promise<void>'.
+src/pages/LessonPlans.tsx(1054,17): error TS2322: Type '() => void' is not assignable to type '() => Promise<void>'.
+  Type 'void' is not assignable to type 'Promise<void>'.
+src/pages/LessonPlans.tsx(1055,17): error TS2322: Type '() => void' is not assignable to type '() => Promise<void>'.
+  Type 'void' is not assignable to type 'Promise<void>'.
+src/pages/LessonPlans.tsx(1918,13): error TS2322: Type 'null' is not assignable to type 'Record<string, { old: any; new: any; }> | undefined'.
+src/pages/LessonPlans.tsx(2015,13): error TS2322: Type 'null' is not assignable to type 'Record<string, { old: any; new: any; }> | undefined'.
+src/pages/LessonPlans.tsx(2172,7): error TS18048: 'tag' is possibly 'undefined'.
+src/pages/LessonPlans.tsx(2292,9): error TS2304: Cannot find name 'onResetMonth'.
+src/pages/LessonPlans.tsx(2293,7): error TS2304: Cannot find name 'onResetMonth'.
+src/pages/LessonPlans.tsx(4948,7): error TS18048: 'tag' is possibly 'undefined'.
+src/pages/LessonPlans.tsx(5170,11): error TS2322: Type 'null' is not assignable to type 'Record<string, { old: any; new: any; }> | undefined'.
+src/pages/LessonPlans.tsx(5236,13): error TS2322: Type 'null' is not assignable to type 'Record<string, { old: any; new: any; }> | undefined'.
+src/pages/LessonPlans.tsx(6996,13): error TS2322: Type 'null' is not assignable to type 'Record<string, { old: any; new: any; }> | undefined'.
+src/pages/LessonPlans.tsx(7156,13): error TS2322: Type 'null' is not assignable to type 'Record<string, { old: any; new: any; }> | undefined'.
+src/pages/Register.tsx(59,9): error TS2322: Type 'string' is not assignable to type '"admin" | "teacher" | "student"'.
+src/pages/Staff.tsx(415,92): error TS2339: Property 'name' does not exist on type 'Teacher'.
+src/pages/Staff.tsx(480,37): error TS2304: Cannot find name 'deleteTeacher'.
+src/pages/StaffDetail.tsx(482,43): error TS2551: Property 'teacherId' does not exist on type 'Session'. Did you mean 'teacher_id'?
+src/pages/StaffDetail.tsx(556,78): error TS2551: Property 'teacherId' does not exist on type 'Session'. Did you mean 'teacher_id'?
+src/pages/StaffDetail.tsx(599,17): error TS2339: Property 'month' does not exist on type 'WorkItem'.
+src/pages/StaffDetail.tsx(600,19): error TS2339: Property 'month' does not exist on type 'WorkItem'.
+src/pages/StaffDetail.tsx(700,41): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/pages/StaffDetail.tsx(873,30): error TS7006: Parameter 'role' implicitly has an 'any' type.
+src/pages/StaffDetail.tsx(1727,66): error TS2339: Property 'clickAction' does not exist on type 'WorkItem'.
+src/pages/StaffDetail.tsx(2681,64): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/pages/StaffDetail.tsx(3458,39): error TS2339: Property 'className' does not exist on type '{ type: string; id: any; className: any; date: string; amount: any; notes: any; } | { type: string; id: any; role: string; taskName: any; date: string; amount: any; notes: any; }'.
+  Property 'className' does not exist on type '{ type: string; id: any; role: string; taskName: any; date: string; amount: any; notes: any; }'.
+src/pages/StaffDetail.tsx(3461,41): error TS2339: Property 'role' does not exist on type '{ type: string; id: any; className: any; date: string; amount: any; notes: any; } | { type: string; id: any; role: string; taskName: any; date: string; amount: any; notes: any; }'.
+  Property 'role' does not exist on type '{ type: string; id: any; className: any; date: string; amount: any; notes: any; }'.
+src/pages/StaffDetail.tsx(3463,74): error TS2339: Property 'taskName' does not exist on type '{ type: string; id: any; className: any; date: string; amount: any; notes: any; } | { type: string; id: any; role: string; taskName: any; date: string; amount: any; notes: any; }'.
+  Property 'taskName' does not exist on type '{ type: string; id: any; className: any; date: string; amount: any; notes: any; }'.
+src/pages/Teachers.tsx(347,55): error TS2345: Argument of type '{ classCount: number; birthYear: number | null; id: string; fullName?: string; full_name?: string; email?: string; phone?: string; birthDate?: string; birth_date?: string; birth_year?: number; ... 13 more ...; qrPaymentLink?: string; }' is not assignable to parameter of type 'Teacher'.
+  Types of property 'birthYear' are incompatible.
+    Type 'number | null' is not assignable to type 'number | undefined'.
+      Type 'null' is not assignable to type 'number | undefined'.
+src/services/actionHistoryService.ts(74,29): error TS2367: This comparison appears to be unintentional because the types '"delete" | "create" | "update" | "undo"' and '""' have no overlap.
+src/services/api.ts(9,29): error TS2339: Property 'env' does not exist on type 'ImportMeta'.
