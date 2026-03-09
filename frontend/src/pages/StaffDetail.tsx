@@ -108,7 +108,9 @@ function StaffDetail() {
   }, [id, user?.role]);
 
   // Giáo viên chỉ được load hồ sơ của chính mình (id === linkId)
-  const canLoadStaff = !user || user.role !== 'teacher' || (user.linkId != null && id === user.linkId);
+  // Backend đã enforce security (trả 404 nếu teacher truy cập record khác), nên frontend chỉ cần kiểm tra cơ bản
+  // Không block loading khi linkId chưa sẵn sàng — useEffect ở trên sẽ redirect nếu cần
+  const canLoadStaff = !user || user.role !== 'teacher' || !user.linkId || id === user.linkId;
   const { data: staff, isLoading, error, refetch } = useDataLoading(fetchTeacherFn, [id], {
     cacheKey: `staff-${id}`,
     staleTime: 5 * 60 * 1000,
