@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from '../utils/toast';
 import { useDataLoading } from '../hooks/useDataLoading';
-import { fetchTeachers, createTeacher, Teacher } from '../services/teachersService';
+import { fetchTeachers, createTeacher, deleteTeacher, Teacher } from '../services/teachersService';
 import { getStaffUnpaidAmounts } from '../services/staffService';
 import { useAuthStore } from '../store/authStore';
 import { hasRole, userHasStaffRole } from '../utils/permissions';
