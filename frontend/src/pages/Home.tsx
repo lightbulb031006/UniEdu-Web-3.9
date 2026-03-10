@@ -1,5 +1,5 @@
 /**
- * Unicorn Edu - Math Tutoring Landing Page
+ * Unicorns Edu - Math Tutoring Landing Page
  * Modern, beautiful design for prospective students and parents
  */
 
@@ -220,7 +220,7 @@ function Home({ initialAuthMode }: HomeProps = {}) {
   const defaultFeedbacks: StudentFeedback[] = [
     {
       id: 'df1', student_name: 'Minh Anh', student_class: 'Học sinh lớp 10 – Toán',
-      content: 'Trước mình học Toán rất yếu, không hiểu bản chất gì cả. Từ khi học với mentor ở Unicorn Edu, mình đã hiểu sâu hơn rất nhiều.',
+      content: 'Trước mình học Toán rất yếu, không hiểu bản chất gì cả. Từ khi học với mentor ở Unicorns Edu, mình đã hiểu sâu hơn rất nhiều.',
       rating: 5, is_active: true, display_order: 1, avatar_color: '#3B82F6',
       highlight_text: 'Điểm từ 5.0 lên 8.5 chỉ sau 2 tháng!', badge_text: 'Tiến bộ vượt bậc', badge_icon: '📈',
     },
@@ -239,7 +239,7 @@ function Home({ initialAuthMode }: HomeProps = {}) {
     },
     {
       id: 'df4', student_name: 'Thu Trang', student_class: 'Học sinh lớp 12 – Toán',
-      content: 'Em ôn thi Đại học với Unicorn Edu trong 4 tháng. Mentor giải thích rất kỹ, cho nhiều bài luyện đề.',
+      content: 'Em ôn thi Đại học với Unicorns Edu trong 4 tháng. Mentor giải thích rất kỹ, cho nhiều bài luyện đề.',
       rating: 5, is_active: true, display_order: 4, avatar_color: '#EC4899',
       highlight_text: 'Cuối cùng em đạt 9.2 điểm Toán trong kỳ thi tốt nghiệp!', badge_text: 'Thi Đại học', badge_icon: '🎓',
     },
@@ -1852,9 +1852,9 @@ function Home({ initialAuthMode }: HomeProps = {}) {
         <div className="section-container">
           <div className="section-header">
             <span className="section-badge">⭐ Đánh giá từ học sinh & phụ huynh</span>
-            <h2 className="section-title">Học sinh nói gì về <span className="text-highlight">Unicorn Edu</span></h2>
+            <h2 className="section-title">Học sinh nói gì về <span className="text-highlight">Unicorns Edu</span></h2>
             <p className="section-subtitle">
-              Những chia sẻ chân thực từ học sinh và phụ huynh đã tin tưởng Unicorn Edu
+              Những chia sẻ chân thực từ học sinh và phụ huynh đã tin tưởng Unicorns Edu
             </p>
             {isAuthenticated && user?.role === 'admin' && (
               <button
@@ -2132,7 +2132,7 @@ function Home({ initialAuthMode }: HomeProps = {}) {
                 onMouseLeave={(e) => e.currentTarget.style.opacity = '0.95'}
               >
                 <span style={{ fontSize: '20px' }}>🌐</span>
-                <span>Fanpage: Unicorn Edu - Học Toán Cùng Huster</span>
+                <span>Fanpage: Unicorns Edu - Học Toán Cùng Huster</span>
               </a>
               <a href="https://www.facebook.com/hoctincungchuyentin" target="_blank" rel="noopener noreferrer"
                 style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)', color: 'white', textDecoration: 'none', opacity: 0.95, transition: 'opacity 0.2s' }}
@@ -2152,7 +2152,7 @@ function Home({ initialAuthMode }: HomeProps = {}) {
         <div className="footer-container">
           <div className="footer-grid">
             <div className="footer-brand">
-              <h3>Unicorn Edu</h3>
+              <h3>Unicorns Edu</h3>
               <p>
                 Nền tảng giáo dục toán học chất lượng cao, kết nối học sinh với các mentor xuất sắc
                 từ Đại học Bách Khoa Hà Nội.

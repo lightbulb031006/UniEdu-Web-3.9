@@ -4,7 +4,7 @@ import { useDataLoading } from '../hooks/useDataLoading';
 import { fetchTeachers, updateTeacher } from '../services/teachersService';
 import { fetchClasses, removeTeacherFromClass } from '../services/classesService';
 import { fetchSessions } from '../services/sessionsService';
-import { getStaffUnpaidAmount, fetchStaffWorkItems, fetchStaffBonuses, updateStaffQrPaymentLink, getStaffLoginInfo, fetchStaffDetailData, StaffDetailData } from '../services/staffService';
+import { getStaffUnpaidAmounts, fetchStaffWorkItems, fetchStaffBonuses, updateStaffQrPaymentLink, getStaffLoginInfo, fetchStaffDetailData, StaffDetailData } from '../services/staffService';
 import api from '../services/api';
 import { fetchBonuses, createBonus, updateBonus, deleteBonus, Bonus } from '../services/bonusesService';
 import { useAuthStore } from '../store/authStore';
@@ -143,19 +143,28 @@ function StaffDetail() {
   });
 
 
-  // Fetch unpaid amount
-  // Chỉ fetch khi staff đã load xong
-  const [unpaidAmount, setUnpaidAmount] = useState<number>(0);
+  // Fetch unpaid amounts WITH BREAKDOWN (same API as Staff list page for consistency)
+  // This ensures StaffDetail shows the same unpaid value as the Staff list
+  const [unpaidBreakdown, setUnpaidBreakdown] = useState<{ classesAndWork: number; bonuses: number; total: number } | null>(null);
   useEffect(() => {
     if (id && staff && !isLoading) {
-      getStaffUnpaidAmount(id)
-        .then(setUnpaidAmount)
+      getStaffUnpaidAmounts([id])
+        .then((result) => {
+          const bd = result.breakdown?.[id];
+          if (bd) {
+            setUnpaidBreakdown(bd);
+          } else {
+            // Fallback: put everything in classesAndWork if no breakdown
+            const total = result.totals?.[id] || 0;
+            setUnpaidBreakdown({ classesAndWork: total, bonuses: 0, total });
+          }
+        })
         .catch((err) => {
           // Không log 429 errors
           if (err?.response?.status !== 429) {
-            console.error('Failed to fetch unpaid amount:', err);
+            console.error('Failed to fetch unpaid amounts:', err);
           }
-          setUnpaidAmount(0);
+          setUnpaidBreakdown(null);
         });
     }
   }, [id, staff, isLoading]);
@@ -661,7 +670,11 @@ function StaffDetail() {
     // Calculate totals with deduction: (classes + work items) * (100 - x%) + bonuses
     const totalMonthAll = Math.round((totalMonthAllClasses + totalMonthWorkItems) * deductionMultiplier) + totalMonthBonuses;
     const totalPaidAll = Math.round((totalPaidByStatus + totalPaidWorkItems) * deductionMultiplier) + totalPaidBonuses;
-    const totalUnpaidAll = Math.round((totalUnpaidByStatus + totalUnpaidWorkItems) * deductionMultiplier) + totalUnpaidBonuses;
+    // Use backend unpaid data (same source as Staff list page) for consistency
+    // Fall back to local calculation only if backend data is not available
+    const totalUnpaidAll = unpaidBreakdown
+      ? Math.round(unpaidBreakdown.classesAndWork * deductionMultiplier) + unpaidBreakdown.bonuses
+      : Math.round((totalUnpaidByStatus + totalUnpaidWorkItems) * deductionMultiplier) + totalUnpaidBonuses;
 
     // Totals WITHOUT deduction (cũ) = classes + work items + bonuses (no deduction applied)
     const totalMonthAllNoDeduction = totalMonthAllClasses + totalMonthWorkItems + totalMonthBonuses;
@@ -693,7 +706,7 @@ function StaffDetail() {
       totalPaidAllTime,
       totalDepositAllTime,
     };
-  }, [workItems, workItemsData, bonuses, bonusesData, bonusesStatistics, sessions, selectedMonth, id, getSessionAllowance, deductionSettings]);
+  }, [workItems, workItemsData, bonuses, bonusesData, bonusesStatistics, sessions, selectedMonth, id, getSessionAllowance, deductionSettings, unpaidBreakdown]);
 
   // Check if income stats are loading
   // Income stats are calculated from UI data, so only show loading if work items are loading
