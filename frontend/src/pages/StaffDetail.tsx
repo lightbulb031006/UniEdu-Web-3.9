@@ -5,6 +5,7 @@ import { fetchTeachers, updateTeacher } from '../services/teachersService';
 import { fetchClasses, removeTeacherFromClass } from '../services/classesService';
 import { fetchSessions } from '../services/sessionsService';
 import { getStaffUnpaidAmount, fetchStaffWorkItems, fetchStaffBonuses, updateStaffQrPaymentLink, getStaffLoginInfo, fetchStaffDetailData, StaffDetailData } from '../services/staffService';
+import api from '../services/api';
 import { fetchBonuses, createBonus, updateBonus, deleteBonus, Bonus } from '../services/bonusesService';
 import { useAuthStore } from '../store/authStore';
 import { authService } from '../services/authService';
@@ -158,6 +159,34 @@ function StaffDetail() {
         });
     }
   }, [id, staff, isLoading]);
+
+  // Load deduction settings from backend (synced across devices)
+  const [deductionSettings, setDeductionSettings] = useState<{ globalPercent: number; individualDeductions: Record<string, number> }>({
+    globalPercent: 0, individualDeductions: {},
+  });
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api.get('/settings/deduction');
+        if (res.data) {
+          setDeductionSettings({
+            globalPercent: res.data.globalPercent ?? 0,
+            individualDeductions: res.data.individualDeductions ?? {},
+          });
+        }
+      } catch {
+        // Fallback to localStorage
+        try {
+          const globalStr = localStorage.getItem('staff_deduction_percent');
+          const indStr = localStorage.getItem('staff_individual_deductions');
+          setDeductionSettings({
+            globalPercent: globalStr ? Number(globalStr) : 0,
+            individualDeductions: indStr ? JSON.parse(indStr) : {},
+          });
+        } catch { /* ignore */ }
+      }
+    })();
+  }, []);
 
   // Fetch work items - use debounced month to avoid too many calls
   const fetchWorkItemsFn = useCallback(async () => {
@@ -620,23 +649,13 @@ function StaffDetail() {
     });
     const totalDepositAllTime = yearDepositSessions.reduce((sum, s) => sum + getSessionAllowance(s), 0);
 
-    // Read deduction % for this staff from localStorage (same keys as Staff.tsx)
+    // Read deduction % for this staff from backend-synced state
     let deductionX = 0;
-    try {
-      const savedIndividual = localStorage.getItem('staff_individual_deductions');
-      if (savedIndividual) {
-        const parsed = JSON.parse(savedIndividual);
-        if (parsed[id || ''] != null) {
-          deductionX = Number(parsed[id || '']);
-        } else {
-          const savedGlobal = localStorage.getItem('staff_deduction_percent');
-          deductionX = savedGlobal ? Number(savedGlobal) : 0;
-        }
-      } else {
-        const savedGlobal = localStorage.getItem('staff_deduction_percent');
-        deductionX = savedGlobal ? Number(savedGlobal) : 0;
-      }
-    } catch { deductionX = 0; }
+    if (deductionSettings.individualDeductions[id || ''] != null) {
+      deductionX = Number(deductionSettings.individualDeductions[id || '']);
+    } else {
+      deductionX = deductionSettings.globalPercent;
+    }
     const deductionMultiplier = (100 - deductionX) / 100;
 
     // Calculate totals with deduction: (classes + work items) * (100 - x%) + bonuses
@@ -674,7 +693,7 @@ function StaffDetail() {
       totalPaidAllTime,
       totalDepositAllTime,
     };
-  }, [workItems, workItemsData, bonuses, bonusesData, bonusesStatistics, sessions, selectedMonth, id, getSessionAllowance]);
+  }, [workItems, workItemsData, bonuses, bonusesData, bonusesStatistics, sessions, selectedMonth, id, getSessionAllowance, deductionSettings]);
 
   // Check if income stats are loading
   // Income stats are calculated from UI data, so only show loading if work items are loading

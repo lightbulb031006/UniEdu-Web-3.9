@@ -1,9 +1,10 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from '../utils/toast';
 import { useDataLoading } from '../hooks/useDataLoading';
 import { fetchTeachers, createTeacher, deleteTeacher, Teacher } from '../services/teachersService';
 import { getStaffUnpaidAmounts } from '../services/staffService';
+import api from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import { hasRole, userHasStaffRole } from '../utils/permissions';
 import { formatCurrencyVND, formatNumber } from '../utils/formatters';
@@ -47,16 +48,44 @@ function Staff() {
   const [search, setSearch] = useState('');
   const [province, setProvince] = useState('all');
   const [status, setStatus] = useState('all');
-  const [deductionPercent, setDeductionPercent] = useState<number>(() => {
-    const saved = localStorage.getItem('staff_deduction_percent');
-    return saved ? Number(saved) : 0;
-  });
-  const [individualDeductions, setIndividualDeductions] = useState<Record<string, number>>(() => {
-    try {
-      const saved = localStorage.getItem('staff_individual_deductions');
-      return saved ? JSON.parse(saved) : {};
-    } catch { return {}; }
-  });
+  const [deductionPercent, setDeductionPercent] = useState<number>(0);
+  const [individualDeductions, setIndividualDeductions] = useState<Record<string, number>>({});
+  const deductionSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Load deduction settings from backend on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api.get('/settings/deduction');
+        if (res.data) {
+          setDeductionPercent(res.data.globalPercent ?? 0);
+          setIndividualDeductions(res.data.individualDeductions ?? {});
+        }
+      } catch {
+        // Fallback to localStorage for backward compatibility
+        try {
+          const saved = localStorage.getItem('staff_deduction_percent');
+          if (saved) setDeductionPercent(Number(saved));
+          const savedInd = localStorage.getItem('staff_individual_deductions');
+          if (savedInd) setIndividualDeductions(JSON.parse(savedInd));
+        } catch { /* ignore */ }
+      }
+    })();
+  }, []);
+
+  // Debounced save to backend
+  const saveDeductionToBackend = useCallback((global: number, individual: Record<string, number>) => {
+    if (deductionSaveTimer.current) clearTimeout(deductionSaveTimer.current);
+    deductionSaveTimer.current = setTimeout(async () => {
+      try {
+        await api.put('/settings/deduction', { globalPercent: global, individualDeductions: individual });
+      } catch {
+        // Fallback: save to localStorage
+        localStorage.setItem('staff_deduction_percent', String(global));
+        localStorage.setItem('staff_individual_deductions', JSON.stringify(individual));
+      }
+    }, 500);
+  }, []);
   const [showAddModal, setShowAddModal] = useState(false);
   const [addSubmitting, setAddSubmitting] = useState(false);
   const [addForm, setAddForm] = useState({
@@ -367,10 +396,9 @@ function Staff() {
                           onChange={(e) => {
                             const val = Math.max(0, Math.min(100, Number(e.target.value) || 0));
                             setDeductionPercent(val);
-                            localStorage.setItem('staff_deduction_percent', String(val));
                             // Reset all individual overrides to the new global value
                             setIndividualDeductions({});
-                            localStorage.removeItem('staff_individual_deductions');
+                            saveDeductionToBackend(val, {});
                           }}
                           onClick={(e) => e.stopPropagation()}
                           style={{
@@ -451,7 +479,7 @@ function Staff() {
                               const val = Math.max(0, Math.min(100, Number(e.target.value) || 0));
                               const updated = { ...individualDeductions, [staff.id]: val };
                               setIndividualDeductions(updated);
-                              localStorage.setItem('staff_individual_deductions', JSON.stringify(updated));
+                              saveDeductionToBackend(deductionPercent, updated);
                             }}
                             onClick={(e) => e.stopPropagation()}
                             style={{

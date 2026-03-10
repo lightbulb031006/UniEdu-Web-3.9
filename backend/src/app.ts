@@ -36,6 +36,7 @@ import lessonTopicLinksRoutes from './routes/lessonTopicLinks';
 import attendanceRoutes from './routes/attendance';
 import surveysRoutes from './routes/surveys';
 import featuredMentorsRoutes from './routes/featuredMentors';
+import settingsRoutes from './routes/settings';
 
 const app = express();
 
@@ -126,6 +127,7 @@ app.use('/api/lesson-topic-links', lessonTopicLinksRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/surveys', surveysRoutes);
 app.use('/api/featured-mentors', featuredMentorsRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // 404 handler
 app.use((req, res) => {

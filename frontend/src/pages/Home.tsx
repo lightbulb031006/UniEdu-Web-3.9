@@ -1307,32 +1307,21 @@ function Home({ initialAuthMode }: HomeProps = {}) {
         </div>
       </section>
 
-      {/* Subject Toggle Section */}
-      <section style={{
-        background: 'linear-gradient(180deg, #F8FAFC 0%, #FFFFFF 100%)',
-        padding: '64px 0 24px 0',
-        textAlign: 'center' as const
-      }}>
-        <div className="section-container" style={{ maxWidth: '720px', margin: '0 auto', padding: '0 24px' }}>
-          <h2 style={{
-            fontSize: 'clamp(2rem, 4vw, 2.8rem)',
-            fontWeight: 800,
-            background: 'linear-gradient(135deg, #4F46E5, #7C3AED)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            marginBottom: '12px'
-          }}>Khám phá chương trình học</h2>
-          <p style={{ color: '#6B7280', fontSize: '16px', marginBottom: '40px' }}>
-            Chọn môn học để xem chi tiết khóa học và lộ trình
-          </p>
 
-          {/* Toggle Cards */}
+
+      {/* Courses Section - Redesigned */}
+      <section id="courses" className="courses-section-redesigned">
+        {/* Background Elements */}
+        <div className="section-bg-pattern"></div>
+
+        <div className="section-container">
+          {/* Subject Toggle Buttons - moved here, close to cards */}
           <div style={{
             display: 'grid',
             gridTemplateColumns: '1fr 1fr',
             gap: '16px',
             maxWidth: '560px',
-            margin: '0 auto'
+            margin: '0 auto 32px auto'
           }}>
             {/* Tin học button */}
             <button
@@ -1409,43 +1398,6 @@ function Home({ initialAuthMode }: HomeProps = {}) {
                 }}>Tư duy logic &amp; Giải toán</div>
               </div>
             </button>
-          </div>
-        </div>
-      </section>
-
-      {/* Courses Section - Redesigned */}
-      <section id="courses" className="courses-section-redesigned">
-        {/* Background Elements */}
-        <div className="section-bg-pattern"></div>
-
-        <div className="section-container">
-          <div className="section-header" style={{ position: 'relative' }}>
-            <h2 className="section-title">Bạn đang cần hỗ trợ <span className="text-highlight">mục tiêu nào?</span></h2>
-            <p className="section-subtitle">
-              {courseSubject === 'toan'
-                ? 'Chọn lớp Toán phù hợp với trình độ và mục tiêu học tập của bạn.'
-                : 'Chọn lớp Tin học phù hợp với trình độ và mục tiêu lập trình của bạn.'}
-            </p>
-            {/* Admin Settings Button */}
-            {isAdmin && (
-              <button
-                onClick={() => openEditModal(courseSubject, 0)}
-                title="Chỉnh sửa thẻ khóa học"
-                style={{
-                  position: 'absolute', top: 0, right: 0,
-                  width: '44px', height: '44px', borderRadius: '12px',
-                  border: '2px solid #E2E8F0', background: 'white',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  cursor: 'pointer', fontSize: '20px',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-                  transition: 'all 0.2s ease',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.transform = 'rotate(45deg)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'white'; e.currentTarget.style.transform = 'rotate(0deg)'; }}
-              >
-                ⚙️
-              </button>
-            )}
           </div>
 
           <div className="courses-grid-redesigned">
