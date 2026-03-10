@@ -89,17 +89,21 @@ export async function getStaffUnpaidAmounts(staffIds: string[]): Promise<{ total
   const cachePromises = staffIds.map(async (staffId) => {
     const cachedStats = await getStaffMonthlyStats(staffId, currentMonth);
     if (cachedStats) {
-      return { staffId, unpaid: cachedStats.total_unpaid_all };
+      return { staffId, unpaid: cachedStats.total_unpaid_all, cachedStats };
     }
-    return { staffId, unpaid: null };
+    return { staffId, unpaid: null, cachedStats: null };
   });
 
   const cacheResults = await Promise.all(cachePromises);
   const uncachedStaffIds: string[] = [];
 
-  cacheResults.forEach(({ staffId, unpaid }) => {
-    if (unpaid !== null) {
+  cacheResults.forEach(({ staffId, unpaid, cachedStats }) => {
+    if (unpaid !== null && cachedStats) {
       result[staffId] = unpaid;
+      // Also provide breakdown from cache so frontend can apply deductions correctly
+      const classesAndWork = (cachedStats.classes_total_unpaid || 0) + (cachedStats.work_items_total_unpaid || 0);
+      const bonuses = cachedStats.bonuses_total_unpaid || 0;
+      resultBreakdown[staffId] = { classesAndWork, bonuses, total: unpaid };
     } else {
       uncachedStaffIds.push(staffId);
     }

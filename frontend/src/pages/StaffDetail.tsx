@@ -167,7 +167,7 @@ function StaffDetail() {
           setUnpaidBreakdown(null);
         });
     }
-  }, [id, staff, isLoading]);
+  }, [id, staff, isLoading, sessionsData, debouncedMonth]);
 
   // Load deduction settings from backend (synced across devices)
   const [deductionSettings, setDeductionSettings] = useState<{ globalPercent: number; individualDeductions: Record<string, number> }>({
