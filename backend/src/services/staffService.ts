@@ -1471,36 +1471,35 @@ export async function getStaffDetailData(staffId: string, month: string) {
     let totalUnpaidAllNonTeacher: number;
     let totalPaidAllTimeNonTeacher: number;
 
+    // ALWAYS calculate totals from fresh data to avoid stale unpaid amounts
+    totalMonthAllNonTeacher = totalMonthWorkItems + totalMonthBonuses;
+    totalPaidAllNonTeacher = totalPaidWorkItems + totalPaidBonuses;
+    totalUnpaidAllNonTeacher = totalUnpaidWorkItems + totalUnpaidBonuses;
+
     if (cachedStatsNonTeacher) {
-      // Use cached values
-      totalMonthAllNonTeacher = cachedStatsNonTeacher.total_month_all;
-      totalPaidAllNonTeacher = cachedStatsNonTeacher.total_paid_all;
-      totalUnpaidAllNonTeacher = cachedStatsNonTeacher.total_unpaid_all;
+      // Only use cached totalPaidAllTime (expensive to calculate)
       totalPaidAllTimeNonTeacher = cachedStatsNonTeacher.total_paid_all_time;
     } else {
-      // Calculate and cache
-      totalMonthAllNonTeacher = totalMonthWorkItems + totalMonthBonuses;
-      totalPaidAllNonTeacher = totalPaidWorkItems + totalPaidBonuses;
-      totalUnpaidAllNonTeacher = totalUnpaidWorkItems + totalUnpaidBonuses;
+      // Calculate totalPaidAllTime and save to cache
       totalPaidAllTimeNonTeacher = totalPaidWorkItemsInYearNonTeacher + totalPaidBonusesInYearNonTeacher;
-
-      // Save to cache
-      await saveStaffMonthlyStats(staffId, month, {
-        classes_total_month: 0,
-        classes_total_paid: 0,
-        classes_total_unpaid: 0,
-        work_items_total_month: totalMonthWorkItems,
-        work_items_total_paid: totalPaidWorkItems,
-        work_items_total_unpaid: totalUnpaidWorkItems,
-        bonuses_total_month: totalMonthBonuses,
-        bonuses_total_paid: totalPaidBonuses,
-        bonuses_total_unpaid: totalUnpaidBonuses,
-        total_month_all: totalMonthAllNonTeacher,
-        total_paid_all: totalPaidAllNonTeacher,
-        total_unpaid_all: totalUnpaidAllNonTeacher,
-        total_paid_all_time: totalPaidAllTimeNonTeacher,
-      });
     }
+
+    // Save/update cache with fresh values
+    await saveStaffMonthlyStats(staffId, month, {
+      classes_total_month: 0,
+      classes_total_paid: 0,
+      classes_total_unpaid: 0,
+      work_items_total_month: totalMonthWorkItems,
+      work_items_total_paid: totalPaidWorkItems,
+      work_items_total_unpaid: totalUnpaidWorkItems,
+      bonuses_total_month: totalMonthBonuses,
+      bonuses_total_paid: totalPaidBonuses,
+      bonuses_total_unpaid: totalUnpaidBonuses,
+      total_month_all: totalMonthAllNonTeacher,
+      total_paid_all: totalPaidAllNonTeacher,
+      total_unpaid_all: totalUnpaidAllNonTeacher,
+      total_paid_all_time: totalPaidAllTimeNonTeacher,
+    });
 
     return {
       teacherClassStats: [],
@@ -1585,27 +1584,19 @@ export async function getStaffDetailData(staffId: string, month: string) {
   let totalUnpaidAll: number;
   let totalPaidAllTime: number;
 
-  // Use finalCachedStats (from parallel fetch) if available
+  // ALWAYS calculate totals from fresh data to avoid stale unpaid amounts after payment
+  // The teacherClassStats, workItems, and bonuses above are calculated from fresh session/DB data
+  totalMonthAll = totalMonthAllClasses + totalMonthWorkItems + totalMonthBonuses;
+  totalPaidAll = totalPaidByStatus + totalPaidWorkItems + totalPaidBonuses;
+  totalUnpaidAll = totalUnpaidByStatus + totalUnpaidWorkItems + totalUnpaidBonuses;
+
+  // Use finalCachedStats (from parallel fetch) if available for totalPaidAllTime only
+  // (expensive to calculate - requires querying all 12 months)
   const statsToUse = finalCachedStats || cachedStats;
   if (statsToUse) {
-    // Use cached aggregated values
-    totalMonthAll = statsToUse.total_month_all;
-    totalPaidAll = statsToUse.total_paid_all;
-    totalUnpaidAll = statsToUse.total_unpaid_all;
     totalPaidAllTime = statsToUse.total_paid_all_time;
   } else {
-    // Calculate and cache
-    // Tổng hợp từ tất cả các bảng:
-    // Tổng trợ cấp tháng = tổng tháng bảng các lớp dạy + tổng tháng bảng công việc + tổng tháng bảng thưởng
-    totalMonthAll = totalMonthAllClasses + totalMonthWorkItems + totalMonthBonuses;
-
-    // Đã thanh toán = tổng đã nhận các bảng
-    totalPaidAll = totalPaidByStatus + totalPaidWorkItems + totalPaidBonuses;
-
-    // Chưa thanh toán = tổng chưa nhận ở các bảng
-    totalUnpaidAll = totalUnpaidByStatus + totalUnpaidWorkItems + totalUnpaidBonuses;
-
-    // Total paid in current year from sessions (tổng nhận từ trước = tổng tất cả trong năm hiện tại)
+    // Calculate totalPaidAllTime (expensive - queries all 12 months)
     const currentYear = year;
     const yearStart = new Date(currentYear, 0, 1); // January 1st of current year
     const yearEnd = new Date(currentYear, 11, 31, 23, 59, 59); // December 31st of current year

@@ -63,16 +63,16 @@
     left: 0;
     right: 0;
     z-index: 1000;
-    background: rgba(255, 255, 255, 0.8);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    background: rgba(15, 23, 42, 0.75);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .math-header.scrolled {
-    background: rgba(255, 255, 255, 0.95);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    background: rgba(15, 23, 42, 0.92);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
 .header-container {
@@ -118,7 +118,7 @@
 .logo-main {
     font-size: 20px;
     font-weight: 800;
-    background: linear-gradient(135deg, #312E81, #1D4ED8);
+    background: linear-gradient(135deg, #A5B4FC, #60A5FA);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -134,7 +134,7 @@
 .nav-link {
     font-size: 15px;
     font-weight: 500;
-    color: var(--text);
+    color: rgba(203, 213, 225, 0.9);
     text-decoration: none;
     position: relative;
     padding: var(--spacing-2) 0;
@@ -157,7 +157,7 @@
 
 .nav-link:hover,
 .nav-link.active {
-    color: var(--landing-primary);
+    color: #A5B4FC;
 }
 
 .nav-link:hover::after,
@@ -1300,15 +1300,82 @@
     color: #64748B;
 }
 
-/* Masonry Grid */
-.fb-masonry {
-    columns: 3;
-    column-gap: 24px;
+/* Marquee Container */
+.fb-marquee {
+    position: relative;
+    overflow: hidden;
+    padding: 8px 0;
+    /* Gradient fade edges */
+    -webkit-mask-image: linear-gradient(to right,
+            transparent 0%,
+            black 8%,
+            black 92%,
+            transparent 100%);
+    mask-image: linear-gradient(to right,
+            transparent 0%,
+            black 8%,
+            black 92%,
+            transparent 100%);
 }
 
-.fb-masonry>.fb-card {
-    break-inside: avoid;
-    margin-bottom: 24px;
+/* Marquee Track - flex row that scrolls */
+.fb-marquee-track {
+    display: flex;
+    gap: 24px;
+    width: max-content;
+    animation: marquee-scroll 40s linear infinite;
+}
+
+.fb-marquee:hover .fb-marquee-track {
+    animation-play-state: paused;
+}
+
+/* Fixed card width for marquee (override masonry break-inside) */
+.fb-marquee-track>.fb-card {
+    flex-shrink: 0;
+    width: 340px;
+    margin-bottom: 0;
+}
+
+@keyframes marquee-scroll {
+    0% {
+        transform: translateX(0);
+    }
+
+    100% {
+        transform: translateX(-50%);
+    }
+}
+
+@media (max-width: 1024px) {
+    .fb-marquee-track>.fb-card {
+        width: 300px;
+    }
+
+    .fb-marquee-track {
+        animation-duration: 35s;
+    }
+}
+
+@media (max-width: 768px) {
+    .fb-marquee-track>.fb-card {
+        width: 280px;
+    }
+
+    .fb-marquee-track {
+        gap: 16px;
+        animation-duration: 28s;
+    }
+
+    .fb-stats-bar {
+        gap: 12px;
+    }
+
+    .fb-stat {
+        padding: 10px 18px;
+        flex: 1;
+        min-width: 140px;
+    }
 }
 
 /* Card */
@@ -1473,28 +1540,6 @@
     color: #475569;
     font-size: 12px;
     font-weight: 600;
-}
-
-@media (max-width: 1024px) {
-    .fb-masonry {
-        columns: 2;
-    }
-}
-
-@media (max-width: 768px) {
-    .fb-masonry {
-        columns: 1;
-    }
-
-    .fb-stats-bar {
-        gap: 12px;
-    }
-
-    .fb-stat {
-        padding: 10px 18px;
-        flex: 1;
-        min-width: 140px;
-    }
 }
 
 .feedback-admin-btn {

@@ -492,9 +492,11 @@ function Home({ initialAuthMode }: HomeProps = {}) {
                   alignItems: 'center',
                   gap: 'var(--spacing-2)',
                   padding: '8px 16px',
-                  background: 'var(--gradient-card)',
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
                   borderRadius: 'var(--radius-full)',
-                  fontSize: '14px'
+                  fontSize: '14px',
+                  color: 'rgba(226, 232, 240, 0.9)'
                 }}>
                   <span style={{ fontWeight: 600 }}>{user?.name || user?.email || 'User'}</span>
                 </div>
@@ -546,59 +548,60 @@ function Home({ initialAuthMode }: HomeProps = {}) {
           <div style={{ width: '50%', flexShrink: 0 }}>
             <div className="hero-container">
               <div className="hero-content">
-                <h1 style={{ marginBottom: 'var(--spacing-4)', color: '#4ADE80' }}>
-                  Chinh phục Tin học
+                <h1 style={{ marginBottom: 'var(--spacing-4)', color: '#E2E8F0' }}>
+                  Chinh phục <span style={{ color: '#34D399' }}>Tin học</span>
                   <br />
                   <span style={{
                     fontFamily: "'Fira Code', 'JetBrains Mono', monospace",
                     fontSize: '0.55em',
-                    color: '#22D3EE',
+                    color: 'rgba(52, 211, 153, 0.7)',
                     fontWeight: 500,
                     fontStyle: 'normal',
                     letterSpacing: '0.05em'
                   }}>
-                    {'<'}<span style={{ color: '#4ADE80' }}>code</span>{'>'} Bứt phá tư duy lập trình {'</'}<span style={{ color: '#4ADE80' }}>code</span>{'>'}
+                    {'<'}<span style={{ color: 'rgba(52, 211, 153, 0.8)' }}>code</span>{'>'} Bứt phá tư duy lập trình {'</'}<span style={{ color: 'rgba(52, 211, 153, 0.8)' }}>code</span>{'>'}
                   </span>
                   <br />
-                  <span className="hero-tagline" style={{ color: '#94A3B8' }}>cùng Chuyên Tin</span>
+                  <span className="hero-tagline" style={{ color: '#CBD5E1' }}>cùng Chuyên Tin</span>
                 </h1>
                 <div className="hero-subtitle" style={{ marginTop: 'var(--spacing-6)', color: 'rgba(148, 163, 184, 0.9)' }}>
                   <p style={{ marginBottom: 'var(--spacing-3)' }}>
-                    <span style={{ color: '#4ADE80' }}>▸</span> Chuyên kèm Tin học 1-1 Online và Nhóm nhỏ (THCS – THPT)
+                    <span style={{ color: '#34D399' }}>▸</span> Chuyên kèm Tin học 1-1 Online và Nhóm nhỏ (THCS – THPT)
                   </p>
                   <p style={{ marginBottom: 'var(--spacing-3)' }}>
-                    <span style={{ color: '#4ADE80' }}>▸</span> Lập trình căn bản – Thuật toán nâng cao – Chinh phục HSG Tin học & CNTT
+                    <span style={{ color: '#34D399' }}>▸</span> Lập trình căn bản – Thuật toán nâng cao – Chinh phục HSG Tin học & CNTT
                   </p>
                   <p>
-                    <span style={{ color: '#4ADE80' }}>▸</span> Rèn tư duy giải thuật, hiểu bản chất, không học thuộc code mẫu
+                    <span style={{ color: '#34D399' }}>▸</span> Rèn tư duy giải thuật, hiểu bản chất, không học thuộc code mẫu
                   </p>
                 </div>
                 <div className="hero-actions">
                   <button className="btn-primary-large" onClick={() => scrollToSection('contact')} style={{
-                    background: 'linear-gradient(135deg, #10B981 0%, #06B6D4 100%)',
-                    boxShadow: '0 0 30px rgba(16, 185, 129, 0.4), 0 8px 24px rgba(16, 185, 129, 0.3)',
-                    border: '1px solid rgba(74, 222, 128, 0.3)'
+                    background: 'linear-gradient(135deg, #059669 0%, #10B981 100%)',
+                    boxShadow: '0 0 20px rgba(16, 185, 129, 0.2), 0 6px 18px rgba(16, 185, 129, 0.15)',
+                    border: '1px solid rgba(52, 211, 153, 0.2)'
                   }}>
                     Đăng ký tư vấn ngay
                   </button>
                   <button className="btn-secondary-large" onClick={() => scrollToSection('mentors')} style={{
-                    color: '#4ADE80',
-                    borderColor: 'rgba(74, 222, 128, 0.4)',
-                    background: 'rgba(74, 222, 128, 0.05)'
+                    color: 'rgba(148, 163, 184, 0.9)',
+                    borderColor: 'rgba(148, 163, 184, 0.25)',
+                    borderWidth: '1px',
+                    background: 'rgba(148, 163, 184, 0.05)'
                   }}>
                     Tìm hiểu đội ngũ Mentor
                   </button>
                 </div>
                 <div className="hero-stats">
                   <div className="stat-item" style={{ color: '#94A3B8' }}>
-                    <svg className="stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: '#4ADE80' }}>
+                    <svg className="stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: '#34D399' }}>
                       <polyline points="16 18 22 12 16 6"></polyline>
                       <polyline points="8 6 2 12 8 18"></polyline>
                     </svg>
                     <span><strong style={{ color: '#E2E8F0' }}>1-1 & Nhóm nhỏ</strong><br />(Zoom)</span>
                   </div>
                   <div className="stat-item" style={{ color: '#94A3B8' }}>
-                    <svg className="stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: '#22D3EE' }}>
+                    <svg className="stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: '#34D399' }}>
                       <circle cx="12" cy="12" r="10"></circle>
                       <polyline points="12 6 12 12 16 14"></polyline>
                     </svg>
@@ -617,36 +620,36 @@ function Home({ initialAuthMode }: HomeProps = {}) {
               <div className="hero-visual" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
                 <svg width="700" height="700" viewBox="0 0 700 700" xmlns="http://www.w3.org/2000/svg" style={{ maxWidth: '100%', height: 'auto' }}>
                   <defs>
-                    <filter id="neonGlow"><feGaussianBlur stdDeviation="4" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
-                    <filter id="softNeon"><feGaussianBlur stdDeviation="2" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
+                    <filter id="neonGlow"><feGaussianBlur stdDeviation="2" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
+                    <filter id="softNeon"><feGaussianBlur stdDeviation="1" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
                   </defs>
-                  <g opacity="0.06" stroke="#4ADE80" strokeWidth="0.5">
+                  <g opacity="0.06" stroke="#34D399" strokeWidth="0.5">
                     {[50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650].map(y => (<line key={`mh${y}`} x1="0" y1={y} x2="700" y2={y} />))}
                     {[50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650].map(x => (<line key={`mv${x}`} x1={x} y1="0" x2={x} y2="700" />))}
                   </g>
                   {[80, 180, 320, 480, 580, 650].map((x, i) => (
                     <g key={`bin${i}`} opacity={0.15 + i * 0.03}>
-                      <text x={x} y="60" fontFamily="'Fira Code', monospace" fontSize="10" fill="#4ADE80">
+                      <text x={x} y="60" fontFamily="'Fira Code', monospace" fontSize="10" fill="#34D399">
                         {['01101', '10011', '11010', '00110', '10101', '01110'][i]}
                         <animate attributeName="y" values="-20;720" dur={`${8 + i * 2}s`} repeatCount="indefinite" />
                       </text>
-                      <text x={x} y="160" fontFamily="'Fira Code', monospace" fontSize="10" fill="#22D3EE">
+                      <text x={x} y="160" fontFamily="'Fira Code', monospace" fontSize="10" fill="#34D399">
                         {['10010', '01101', '11100', '10001', '01011', '11001'][i]}
                         <animate attributeName="y" values="-120;620" dur={`${10 + i * 1.5}s`} repeatCount="indefinite" />
                       </text>
                     </g>
                   ))}
                   <g transform="translate(350, 320)">
-                    <rect x="-130" y="-90" width="260" height="180" rx="12" fill="rgba(74, 222, 128, 0.03)" />
+                    <rect x="-130" y="-90" width="260" height="180" rx="12" fill="rgba(52, 211, 153, 0.03)" />
                     <rect x="-120" y="-80" width="240" height="160" rx="10" fill="#1E293B" stroke="#334155" strokeWidth="2" />
                     <rect x="-120" y="-80" width="240" height="28" rx="10" fill="#0F172A" />
                     <rect x="-120" y="-62" width="240" height="10" fill="#0F172A" />
                     <circle cx="-102" cy="-66" r="4" fill="#EF4444" />
                     <circle cx="-88" cy="-66" r="4" fill="#F59E0B" />
-                    <circle cx="-74" cy="-66" r="4" fill="#4ADE80" />
+                    <circle cx="-74" cy="-66" r="4" fill="#34D399" />
                     <text x="-20" y="-62" fontFamily="'Fira Code', monospace" fontSize="9" fill="#64748B" textAnchor="middle">algorithm.py</text>
                     <text x="-105" y="-35" fontFamily="'Fira Code', monospace" fontSize="11" fill="#C084FC" filter="url(#softNeon)">def</text>
-                    <text x="-78" y="-35" fontFamily="'Fira Code', monospace" fontSize="11" fill="#4ADE80" filter="url(#softNeon)">solve</text>
+                    <text x="-78" y="-35" fontFamily="'Fira Code', monospace" fontSize="11" fill="#34D399" filter="url(#softNeon)">solve</text>
                     <text x="-40" y="-35" fontFamily="'Fira Code', monospace" fontSize="11" fill="#94A3B8">(n, graph):</text>
                     <text x="-95" y="-16" fontFamily="'Fira Code', monospace" fontSize="11" fill="#94A3B8">  dp = [</text>
                     <text x="-42" y="-16" fontFamily="'Fira Code', monospace" fontSize="11" fill="#F59E0B">0</text>
@@ -656,16 +659,16 @@ function Home({ initialAuthMode }: HomeProps = {}) {
                     <text x="-95" y="3" fontFamily="'Fira Code', monospace" fontSize="11" fill="#C084FC" filter="url(#softNeon)">  for</text>
                     <text x="-67" y="3" fontFamily="'Fira Code', monospace" fontSize="11" fill="#94A3B8"> i </text>
                     <text x="-49" y="3" fontFamily="'Fira Code', monospace" fontSize="11" fill="#C084FC">in</text>
-                    <text x="-33" y="3" fontFamily="'Fira Code', monospace" fontSize="11" fill="#22D3EE" filter="url(#softNeon)"> range</text>
+                    <text x="-33" y="3" fontFamily="'Fira Code', monospace" fontSize="11" fill="#34D399" filter="url(#softNeon)"> range</text>
                     <text x="8" y="3" fontFamily="'Fira Code', monospace" fontSize="11" fill="#94A3B8">(n):</text>
                     <text x="-85" y="22" fontFamily="'Fira Code', monospace" fontSize="11" fill="#94A3B8">    dp[i] = </text>
-                    <text x="-3" y="22" fontFamily="'Fira Code', monospace" fontSize="11" fill="#22D3EE" filter="url(#softNeon)">max</text>
+                    <text x="-3" y="22" fontFamily="'Fira Code', monospace" fontSize="11" fill="#34D399" filter="url(#softNeon)">max</text>
                     <text x="22" y="22" fontFamily="'Fira Code', monospace" fontSize="11" fill="#94A3B8">(dp[i-</text>
                     <text x="62" y="22" fontFamily="'Fira Code', monospace" fontSize="11" fill="#F59E0B">1</text>
                     <text x="72" y="22" fontFamily="'Fira Code', monospace" fontSize="11" fill="#94A3B8">],..</text>
                     <text x="-95" y="41" fontFamily="'Fira Code', monospace" fontSize="11" fill="#C084FC" filter="url(#softNeon)">  return</text>
                     <text x="-43" y="41" fontFamily="'Fira Code', monospace" fontSize="11" fill="#94A3B8"> dp[n]</text>
-                    <rect x="-18" y="50" width="7" height="13" fill="#4ADE80" opacity="0.9"><animate attributeName="opacity" values="0;1;0" dur="1s" repeatCount="indefinite" /></rect>
+                    <rect x="-18" y="50" width="7" height="13" fill="#34D399" opacity="0.9"><animate attributeName="opacity" values="0;1;0" dur="1s" repeatCount="indefinite" /></rect>
                     <text x="-112" y="-35" fontFamily="'Fira Code', monospace" fontSize="9" fill="#475569">1</text>
                     <text x="-112" y="-16" fontFamily="'Fira Code', monospace" fontSize="9" fill="#475569">2</text>
                     <text x="-112" y="3" fontFamily="'Fira Code', monospace" fontSize="9" fill="#475569">3</text>
@@ -674,37 +677,37 @@ function Home({ initialAuthMode }: HomeProps = {}) {
                     <text x="-112" y="57" fontFamily="'Fira Code', monospace" fontSize="9" fill="#475569">6</text>
                   </g>
                   <g transform="translate(560, 160)" opacity="0.7">
-                    <circle cx="0" cy="0" r="12" fill="none" stroke="#4ADE80" strokeWidth="2" filter="url(#softNeon)" />
-                    <circle cx="50" cy="-30" r="10" fill="none" stroke="#22D3EE" strokeWidth="2" filter="url(#softNeon)" />
+                    <circle cx="0" cy="0" r="12" fill="none" stroke="#34D399" strokeWidth="2" filter="url(#softNeon)" />
+                    <circle cx="50" cy="-30" r="10" fill="none" stroke="#34D399" strokeWidth="2" filter="url(#softNeon)" />
                     <circle cx="60" cy="30" r="10" fill="none" stroke="#A78BFA" strokeWidth="2" filter="url(#softNeon)" />
-                    <circle cx="-10" cy="50" r="10" fill="none" stroke="#4ADE80" strokeWidth="2" filter="url(#softNeon)" />
-                    <line x1="10" y1="-5" x2="40" y2="-25" stroke="#4ADE80" strokeWidth="1.5" opacity="0.5" />
-                    <line x1="10" y1="5" x2="50" y2="25" stroke="#22D3EE" strokeWidth="1.5" opacity="0.5" />
+                    <circle cx="-10" cy="50" r="10" fill="none" stroke="#34D399" strokeWidth="2" filter="url(#softNeon)" />
+                    <line x1="10" y1="-5" x2="40" y2="-25" stroke="#34D399" strokeWidth="1.5" opacity="0.5" />
+                    <line x1="10" y1="5" x2="50" y2="25" stroke="#34D399" strokeWidth="1.5" opacity="0.5" />
                     <line x1="-5" y1="10" x2="-8" y2="40" stroke="#A78BFA" strokeWidth="1.5" opacity="0.5" />
                     <text x="15" y="-40" fontFamily="'Fira Code', monospace" fontSize="9" fill="#64748B">Graph Theory</text>
                   </g>
                   <g transform="translate(80, 540)" opacity="0.6">
-                    <text fontFamily="'Fira Code', monospace" fontSize="18" fill="#4ADE80" filter="url(#softNeon)">O(n log n)</text>
+                    <text fontFamily="'Fira Code', monospace" fontSize="18" fill="#34D399" filter="url(#softNeon)">O(n log n)</text>
                     <text y="22" fontFamily="'Fira Code', monospace" fontSize="12" fill="#64748B">Time Complexity</text>
                   </g>
-                  <text x="60" y="150" fontFamily="'Fira Code', monospace" fontSize="12" fill="#22D3EE" opacity="0.4">BFS</text>
-                  <text x="520" y="500" fontFamily="'Fira Code', monospace" fontSize="12" fill="#4ADE80" opacity="0.4">DFS</text>
+                  <text x="60" y="150" fontFamily="'Fira Code', monospace" fontSize="12" fill="#34D399" opacity="0.4">BFS</text>
+                  <text x="520" y="500" fontFamily="'Fira Code', monospace" fontSize="12" fill="#34D399" opacity="0.4">DFS</text>
                   <text x="100" y="400" fontFamily="'Fira Code', monospace" fontSize="11" fill="#A78BFA" opacity="0.3" transform="rotate(-10 100 400)">Dijkstra</text>
-                  <text x="500" y="350" fontFamily="'Fira Code', monospace" fontSize="11" fill="#22D3EE" opacity="0.3" transform="rotate(8 500 350)">Dynamic Programming</text>
-                  <text x="400" y="580" fontFamily="'Fira Code', monospace" fontSize="11" fill="#4ADE80" opacity="0.3">Binary Search</text>
+                  <text x="500" y="350" fontFamily="'Fira Code', monospace" fontSize="11" fill="#34D399" opacity="0.3" transform="rotate(8 500 350)">Dynamic Programming</text>
+                  <text x="400" y="580" fontFamily="'Fira Code', monospace" fontSize="11" fill="#34D399" opacity="0.3">Binary Search</text>
                   <g transform="translate(530, 500)" opacity="0.5">
                     {[0, 1, 2, 3, 4].map(i => (
                       <g key={`arr${i}`}>
-                        <rect x={i * 28} y="0" width="25" height="25" rx="3" fill="none" stroke="#4ADE80" strokeWidth="1.5" />
-                        <text x={i * 28 + 12.5} y="17" fontFamily="'Fira Code', monospace" fontSize="10" fill="#4ADE80" textAnchor="middle">
+                        <rect x={i * 28} y="0" width="25" height="25" rx="3" fill="none" stroke="#34D399" strokeWidth="1.5" />
+                        <text x={i * 28 + 12.5} y="17" fontFamily="'Fira Code', monospace" fontSize="10" fill="#34D399" textAnchor="middle">
                           {[3, 7, 1, 9, 2][i]}
                         </text>
                       </g>
                     ))}
                     <text x="0" y="-8" fontFamily="'Fira Code', monospace" fontSize="9" fill="#64748B">Array</text>
                   </g>
-                  <circle cx="100" cy="100" r="2" fill="#4ADE80" filter="url(#softNeon)"><animate attributeName="cy" values="100;70;100" dur="3s" repeatCount="indefinite" /></circle>
-                  <circle cx="600" cy="200" r="2" fill="#22D3EE" filter="url(#softNeon)"><animate attributeName="cy" values="200;170;200" dur="4s" repeatCount="indefinite" /></circle>
+                  <circle cx="100" cy="100" r="2" fill="#34D399" filter="url(#softNeon)"><animate attributeName="cy" values="100;70;100" dur="3s" repeatCount="indefinite" /></circle>
+                  <circle cx="600" cy="200" r="2" fill="#34D399" filter="url(#softNeon)"><animate attributeName="cy" values="200;170;200" dur="4s" repeatCount="indefinite" /></circle>
                   <circle cx="300" cy="600" r="2" fill="#A78BFA" filter="url(#softNeon)"><animate attributeName="cy" values="600;570;600" dur="3.5s" repeatCount="indefinite" /></circle>
                   <text x="40" y="300" fontFamily="'Fira Code', monospace" fontSize="40" fill="#1E293B" opacity="0.8">{'{'}</text>
                   <text x="640" y="450" fontFamily="'Fira Code', monospace" fontSize="40" fill="#1E293B" opacity="0.8">{'}'}</text>
@@ -1028,7 +1031,7 @@ function Home({ initialAuthMode }: HomeProps = {}) {
                 borderRadius: '50px',
                 border: heroSlide === i ? 'none' : '1px solid rgba(255,255,255,0.3)',
                 background: heroSlide === i
-                  ? (i === 0 ? 'linear-gradient(135deg, #10B981, #06B6D4)' : 'linear-gradient(135deg, #7C3AED, #3B82F6)')
+                  ? (i === 0 ? 'linear-gradient(135deg, #059669, #10B981)' : 'linear-gradient(135deg, #7C3AED, #3B82F6)')
                   : 'rgba(255,255,255,0.1)',
                 backdropFilter: 'blur(10px)',
                 color: 'white',
@@ -1891,68 +1894,71 @@ function Home({ initialAuthMode }: HomeProps = {}) {
             </div>
           </div>
 
-          {/* Masonry Grid */}
-          <div className="fb-masonry">
-            {displayFeedbacks.map((fb) => (
-              <div key={fb.id} className={`fb-card ${fb.is_featured ? 'fb-card-featured' : ''}`}>
-                {/* Quote icon */}
-                <div className="fb-quote">“</div>
+          {/* Infinite Marquee Carousel */}
+          <div className="fb-marquee">
+            <div className="fb-marquee-track">
+              {/* Original cards + Duplicated cards for seamless loop */}
+              {[...displayFeedbacks, ...displayFeedbacks].map((fb, idx) => (
+                <div key={`${fb.id}${idx >= displayFeedbacks.length ? '_dup' : ''}`} className={`fb-card ${fb.is_featured ? 'fb-card-featured' : ''}`}>
+                  {/* Quote icon */}
+                  <div className="fb-quote">&ldquo;</div>
 
-                {/* Featured badge */}
-                {fb.is_featured && (
-                  <div className="fb-featured-badge">⭐ Phản hồi nổi bật</div>
-                )}
-
-                {/* Header: avatar + info */}
-                <div className="fb-card-header">
-                  <div className="fb-avatar" style={{ background: fb.avatar_color || '#3B82F6' }}>
-                    {fb.avatar_url
-                      ? <img src={fb.avatar_url} alt={fb.student_name} />
-                      : <span>{fb.student_name.charAt(0).toUpperCase()}</span>
-                    }
-                  </div>
-                  <div className="fb-name-info">
-                    <h4>{fb.student_name}</h4>
-                    {fb.student_class && <p>{fb.student_class}</p>}
-                  </div>
-                </div>
-
-                {/* Stars */}
-                <div className="fb-stars">
-                  {[1, 2, 3, 4, 5].map(s => (
-                    <span key={s} className={s <= fb.rating ? 'star-filled' : 'star-empty'}>★</span>
-                  ))}
-                </div>
-
-                {/* Content */}
-                <p className="fb-text">
-                  {fb.highlight_text ? (
-                    <>
-                      {fb.content.split(fb.highlight_text)[0]}
-                      <strong className="fb-highlight">{fb.highlight_text}</strong>
-                      {fb.content.split(fb.highlight_text).slice(1).join(fb.highlight_text)}
-                    </>
-                  ) : fb.content}
-                </p>
-
-                {/* Achievement */}
-                {fb.achievement_text && (
-                  <div className="fb-achievement">
-                    <div className="fb-achievement-label">🏆 KẾ́T QUẢ ĐẠT ĐƯỢC</div>
-                    <div className="fb-achievement-text">{fb.achievement_text}</div>
-                  </div>
-                )}
-
-                {/* Footer: badge + time */}
-                <div className="fb-card-footer">
-                  {fb.badge_text && (
-                    <span className="fb-badge">
-                      {fb.badge_icon && <span>{fb.badge_icon}</span>} {fb.badge_text}
-                    </span>
+                  {/* Featured badge */}
+                  {fb.is_featured && (
+                    <div className="fb-featured-badge">⭐ Phản hồi nổi bật</div>
                   )}
+
+                  {/* Header: avatar + info */}
+                  <div className="fb-card-header">
+                    <div className="fb-avatar" style={{ background: fb.avatar_color || '#3B82F6' }}>
+                      {fb.avatar_url
+                        ? <img src={fb.avatar_url} alt={fb.student_name} />
+                        : <span>{fb.student_name.charAt(0).toUpperCase()}</span>
+                      }
+                    </div>
+                    <div className="fb-name-info">
+                      <h4>{fb.student_name}</h4>
+                      {fb.student_class && <p>{fb.student_class}</p>}
+                    </div>
+                  </div>
+
+                  {/* Stars */}
+                  <div className="fb-stars">
+                    {[1, 2, 3, 4, 5].map(s => (
+                      <span key={s} className={s <= fb.rating ? 'star-filled' : 'star-empty'}>★</span>
+                    ))}
+                  </div>
+
+                  {/* Content */}
+                  <p className="fb-text">
+                    {fb.highlight_text ? (
+                      <>
+                        {fb.content.split(fb.highlight_text)[0]}
+                        <strong className="fb-highlight">{fb.highlight_text}</strong>
+                        {fb.content.split(fb.highlight_text).slice(1).join(fb.highlight_text)}
+                      </>
+                    ) : fb.content}
+                  </p>
+
+                  {/* Achievement */}
+                  {fb.achievement_text && (
+                    <div className="fb-achievement">
+                      <div className="fb-achievement-label">🏆 KẾT QUẢ ĐẠT ĐƯỢC</div>
+                      <div className="fb-achievement-text">{fb.achievement_text}</div>
+                    </div>
+                  )}
+
+                  {/* Footer: badge */}
+                  <div className="fb-card-footer">
+                    {fb.badge_text && (
+                      <span className="fb-badge">
+                        {fb.badge_icon && <span>{fb.badge_icon}</span>} {fb.badge_text}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
 
