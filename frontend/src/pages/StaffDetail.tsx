@@ -651,10 +651,10 @@ function StaffDetail() {
     // Tổng năm = Classes + Work Items + Bonuses (đã thanh toán trong năm)
     const totalPaidAllTime = totalPaidClassesYear + totalPaidWorkItemsYear + totalPaidBonusesYear;
 
-    // Tính cọc từ sessions trong năm hiện tại
+    // Tính cọc từ TẤT CẢ sessions (không giới hạn năm, khớp với DepositDetailsModal)
     const yearDepositSessions = allClassSessions.filter((s) => {
       if (!s.date) return false;
-      return s.date.slice(0, 4) === currentYear && s.payment_status === 'deposit';
+      return s.payment_status === 'deposit';
     });
     const totalDepositAllTime = yearDepositSessions.reduce((sum, s) => sum + getSessionAllowance(s), 0);
 
@@ -670,11 +670,10 @@ function StaffDetail() {
     // Calculate totals with deduction: (classes + work items) * (100 - x%) + bonuses
     const totalMonthAll = Math.round((totalMonthAllClasses + totalMonthWorkItems) * deductionMultiplier) + totalMonthBonuses;
     const totalPaidAll = Math.round((totalPaidByStatus + totalPaidWorkItems) * deductionMultiplier) + totalPaidBonuses;
-    // Use backend unpaid data (same source as Staff list page) for consistency
-    // Fall back to local calculation only if backend data is not available
-    const totalUnpaidAll = unpaidBreakdown
-      ? Math.round(unpaidBreakdown.classesAndWork * deductionMultiplier) + unpaidBreakdown.bonuses
-      : Math.round((totalUnpaidByStatus + totalUnpaidWorkItems) * deductionMultiplier) + totalUnpaidBonuses;
+    // Always calculate from fresh local data (sessions, workItems, bonuses already loaded on this page)
+    // Previously this preferred unpaidBreakdown from the backend API, but that reads from
+    // staff_monthly_stats cache which can be stale after payment status changes
+    const totalUnpaidAll = Math.round((totalUnpaidByStatus + totalUnpaidWorkItems) * deductionMultiplier) + totalUnpaidBonuses;
 
     // Totals WITHOUT deduction (cũ) = classes + work items + bonuses (no deduction applied)
     const totalMonthAllNoDeduction = totalMonthAllClasses + totalMonthWorkItems + totalMonthBonuses;
@@ -706,7 +705,7 @@ function StaffDetail() {
       totalPaidAllTime,
       totalDepositAllTime,
     };
-  }, [workItems, workItemsData, bonuses, bonusesData, bonusesStatistics, sessions, selectedMonth, id, getSessionAllowance, deductionSettings, unpaidBreakdown]);
+  }, [workItems, workItemsData, bonuses, bonusesData, bonusesStatistics, sessions, selectedMonth, id, getSessionAllowance, deductionSettings]);
 
   // Check if income stats are loading
   // Income stats are calculated from UI data, so only show loading if work items are loading
