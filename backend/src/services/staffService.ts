@@ -85,34 +85,9 @@ export async function getStaffUnpaidAmounts(staffIds: string[]): Promise<{ total
   const lastDayOfMonth = new Date(year, monthNum, 0).getDate();
   const monthEndStr = `${year}-${String(monthNum).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`;
 
-  // Try to get from cache first (faster)
-  const cachePromises = staffIds.map(async (staffId) => {
-    const cachedStats = await getStaffMonthlyStats(staffId, currentMonth);
-    if (cachedStats) {
-      return { staffId, unpaid: cachedStats.total_unpaid_all, cachedStats };
-    }
-    return { staffId, unpaid: null, cachedStats: null };
-  });
-
-  const cacheResults = await Promise.all(cachePromises);
-  const uncachedStaffIds: string[] = [];
-
-  cacheResults.forEach(({ staffId, unpaid, cachedStats }) => {
-    if (unpaid !== null && cachedStats) {
-      result[staffId] = unpaid;
-      // Also provide breakdown from cache so frontend can apply deductions correctly
-      const classesAndWork = (cachedStats.classes_total_unpaid || 0) + (cachedStats.work_items_total_unpaid || 0);
-      const bonuses = cachedStats.bonuses_total_unpaid || 0;
-      resultBreakdown[staffId] = { classesAndWork, bonuses, total: unpaid };
-    } else {
-      uncachedStaffIds.push(staffId);
-    }
-  });
-
-  // If all staff have cache, return early
-  if (uncachedStaffIds.length === 0) {
-    return { totals: result, breakdown: resultBreakdown };
-  }
+  // ALWAYS calculate from fresh data - never use cache for unpaid amounts
+  // Cache (staff_monthly_stats) can be stale when sessions are paid but cache isn't invalidated properly
+  const uncachedStaffIds = [...staffIds];
 
   // For uncached staff, calculate unpaid amount
   // This matches the logic in getStaffDetailData:
@@ -120,44 +95,17 @@ export async function getStaffUnpaidAmounts(staffIds: string[]): Promise<{ total
   // 2. Unpaid from work items
   // 3. Unpaid from bonuses
 
-  // Get unpaid bonuses for uncached staff - also check cache first
-  // Logic: unpaid bonuses = unpaid from current month + previous month (matching getStaffBonusesStatistics)
-  const bonusesCachePromises = uncachedStaffIds.map(async (staffId) => {
-    const cachedStats = await getStaffMonthlyStats(staffId, currentMonth);
-    if (cachedStats) {
-      return { staffId, unpaidBonuses: cachedStats.bonuses_total_unpaid || 0 };
-    }
-    const previousMonthCached = await getStaffMonthlyStats(staffId, previousMonth);
-    if (previousMonthCached) {
-      return { staffId, unpaidBonuses: previousMonthCached.bonuses_total_unpaid || 0 };
-    }
-    return { staffId, unpaidBonuses: null };
-  });
-
-  const bonusesCacheResults = await Promise.all(bonusesCachePromises);
-  const bonusesUncachedIds: string[] = [];
+  // Get unpaid bonuses - always query from database (no cache)
   const unpaidBonuses: Record<string, number> = {};
-
-  bonusesCacheResults.forEach(({ staffId, unpaidBonuses: unpaid }) => {
-    if (unpaid !== null) {
-      unpaidBonuses[staffId] = unpaid;
-    } else {
-      bonusesUncachedIds.push(staffId);
-    }
-  });
-
-  // Only query database for staff without cache
-  // Query bonuses from current month + previous month only (matching getStaffBonusesStatistics logic)
-  const { data: bonuses, error: bonusesError } = bonusesUncachedIds.length > 0
+  const { data: bonuses, error: bonusesError } = uncachedStaffIds.length > 0
     ? await supabase
       .from('bonuses')
       .select('staff_id, amount, month')
-      .in('staff_id', bonusesUncachedIds)
+      .in('staff_id', uncachedStaffIds)
       .eq('status', 'unpaid')
       .in('month', [currentMonth, previousMonth])
     : { data: [], error: null };
 
-  // Add bonuses from database query to existing cache results
   if (!bonusesError && bonuses) {
     bonuses.forEach((b) => {
       if (!unpaidBonuses[b.staff_id]) {
@@ -167,37 +115,10 @@ export async function getStaffUnpaidAmounts(staffIds: string[]): Promise<{ total
     });
   }
 
-  // Get unpaid work items for uncached staff - optimize by checking cache for previous month too
-  // Try to get from cache for both current and previous month first
-  const workItemsCachePromises = uncachedStaffIds.map(async (staffId) => {
-    // Check cache for current month work items
-    const cachedStats = await getStaffMonthlyStats(staffId, currentMonth);
-    if (cachedStats) {
-      return { staffId, unpaidWorkItems: cachedStats.work_items_total_unpaid || 0 };
-    }
-    // If not found, try previous month cache (work items unpaid might be similar)
-    const previousMonthCached = await getStaffMonthlyStats(staffId, previousMonth);
-    if (previousMonthCached) {
-      return { staffId, unpaidWorkItems: previousMonthCached.work_items_total_unpaid || 0 };
-    }
-    return { staffId, unpaidWorkItems: null };
-  });
-
-  const workItemsCacheResults = await Promise.all(workItemsCachePromises);
-  const workItemsUncachedIds: string[] = [];
+  // Get unpaid work items - always calculate from fresh data (no cache)
   const unpaidWorkItems: Record<string, number> = {};
-
-  workItemsCacheResults.forEach(({ staffId, unpaidWorkItems: unpaid }) => {
-    if (unpaid !== null) {
-      unpaidWorkItems[staffId] = unpaid;
-    } else {
-      workItemsUncachedIds.push(staffId);
-    }
-  });
-
-  // Only calculate for staff without cache - run in parallel
-  if (workItemsUncachedIds.length > 0) {
-    const workItemsPromises = workItemsUncachedIds.map(async (staffId) => {
+  if (uncachedStaffIds.length > 0) {
+    const workItemsPromises = uncachedStaffIds.map(async (staffId) => {
       try {
         const workItems = await getStaffWorkItems(staffId, currentMonth);
         const totalUnpaidWorkItems = workItems.reduce((sum, item) => sum + (item.unpaid || 0), 0);
