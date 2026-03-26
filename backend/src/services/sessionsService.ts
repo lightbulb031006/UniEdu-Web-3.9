@@ -45,7 +45,26 @@ export async function getSessions(filters: SessionFilters = {}) {
   }
 
   if (filters.teacherId) {
-    query = query.eq('teacher_id', filters.teacherId);
+    // Look up classes where this teacher is assigned (via teacher_ids array on classes table)
+    // This ensures we also find sessions where teacher_id is null but the session
+    // belongs to a class that has this teacher assigned
+    const { data: teacherClasses } = await supabase
+      .from('classes')
+      .select('id')
+      .contains('teacher_ids', [filters.teacherId]);
+    const classIds = (teacherClasses || []).map((c: any) => c.id);
+
+    if (classIds.length > 0) {
+      // Include sessions where:
+      // 1. teacher_id matches directly, OR
+      // 2. session belongs to a class with this teacher AND teacher_id is null or matches
+      query = query.or(
+        `teacher_id.eq.${filters.teacherId},and(class_id.in.(${classIds.join(',')}),or(teacher_id.is.null,teacher_id.eq.${filters.teacherId}))`
+      );
+    } else {
+      // Fallback: no classes found, just filter by teacher_id directly
+      query = query.eq('teacher_id', filters.teacherId);
+    }
   }
 
   if (filters.date) {

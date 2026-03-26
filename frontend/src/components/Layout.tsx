@@ -48,6 +48,7 @@ function Layout({ children }: LayoutProps) {
     { path: '/home', label: 'Trang chủ', icon: ['M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', 'M9 22V12h6v10'], roles: ['teacher'] }, // Thêm Trang chủ cho teacher
     { path: '/staff', label: 'Nhân sự', icon: ['M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2', 'M9 7a4 4 0 1 0 8 0 4 4 0 0 0-8 0', 'M23 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'], roles: ['admin'], requireStaffRole: 'accountant' }, // Only admin and accountant can access
     { path: '/classes', label: 'Lớp học', icon: ['M4 19.5A2.5 2.5 0 0 1 6.5 17H20', 'M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'], roles: ['admin'], requireStaffRole: 'accountant' }, // Only admin and accountant can access
+    { path: '/schedule', label: 'Lịch Học', icon: ['M19 4H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z', 'M16 2v4', 'M8 2v4', 'M3 10h18'], roles: ['admin'] },
     { path: '/coding', label: 'Lập trình', icon: ['M2 4h20v14H2z', 'M8 20h8', 'M12 16v4'], roles: ['admin', 'teacher', 'student'] },
     { path: '/students', label: 'Học sinh', icon: ['M22 10v6M2 10l10-5 10 5M2 17l10 5 10-5M2 12l10 5 10-5'], roles: ['admin'] },
     { path: '/costs', label: 'Chi phí', icon: ['M12 1v22', 'M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'], roles: ['admin'] },
