@@ -10,6 +10,43 @@ const CACHE_TTL = 2 * 60 * 1000; // 2 minutes for dashboard
 const QUICK_VIEW_CACHE_TTL = 5 * 60 * 1000; // 5 minutes for quick view
 
 /**
+ * Fetch ALL rows from a Supabase table, paginating in chunks of 1000.
+ * Supabase returns at most 1000 rows per request by default.
+ * Without this helper, tables with >1000 rows silently lose data.
+ */
+async function fetchAll(table: string): Promise<any[]> {
+  const PAGE_SIZE = 1000;
+  let allRows: any[] = [];
+  let from = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from(table)
+      .select('*')
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) {
+      console.error(`[fetchAll] Error fetching from ${table}:`, error.message);
+      break;
+    }
+
+    if (!data || data.length === 0) {
+      hasMore = false;
+    } else {
+      allRows = allRows.concat(data);
+      if (data.length < PAGE_SIZE) {
+        hasMore = false; // Last page, fewer than PAGE_SIZE rows
+      } else {
+        from += PAGE_SIZE;
+      }
+    }
+  }
+
+  return allRows;
+}
+
+/**
  * Get cached data from database
  */
 async function getCachedData<T>(cacheKey: string, cacheType: 'dashboard' | 'quickview'): Promise<T | null> {
@@ -193,45 +230,44 @@ export async function getDashboardData(params: DashboardParams) {
   const range = parseFilterRange(params.filterType, params.filterValue);
 
   // Fetch all required data from Supabase
+  // Use fetchAll for large tables that may exceed Supabase's 1000-row default limit.
+  // Smaller tables (classes, teachers, costs, bonuses, class_teachers, surveys) use normal select.
   const [
     classesResult,
     studentsResult,
     teachersResult,
-    paymentsResult,
-    sessionsResult,
     costsResult,
-    walletTxResult,
-    studentClassesResult,
     classTeachersResult,
     bonusesResult,
-    lessonOutputsResult,
     surveysResult,
+    // Large tables fetched with pagination:
+    walletTransactions,
+    sessions,
+    payments,
+    studentClasses,
+    lessonOutputs,
   ] = await Promise.all([
     supabase.from('classes').select('*'),
     supabase.from('students').select('*'),
     supabase.from('teachers').select('*'),
-    supabase.from('payments').select('*'),
-    supabase.from('sessions').select('*'),
     supabase.from('costs').select('*'),
-    supabase.from('wallet_transactions').select('*'),
-    supabase.from('student_classes').select('*'),
     supabase.from('class_teachers').select('*'),
     supabase.from('bonuses').select('*'),
-    supabase.from('lesson_outputs').select('*'),
     supabase.from('class_surveys').select('*'),
+    // Paginated fetches for tables that can exceed 1000 rows:
+    fetchAll('wallet_transactions'),
+    fetchAll('sessions'),
+    fetchAll('payments'),
+    fetchAll('student_classes'),
+    fetchAll('lesson_outputs'),
   ]);
 
   const classes = classesResult.data || [];
   const students = studentsResult.data || [];
   const teachers = teachersResult.data || [];
-  const payments = paymentsResult.data || [];
-  const sessions = sessionsResult.data || [];
   const costs = costsResult.data || [];
-  const walletTransactions = walletTxResult.data || [];
-  const studentClasses = studentClassesResult.data || [];
   const classTeachers = classTeachersResult.data || [];
   const bonuses = bonusesResult.data || [];
-  const lessonOutputs = lessonOutputsResult.data || [];
   const surveys = surveysResult.data || [];
 
   // Calculate summary
@@ -798,22 +834,22 @@ export async function getQuickViewData(year: string) {
     classesResult,
     teachersResult,
   ] = await Promise.all([
-    supabase.from('wallet_transactions').select('*'),
-    supabase.from('sessions').select('*'),
+    fetchAll('wallet_transactions'),
+    fetchAll('sessions'),
     supabase.from('costs').select('*'),
-    supabase.from('student_classes').select('*'),
+    fetchAll('student_classes'),
     supabase.from('bonuses').select('*'),
     supabase.from('classes').select('*'),
     supabase.from('teachers').select('*'),
   ]);
 
-  const walletTransactions = walletTxResult.data || [];
-  const sessions = sessionsResult.data || [];
-  const costs = costsResult.data || [];
-  const studentClasses = studentClassesResult.data || [];
-  const bonuses = bonusesResult.data || [];
-  const classes = classesResult.data || [];
-  const teachers = teachersResult.data || [];
+  const walletTransactions = walletTxResult as any[];
+  const sessions = sessionsResult as any[];
+  const costs = (costsResult as any).data || [];
+  const studentClasses = studentClassesResult as any[]; // fetchAll returns array directly
+  const bonuses = (bonusesResult as any).data || [];
+  const classes = (classesResult as any).data || [];
+  const teachers = (teachersResult as any).data || [];
 
   // Filter by year
   const walletTxYear = walletTransactions.filter((tx: any) => (tx.date || '').startsWith(yearStr));
