@@ -391,17 +391,41 @@ export async function updateStudent(id: string, studentData: Partial<Student> & 
 
     // Add new class assignments
     if (toAdd.length > 0) {
-      const newRecords = toAdd.map((classId) => ({
-        id: `SC${Date.now()}${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
-        student_id: id,
-        class_id: classId,
-        start_date: new Date().toISOString().slice(0, 10),
-        status: 'active',
-      }));
+      for (const classId of toAdd) {
+        // Check if an inactive record already exists (student was previously removed from this class)
+        const { data: existingRecord } = await supabase
+          .from('student_classes')
+          .select('id, status')
+          .eq('student_id', id)
+          .eq('class_id', classId)
+          .maybeSingle();
 
-      const { error: addError } = await supabase.from('student_classes').insert(newRecords);
-      if (addError) {
-        console.error('Failed to add student_classes records:', addError);
+        if (existingRecord) {
+          // Re-activate existing record instead of inserting (avoids UNIQUE constraint violation)
+          const { error: reactivateError } = await supabase
+            .from('student_classes')
+            .update({ status: 'active', start_date: new Date().toISOString().slice(0, 10) })
+            .eq('id', existingRecord.id);
+          if (reactivateError) {
+            console.error(`Failed to re-activate student_classes record for class ${classId}:`, reactivateError);
+            throw new Error(`Failed to re-add student to class: ${reactivateError.message}`);
+          }
+          console.log(`[updateStudent] Re-activated student_classes record for student ${id}, class ${classId}`);
+        } else {
+          // Insert new record
+          const newRecord = {
+            id: `SC${Date.now()}${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
+            student_id: id,
+            class_id: classId,
+            start_date: new Date().toISOString().slice(0, 10),
+            status: 'active',
+          };
+          const { error: addError } = await supabase.from('student_classes').insert([newRecord]);
+          if (addError) {
+            console.error(`Failed to add student_classes record for class ${classId}:`, addError);
+            throw new Error(`Failed to add student to class: ${addError.message}`);
+          }
+        }
       }
     }
 

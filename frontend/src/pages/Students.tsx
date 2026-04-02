@@ -247,7 +247,7 @@ function Students() {
       toast.success(editingStudent ? 'Đã cập nhật học sinh' : 'Đã thêm học sinh mới');
       refetch();
     } catch (err: any) {
-      toast.error('Lỗi khi lưu học sinh: ' + (err.message || 'Lỗi không xác định'));
+      toast.error('Lỗi khi lưu học sinh: ' + (err.response?.data?.error || err.message || 'Lỗi không xác định'));
     }
   };
 

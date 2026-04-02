@@ -62,6 +62,7 @@ function ClassDetail() {
   const [editingTeacherForAllowance, setEditingTeacherForAllowance] = useState<any | null>(null);
   const [selectedSessions, setSelectedSessions] = useState<Set<string>>(new Set());
   const [bulkSessionStatusModalOpen, setBulkSessionStatusModalOpen] = useState(false);
+  const [statsModalOpen, setStatsModalOpen] = useState(false);
   const [headerTuitionFee, setHeaderTuitionFee] = useState<number>(0);
   const [isEditingHeaderTuitionFee, setIsEditingHeaderTuitionFee] = useState<boolean>(false);
   const [editingHeaderTuitionFeeValue, setEditingHeaderTuitionFeeValue] = useState<number>(0);
@@ -304,6 +305,8 @@ function ClassDetail() {
   const canManageSurveys = isAuthenticated && (isAdmin || isTutor || hasRole('accountant') || hasCskhPrivileges);
   // Chỉ admin mới có thể xóa khảo sát
   const canDeleteSurveys = isAuthenticated && isAdmin;
+  // Quyền xem bảng thống kê buổi học tháng: admin, accountant, hoặc cskh_sale (TUYỆT ĐỐI ẨN với gia sư)
+  const canViewMonthlyStats = isAuthenticated && !isTutor && (isAdmin || hasRole('accountant') || hasCskhPrivileges);
 
   // Month navigation handlers
   const handleMonthChange = (delta: number) => {
@@ -1700,8 +1703,26 @@ function ClassDetail() {
                   </div>
                 )}
               </div>
-              {canCreateSession && (
-                <div className="session-toolbar-actions" style={{ display: 'flex', gap: 'var(--spacing-2)' }}>
+              <div className="session-toolbar-actions" style={{ display: 'flex', gap: 'var(--spacing-2)' }}>
+                {canViewMonthlyStats && monthSessions.length > 0 && (
+                  <button
+                    className="btn btn-outline"
+                    id="exportStatsBtn"
+                    title="Xuất bảng thống kê tháng để chụp ảnh gửi phụ huynh"
+                    onClick={() => setStatsModalOpen(true)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-1)', fontSize: 'var(--font-size-sm)' }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                      <line x1="3" y1="9" x2="21" y2="9" />
+                      <line x1="3" y1="15" x2="21" y2="15" />
+                      <line x1="9" y1="3" x2="9" y2="21" />
+                      <line x1="15" y1="3" x2="15" y2="21" />
+                    </svg>
+                    Thống kê
+                  </button>
+                )}
+                {canCreateSession && (
                   <button
                     className="btn btn-primary btn-add-icon"
                     id="addSessionBtn"
@@ -1716,8 +1737,8 @@ function ClassDetail() {
                       <line x1="5" y1="12" x2="19" y2="12" />
                     </svg>
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
 
             {/* Bulk Actions */}
@@ -2704,6 +2725,15 @@ function ClassDetail() {
           />
         )}
       </Modal>
+
+      {/* Monthly Stats Modal - Bảng thống kê buổi học tháng cho phụ huynh */}
+      <MonthlyStatsModal
+        isOpen={statsModalOpen}
+        onClose={() => setStatsModalOpen(false)}
+        sessions={monthSessions}
+        monthLabel={monthLabel}
+        className={classData?.name}
+      />
     </div>
   );
 }
@@ -6377,6 +6407,206 @@ function TeacherAllowanceModal({
         </button>
       </div>
     </form>
+  );
+}
+
+/**
+ * Monthly Stats Modal
+ * Hiển thị bảng thống kê buổi học tháng, tối ưu cho việc chụp ảnh màn hình gửi phụ huynh.
+ * Chỉ hiển thị cho admin, accountant, cskh_sale.
+ */
+function MonthlyStatsModal({
+  isOpen,
+  onClose,
+  sessions,
+  monthLabel,
+  className: classNameProp,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  sessions: any[];
+  monthLabel: string;
+  className?: string;
+}) {
+  // Sort sessions chronologically (oldest first) for the stats table
+  const sortedSessions = useMemo(() => {
+    return [...sessions].sort((a, b) => {
+      const aDate = a.date || '';
+      const bDate = b.date || '';
+      if (aDate !== bDate) return aDate.localeCompare(bDate);
+      const aTime = a.start_time || a.startTime || '';
+      const bTime = b.start_time || b.startTime || '';
+      return aTime.localeCompare(bTime);
+    });
+  }, [sessions]);
+
+  // Calculate total tuition fee
+  const totalFee = useMemo(() => {
+    return sortedSessions.reduce((sum, s) => {
+      const fee = s.tuition_fee !== undefined && s.tuition_fee !== null
+        ? Number(s.tuition_fee)
+        : s.tuitionFee !== undefined && s.tuitionFee !== null
+          ? Number(s.tuitionFee)
+          : 0;
+      return sum + fee;
+    }, 0);
+  }, [sortedSessions]);
+
+  const formatDateDDMMYYYY = (dateStr: string) => {
+    if (!dateStr) return '-';
+    try {
+      const date = new Date(dateStr + 'T00:00:00');
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = date.getFullYear();
+      return `${day}/${month}/${year}`;
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const formatTimeHHMM = (timeStr?: string) => {
+    if (!timeStr) return '-';
+    // Handle HH:MM:SS or HH:MM format
+    const parts = timeStr.split(':');
+    if (parts.length >= 2) return `${parts[0]}:${parts[1]}`;
+    return timeStr;
+  };
+
+  const formatPrice = (value: number) => {
+    return value.toLocaleString('vi-VN');
+  };
+
+  if (!isOpen) return null;
+
+  // Styles optimized for screenshot capture
+  const tableContainerStyle: React.CSSProperties = {
+    background: '#ffffff',
+    padding: '24px',
+    borderRadius: '8px',
+  };
+
+  const titleStyle: React.CSSProperties = {
+    textAlign: 'center',
+    fontSize: '1.25rem',
+    fontWeight: '700',
+    color: '#1a1a2e',
+    marginBottom: '4px',
+  };
+
+  const subtitleStyle: React.CSSProperties = {
+    textAlign: 'center',
+    fontSize: '0.9rem',
+    color: '#6b7280',
+    marginBottom: '16px',
+  };
+
+  const tableStyle: React.CSSProperties = {
+    width: '100%',
+    borderCollapse: 'collapse',
+    border: '1px solid #d1d5db',
+    fontSize: '0.9rem',
+  };
+
+  const thStyle: React.CSSProperties = {
+    background: '#eef2ff',
+    color: '#374151',
+    fontWeight: '600',
+    padding: '10px 14px',
+    border: '1px solid #d1d5db',
+    textAlign: 'center',
+    fontSize: '0.85rem',
+    whiteSpace: 'nowrap',
+  };
+
+  const tdStyle: React.CSSProperties = {
+    padding: '8px 14px',
+    border: '1px solid #d1d5db',
+    textAlign: 'center',
+    color: '#374151',
+  };
+
+  const tdPriceStyle: React.CSSProperties = {
+    ...tdStyle,
+    textAlign: 'right',
+    fontVariantNumeric: 'tabular-nums',
+  };
+
+  const totalRowTdStyle: React.CSSProperties = {
+    padding: '10px 14px',
+    border: '1px solid #d1d5db',
+    fontWeight: '700',
+    color: '#1a1a2e',
+    background: '#f8fafc',
+    borderTop: '2px solid #6366f1',
+  };
+
+  return (
+    <Modal
+      title="Thống kê buổi học tháng"
+      isOpen={isOpen}
+      onClose={onClose}
+      size="lg"
+      closeOnBackdropClick={true}
+    >
+      <div style={tableContainerStyle}>
+        {/* Title for screenshot */}
+        <div style={titleStyle}>
+          {classNameProp || 'Lớp học'}
+        </div>
+        <div style={subtitleStyle}>
+          {monthLabel} • Tổng: {sortedSessions.length} buổi
+        </div>
+
+        {/* Stats Table */}
+        <table style={tableStyle}>
+          <thead>
+            <tr>
+              <th style={{ ...thStyle, width: '60px' }}>Buổi</th>
+              <th style={{ ...thStyle, width: '120px' }}>Ngày</th>
+              <th style={thStyle}>Thời gian bắt đầu</th>
+              <th style={thStyle}>Thời gian kết thúc</th>
+              <th style={{ ...thStyle, width: '130px' }}>Giá</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortedSessions.map((session, index) => {
+              const sessionDate = session.date || '';
+              const startTime = session.start_time || session.startTime || '';
+              const endTime = session.end_time || session.endTime || '';
+              const fee = session.tuition_fee !== undefined && session.tuition_fee !== null
+                ? Number(session.tuition_fee)
+                : session.tuitionFee !== undefined && session.tuitionFee !== null
+                  ? Number(session.tuitionFee)
+                  : 0;
+
+              return (
+                <tr
+                  key={session.id}
+                  style={{ background: index % 2 === 0 ? '#ffffff' : '#f9fafb' }}
+                >
+                  <td style={tdStyle}>{index + 1}</td>
+                  <td style={tdStyle}>{formatDateDDMMYYYY(sessionDate)}</td>
+                  <td style={tdStyle}>{formatTimeHHMM(startTime)}</td>
+                  <td style={tdStyle}>{formatTimeHHMM(endTime)}</td>
+                  <td style={tdPriceStyle}>{formatPrice(fee)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td style={{ ...totalRowTdStyle, textAlign: 'left' }} colSpan={4}>
+                <strong>Tổng cộng</strong>
+              </td>
+              <td style={{ ...totalRowTdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: '1rem' }}>
+                <strong>{formatPrice(totalFee)}</strong>
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </Modal>
   );
 }
 
