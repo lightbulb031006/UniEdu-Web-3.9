@@ -232,9 +232,8 @@ function Students() {
         if (formData.loginEmail) {
           studentData.email = formData.loginEmail.trim();
         }
-        if (formData.cskhStaffId) {
-          studentData.cskhStaffId = formData.cskhStaffId;
-        }
+        // Always send cskhStaffId when admin changes it (including empty string to unassign)
+        studentData.cskhStaffId = formData.cskhStaffId || '';
       }
 
       if (editingStudent) {

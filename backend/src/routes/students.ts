@@ -75,8 +75,13 @@ router.put('/:id', authenticate, async (req, res, next) => {
   try {
     const student = await updateStudent(req.params.id, req.body);
     res.json(student);
-  } catch (error) {
-    next(error);
+  } catch (error: any) {
+    console.error(`[PUT /students/${req.params.id}] Error:`, error.message || error);
+    // Return actual error message instead of generic "Internal server error"
+    const statusCode = error.message?.includes('not found') || error.message?.includes('không tìm thấy') ? 404 : 400;
+    res.status(statusCode).json({ 
+      error: error.message || 'Lỗi cập nhật học sinh' 
+    });
   }
 });
 

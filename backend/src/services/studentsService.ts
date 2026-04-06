@@ -237,6 +237,22 @@ export async function updateStudent(id: string, studentData: Partial<Student> & 
     try {
       console.log(`[updateStudent] Processing CSKH assignment for student ${id}: cskhStaffIdValue=${cskhStaffIdValue}`);
       
+      const newCskhStaffId = cskhStaffIdValue === '' ? null : cskhStaffIdValue;
+      
+      // Validate that the staff ID exists in teachers table (if assigning)
+      if (newCskhStaffId) {
+        const { data: staffExists, error: staffCheckError } = await supabase
+          .from('teachers')
+          .select('id')
+          .eq('id', newCskhStaffId)
+          .maybeSingle();
+        
+        if (staffCheckError || !staffExists) {
+          console.error(`[updateStudent] CSKH staff ID ${newCskhStaffId} not found in teachers table`);
+          throw new Error('Người phụ trách CSKH không tồn tại. Vui lòng chọn lại.');
+        }
+      }
+      
       // Get current student's cskh_staff_id directly from database to check if it's changing
       const { data: currentStudentData, error: fetchError } = await supabase
         .from('students')
@@ -247,11 +263,9 @@ export async function updateStudent(id: string, studentData: Partial<Student> & 
       if (fetchError) {
         console.error('[updateStudent] Error fetching current student for CSKH assignment:', fetchError);
         // Continue anyway - just set the cskh_staff_id without auto-setting dates
-        const newCskhStaffId = cskhStaffIdValue === '' ? null : cskhStaffIdValue;
         studentFields.cskh_staff_id = newCskhStaffId;
       } else {
         const currentCskhStaffId = currentStudentData?.cskh_staff_id || null;
-        const newCskhStaffId = cskhStaffIdValue === '' ? null : cskhStaffIdValue;
         
         console.log(`[updateStudent] Current CSKH staff: ${currentCskhStaffId}, New CSKH staff: ${newCskhStaffId}`);
         console.log(`[updateStudent] Current assigned_date: ${currentStudentData?.cskh_assigned_date || 'null'}, unassigned_date: ${currentStudentData?.cskh_unassigned_date || 'null'}`);
@@ -280,6 +294,10 @@ export async function updateStudent(id: string, studentData: Partial<Student> & 
         }
       }
     } catch (error: any) {
+      // If it's a validation error we threw, re-throw it
+      if (error.message?.includes('không tồn tại') || error.message?.includes('không hợp lệ')) {
+        throw error;
+      }
       // If query fails, just set the cskh_staff_id without auto-setting dates
       console.error('[updateStudent] Exception getting current student for CSKH assignment:', error);
       console.error('[updateStudent] Error stack:', error?.stack);
@@ -323,26 +341,64 @@ export async function updateStudent(id: string, studentData: Partial<Student> & 
   if (Object.keys(cleanFields).length > 0) {
     console.log(`[updateStudent] Updating student ${id} with fields:`, JSON.stringify(cleanFields, null, 2));
     
-    const { data, error } = await supabase
-      .from('students')
-      .update(cleanFields)
-      .eq('id', id)
-      .select();
+    try {
+      let fieldsToUpdate = { ...cleanFields };
+      let maxRetries = 3;
+      let success = false;
+      
+      while (!success && maxRetries > 0 && Object.keys(fieldsToUpdate).length > 0) {
+        const { data, error } = await supabase
+          .from('students')
+          .update(fieldsToUpdate)
+          .eq('id', id)
+          .select();
 
-    if (error) {
-      // Provide more detailed error message
-      console.error('[updateStudent] Error updating student:', error);
-      console.error('[updateStudent] Error details:', JSON.stringify(error, null, 2));
-      throw new Error(`Failed to update student: ${error.message}`);
-    }
+        if (error) {
+          console.error('[updateStudent] Error updating student:', error);
+          console.error('[updateStudent] Error details:', JSON.stringify(error, null, 2));
+          
+          const errorMsg = error.message || '';
+          const errorCode = (error as any).code || '';
+          
+          // Handle "column does not exist" error (PostgreSQL error code 42703)
+          if (errorCode === '42703' || errorMsg.includes('does not exist')) {
+            // Extract column name from error message like "column students.cskh_staff_id does not exist"
+            const colMatch = errorMsg.match(/column\s+(?:\w+\.)?(\w+)\s+does not exist/);
+            if (colMatch) {
+              const missingCol = colMatch[1];
+              console.warn(`[updateStudent] Column "${missingCol}" does not exist in database, removing from update and retrying...`);
+              delete fieldsToUpdate[missingCol];
+              maxRetries--;
+              continue;
+            }
+          }
+          
+          // Handle foreign key constraint violation
+          if (errorMsg.includes('foreign key') || errorMsg.includes('violates foreign key')) {
+            throw new Error('Người phụ trách CSKH không hợp lệ. Vui lòng chọn lại.');
+          }
+          
+          // Other errors
+          throw new Error(`Lỗi cập nhật học sinh: ${errorMsg}`);
+        }
 
-    // Check if student exists (update returns empty array if no rows matched)
-    if (!data || data.length === 0) {
-      console.error(`[updateStudent] Student with id ${id} not found`);
-      throw new Error(`Student with id ${id} not found`);
+        // Check if student exists (update returns empty array if no rows matched)
+        if (!data || data.length === 0) {
+          console.error(`[updateStudent] Student with id ${id} not found`);
+          throw new Error(`Không tìm thấy học sinh với id ${id}`);
+        }
+        
+        success = true;
+        console.log(`[updateStudent] Successfully updated student ${id}`);
+      }
+      
+      if (!success && Object.keys(fieldsToUpdate).length === 0) {
+        console.log(`[updateStudent] All fields were removed due to missing columns, skipping update`);
+      }
+    } catch (updateError: any) {
+      console.error('[updateStudent] Exception during update:', updateError);
+      throw updateError;
     }
-    
-    console.log(`[updateStudent] Successfully updated student ${id}`);
   } else {
     console.log(`[updateStudent] No fields to update for student ${id}`);
   }
