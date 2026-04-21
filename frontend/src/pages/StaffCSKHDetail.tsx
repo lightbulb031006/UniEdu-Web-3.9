@@ -62,6 +62,8 @@ function StaffCSKHDetail() {
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [showBulkStatusModal, setShowBulkStatusModal] = useState(false);
+  const [localDefaultPercent, setLocalDefaultPercent] = useState<number | null>(null);
+  const [isUpdatingDefault, setIsUpdatingDefault] = useState(false);
 
   // Giáo viên chỉ được load hồ sơ của chính mình
   const canLoadStaffCSKH = !user || user.role !== 'teacher' || (user.linkId != null && staffId === user.linkId);
@@ -130,9 +132,16 @@ function StaffCSKHDetail() {
   const canEditProfit = Boolean(isAdmin);
   const canManagePaymentStatus = Boolean(isAdmin || hasCskhRole); // Match backup: no isSelf check for managing payment status
 
+  // Sync localDefaultPercent with backend data when it loads/changes
+  useEffect(() => {
+    if (cskhDetailData?.defaultProfitPercent != null) {
+      setLocalDefaultPercent(cskhDetailData.defaultProfitPercent);
+    }
+  }, [cskhDetailData?.defaultProfitPercent]);
+
   // Extract data from backend (all calculations done in backend)
   const studentStats = cskhDetailData?.students || [];
-  const defaultProfitPercent = cskhDetailData?.defaultProfitPercent || 10;
+  const defaultProfitPercent = localDefaultPercent ?? cskhDetailData?.defaultProfitPercent ?? 10;
   const totals = cskhDetailData?.totals || {
     totalUnpaidProfit: 0,
     totalPaidProfit: 0,
@@ -160,9 +169,34 @@ function StaffCSKHDetail() {
   }, [setSearchParams]);
 
   const handleDefaultProfitChange = async (value: number) => {
-    // Note: Default profit percent is stored per student, not globally
-    // This is just for UI display - actual profit percent is stored per student
-    // Backend will handle the update
+    if (!staffId || !canEditProfit || isUpdatingDefault) return;
+    // Update local state immediately for responsive UI
+    setLocalDefaultPercent(value);
+  };
+
+  const handleDefaultProfitBlur = async () => {
+    if (!staffId || !canEditProfit || isUpdatingDefault) return;
+    const value = localDefaultPercent ?? defaultProfitPercent;
+    if (studentStats.length === 0) return;
+
+    setIsUpdatingDefault(true);
+    try {
+      // Bulk-update ALL students in this month to the new default percent
+      const updates = studentStats.map((stat) => ({
+        studentId: stat.student.id,
+        paymentStatus: stat.paymentStatus,
+        profitPercent: value,
+      }));
+      await bulkUpdateCSKHPaymentStatus(staffId, monthKey, updates);
+      await refetchCSKHDetail();
+      toast.success(`Đã cập nhật % lợi nhuận mặc định thành ${value}% cho tất cả học sinh`);
+    } catch (error: any) {
+      toast.error('Không thể cập nhật % lợi nhuận: ' + (error.message || 'Lỗi không xác định'));
+      // Revert local state
+      setLocalDefaultPercent(cskhDetailData?.defaultProfitPercent ?? 10);
+    } finally {
+      setIsUpdatingDefault(false);
+    }
   };
 
   const handleStudentProfitChange = async (studentId: string, value: number) => {
@@ -488,23 +522,30 @@ function StaffCSKHDetail() {
                       <span>Lợi nhuận</span>
                       <input
                         type="number"
-                        value={defaultProfitPercent ?? 10}
+                        value={defaultProfitPercent}
                         min="0"
                         max="100"
                         step="0.1"
                         onChange={(e) => handleDefaultProfitChange(parseFloat(e.target.value) || 0)}
-                        disabled={!canEditProfit}
+                        onBlur={handleDefaultProfitBlur}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.currentTarget.blur(); } }}
+                        disabled={!canEditProfit || isUpdatingDefault}
                         style={{
                           width: '60px',
                           padding: '4px',
-                          border: '1px solid var(--border)',
+                          border: `1px solid ${isUpdatingDefault ? 'var(--primary)' : 'var(--border)'}`,
                           borderRadius: 'var(--radius)',
                           textAlign: 'center',
                           background: 'var(--bg)',
+                          opacity: isUpdatingDefault ? 0.7 : 1,
+                          transition: 'border-color 0.2s ease, opacity 0.2s ease',
                         }}
-                        title="% lợi nhuận mặc định"
+                        title={canEditProfit ? '% lợi nhuận mặc định – nhấn Enter hoặc click ra ngoài để lưu cho tất cả học sinh' : '% lợi nhuận mặc định'}
                       />
                       <span style={{ fontSize: '0.875rem', color: 'var(--muted)' }}>%</span>
+                      {isUpdatingDefault && (
+                        <span style={{ fontSize: '0.75rem', color: 'var(--primary)', whiteSpace: 'nowrap' }}>Đang lưu...</span>
+                      )}
                     </div>
                   </th>
                   <th style={{ padding: 'var(--spacing-3)', textAlign: 'center', minWidth: '150px', borderBottom: '2px solid var(--border)', fontWeight: 600 }}>
