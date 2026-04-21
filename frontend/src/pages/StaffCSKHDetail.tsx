@@ -64,6 +64,8 @@ function StaffCSKHDetail() {
   const [showBulkStatusModal, setShowBulkStatusModal] = useState(false);
   const [localDefaultPercent, setLocalDefaultPercent] = useState<number | null>(null);
   const [isUpdatingDefault, setIsUpdatingDefault] = useState(false);
+  // Local state cho % từng học sinh: studentId -> value đang gõ
+  const [localStudentPercents, setLocalStudentPercents] = useState<Record<string, number>>({});
 
   // Giáo viên chỉ được load hồ sơ của chính mình
   const canLoadStaffCSKH = !user || user.role !== 'teacher' || (user.linkId != null && staffId === user.linkId);
@@ -139,6 +141,18 @@ function StaffCSKHDetail() {
     }
   }, [cskhDetailData?.defaultProfitPercent]);
 
+  // Sync localStudentPercents từ backend khi dữ liệu thay đổi
+  useEffect(() => {
+    if (!cskhDetailData?.students) return;
+    setLocalStudentPercents((prev) => {
+      const next: Record<string, number> = {};
+      cskhDetailData.students.forEach((s) => {
+        next[s.student.id] = s.profitPercent;
+      });
+      return next;
+    });
+  }, [cskhDetailData?.students]);
+
   // Extract data from backend (all calculations done in backend)
   const studentStats = cskhDetailData?.students || [];
   const defaultProfitPercent = localDefaultPercent ?? cskhDetailData?.defaultProfitPercent ?? 10;
@@ -199,20 +213,27 @@ function StaffCSKHDetail() {
     }
   };
 
-  const handleStudentProfitChange = async (studentId: string, value: number) => {
-    if (!staffId) return;
-    
-    // Update in database immediately
+  // Chỉ cập nhật local state khi gõ, KHÔNG gọi API
+  const handleStudentProfitChange = (studentId: string, value: number) => {
+    setLocalStudentPercents((prev) => ({ ...prev, [studentId]: value }));
+  };
+
+  // Lưu vào DB khi blur hoặc nhấn Enter
+  const handleStudentProfitSave = async (studentId: string) => {
+    if (!staffId || !canEditProfit) return;
+    const value = localStudentPercents[studentId];
+    if (value === undefined) return;
     try {
       const studentStat = studentStats.find((s) => s.student.id === studentId);
       if (!studentStat) return;
-      const currentStatus = studentStat.paymentStatus;
-      await updateCSKHPaymentStatus(staffId, studentId, monthKey, currentStatus, value);
-      // Refetch to get updated data from backend
+      await updateCSKHPaymentStatus(staffId, studentId, monthKey, studentStat.paymentStatus, value);
       await refetchCSKHDetail();
     } catch (error: any) {
       console.error('Failed to update profit percent:', error);
-      // Don't show error toast for profit percent changes to avoid spam
+      toast.error('Không thể cập nhật % lợi nhuận: ' + (error.message || 'Lỗi không xác định'));
+      // Revert về giá trị gốc từ backend
+      const orig = studentStats.find((s) => s.student.id === studentId);
+      if (orig) setLocalStudentPercents((prev) => ({ ...prev, [studentId]: orig.profitPercent }));
     }
   };
 
@@ -620,11 +641,13 @@ function StaffCSKHDetail() {
                             className="student-profit-percent"
                             data-staff-id={staffId}
                             data-student-id={student.id}
-                            value={stat.profitPercent ?? defaultProfitPercent ?? 10}
+                            value={localStudentPercents[student.id] ?? stat.profitPercent ?? defaultProfitPercent}
                             min="0"
                             max="100"
                             step="0.1"
                             onChange={(e) => handleStudentProfitChange(student.id, parseFloat(e.target.value) || 0)}
+                            onBlur={() => handleStudentProfitSave(student.id)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') { e.currentTarget.blur(); } }}
                             disabled={!canEditProfit}
                             onClick={(e) => e.stopPropagation()}
                             style={{
@@ -634,8 +657,9 @@ function StaffCSKHDetail() {
                               borderRadius: 'var(--radius)',
                               textAlign: 'center',
                               background: 'var(--bg)',
+                              transition: 'border-color 0.2s ease',
                             }}
-                            title="% lợi nhuận riêng cho học sinh này"
+                            title={canEditProfit ? '% lợi nhuận – nhấn Enter hoặc click ra ngoài để lưu' : '% lợi nhuận riêng cho học sinh này'}
                           />
                           <span style={{ fontSize: '0.875rem', color: 'var(--muted)' }}>%</span>
                           <span style={{ marginLeft: 'var(--spacing-2)', fontWeight: 500, color: 'var(--text)' }}>
