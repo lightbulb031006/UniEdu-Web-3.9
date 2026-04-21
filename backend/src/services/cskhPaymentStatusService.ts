@@ -149,25 +149,62 @@ export async function bulkUpdateCSKHPaymentStatus(
 }
 
 /**
- * Get default profit percent for a staff member (from first record or default)
+ * Get default profit percent for a staff member
+ * Priority: teachers.cskh_default_profit_percent > first cskh_payment_status record > 10%
  */
 export async function getDefaultProfitPercent(staffId: string): Promise<number> {
+  // 1. Try to read from teachers table (dedicated column)
+  const { data: teacher, error: teacherError } = await supabase
+    .from('teachers')
+    .select('cskh_default_profit_percent')
+    .eq('id', staffId)
+    .maybeSingle();
+
+  if (!teacherError && teacher && teacher.cskh_default_profit_percent != null) {
+    return Number(teacher.cskh_default_profit_percent);
+  }
+
+  // 2. Fallback: read from first cskh_payment_status record
   const { data, error } = await supabase
     .from('cskh_payment_status')
     .select('profit_percent')
     .eq('staff_id', staffId)
     .limit(1)
-    .maybeSingle(); // Use maybeSingle() instead of single() to avoid error when no record exists
+    .maybeSingle();
 
-  if (error) {
-    console.error('Error fetching default profit percent:', error);
-    return 10; // Default 10%
+  if (!error && data) {
+    return Number(data.profit_percent) || 10;
   }
 
-  if (!data) {
-    return 10; // Default 10%
+  return 10; // Default 10%
+}
+
+/**
+ * Update default profit percent for a staff member
+ * Saves to teachers table AND bulk-updates all existing cskh_payment_status records
+ */
+export async function updateDefaultProfitPercent(staffId: string, profitPercent: number): Promise<number> {
+  // 1. Save to teachers table (dedicated column for persistence)
+  const { error: teacherError } = await supabase
+    .from('teachers')
+    .update({ cskh_default_profit_percent: profitPercent })
+    .eq('id', staffId);
+
+  if (teacherError) {
+    console.error('Failed to update default profit percent on teachers table:', teacherError);
+    // Don't throw - continue with bulk update of payment statuses
   }
 
-  return Number(data.profit_percent) || 10;
+  // 2. Bulk-update all existing cskh_payment_status records for this staff
+  const { error: bulkError } = await supabase
+    .from('cskh_payment_status')
+    .update({ profit_percent: profitPercent })
+    .eq('staff_id', staffId);
+
+  if (bulkError) {
+    console.error('Failed to bulk update profit percent in cskh_payment_status:', bulkError);
+  }
+
+  return profitPercent;
 }
 

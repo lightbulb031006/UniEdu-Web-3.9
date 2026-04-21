@@ -15,6 +15,7 @@ import {
   upsertCSKHPaymentStatus,
   bulkUpdateCSKHPaymentStatus,
   getDefaultProfitPercent,
+  updateDefaultProfitPercent,
 } from '../services/cskhPaymentStatusService';
 
 const router = express.Router();
@@ -178,6 +179,32 @@ router.get('/:id/cskh/default-profit-percent', authenticate, allowStaffProfileAc
     const { id } = req.params;
     const profitPercent = await getDefaultProfitPercent(id);
     res.json({ profitPercent });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+/**
+ * PUT /api/staff/:id/cskh/default-profit-percent
+ * Update default profit percent for CSKH staff
+ * Saves to teachers table and bulk-updates all student records
+ * Body: { profitPercent: number }
+ */
+router.put('/:id/cskh/default-profit-percent', authenticate, allowStaffProfileAccess, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { profitPercent } = req.body;
+
+    if (profitPercent === undefined || profitPercent === null || typeof profitPercent !== 'number') {
+      return res.status(400).json({ error: 'profitPercent must be a number' });
+    }
+
+    if (profitPercent < 0 || profitPercent > 100) {
+      return res.status(400).json({ error: 'profitPercent must be between 0 and 100' });
+    }
+
+    const updatedPercent = await updateDefaultProfitPercent(id, profitPercent);
+    res.json({ profitPercent: updatedPercent });
   } catch (error: any) {
     next(error);
   }

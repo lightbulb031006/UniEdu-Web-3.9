@@ -4,13 +4,14 @@
  * Migrated from backup/assets/js/pages/staff-cskh-detail.js
  */
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDataLoading } from '../hooks/useDataLoading';
 import { fetchTeachers } from '../services/teachersService';
 import {
   updateCSKHPaymentStatus,
   bulkUpdateCSKHPaymentStatus,
+  updateDefaultProfitPercent,
 } from '../services/cskhPaymentStatusService';
 import { fetchCSKHDetailData, CSKHDetailData } from '../services/staffService';
 import { useAuthStore } from '../store/authStore';
@@ -61,11 +62,9 @@ function StaffCSKHDetail() {
   // State for UI
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [editableDefaultProfit, setEditableDefaultProfit] = useState<number | null>(null);
+  const defaultProfitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showBulkStatusModal, setShowBulkStatusModal] = useState(false);
-  const [localDefaultPercent, setLocalDefaultPercent] = useState<number | null>(null);
-  const [isUpdatingDefault, setIsUpdatingDefault] = useState(false);
-  // Local state cho % từng học sinh: studentId -> value đang gõ
-  const [localStudentPercents, setLocalStudentPercents] = useState<Record<string, number>>({});
 
   // Giáo viên chỉ được load hồ sơ của chính mình
   const canLoadStaffCSKH = !user || user.role !== 'teacher' || (user.linkId != null && staffId === user.linkId);
@@ -134,34 +133,27 @@ function StaffCSKHDetail() {
   const canEditProfit = Boolean(isAdmin);
   const canManagePaymentStatus = Boolean(isAdmin || hasCskhRole); // Match backup: no isSelf check for managing payment status
 
-  // Sync localDefaultPercent with backend data when it loads/changes
-  useEffect(() => {
-    if (cskhDetailData?.defaultProfitPercent != null) {
-      setLocalDefaultPercent(cskhDetailData.defaultProfitPercent);
-    }
-  }, [cskhDetailData?.defaultProfitPercent]);
-
-  // Sync localStudentPercents từ backend khi dữ liệu thay đổi
-  useEffect(() => {
-    if (!cskhDetailData?.students) return;
-    setLocalStudentPercents((prev) => {
-      const next: Record<string, number> = {};
-      cskhDetailData.students.forEach((s) => {
-        next[s.student.id] = s.profitPercent;
-      });
-      return next;
-    });
-  }, [cskhDetailData?.students]);
-
   // Extract data from backend (all calculations done in backend)
   const studentStats = cskhDetailData?.students || [];
-  const defaultProfitPercent = localDefaultPercent ?? cskhDetailData?.defaultProfitPercent ?? 10;
+  const defaultProfitPercent = cskhDetailData?.defaultProfitPercent || 10;
   const totals = cskhDetailData?.totals || {
     totalUnpaidProfit: 0,
     totalPaidProfit: 0,
     totalPaidAll: 0,
     totalProfitAll: 0,
   };
+
+  // Sync editableDefaultProfit from backend data (only when backend data changes and no pending edit)
+  useEffect(() => {
+    if (cskhDetailData?.defaultProfitPercent != null && editableDefaultProfit === null) {
+      setEditableDefaultProfit(cskhDetailData.defaultProfitPercent);
+    }
+  }, [cskhDetailData?.defaultProfitPercent]);
+
+  // Also sync when switching months (reset local state so it picks up new data)
+  useEffect(() => {
+    setEditableDefaultProfit(null);
+  }, [debouncedMonthKey]);
 
   // Generate month options (last 12 months)
   const monthOptions = useMemo(() => {
@@ -182,58 +174,45 @@ function StaffCSKHDetail() {
     setSearchParams({ month, year });
   }, [setSearchParams]);
 
-  const handleDefaultProfitChange = async (value: number) => {
-    if (!staffId || !canEditProfit || isUpdatingDefault) return;
+  const handleDefaultProfitChange = (value: number) => {
+    if (!staffId) return;
+
     // Update local state immediately for responsive UI
-    setLocalDefaultPercent(value);
-  };
+    setEditableDefaultProfit(value);
 
-  const handleDefaultProfitBlur = async () => {
-    if (!staffId || !canEditProfit || isUpdatingDefault) return;
-    const value = localDefaultPercent ?? defaultProfitPercent;
-    if (studentStats.length === 0) return;
-
-    setIsUpdatingDefault(true);
-    try {
-      // Bulk-update ALL students in this month to the new default percent
-      const updates = studentStats.map((stat) => ({
-        studentId: stat.student.id,
-        paymentStatus: stat.paymentStatus,
-        profitPercent: value,
-      }));
-      await bulkUpdateCSKHPaymentStatus(staffId, monthKey, updates);
-      await refetchCSKHDetail();
-      toast.success(`Đã cập nhật % lợi nhuận mặc định thành ${value}% cho tất cả học sinh`);
-    } catch (error: any) {
-      toast.error('Không thể cập nhật % lợi nhuận: ' + (error.message || 'Lỗi không xác định'));
-      // Revert local state
-      setLocalDefaultPercent(cskhDetailData?.defaultProfitPercent ?? 10);
-    } finally {
-      setIsUpdatingDefault(false);
+    // Clear previous debounce timer
+    if (defaultProfitTimerRef.current) {
+      clearTimeout(defaultProfitTimerRef.current);
     }
+
+    // Debounce the API call (800ms) to avoid spamming while user types
+    defaultProfitTimerRef.current = setTimeout(async () => {
+      try {
+        await updateDefaultProfitPercent(staffId, value);
+        // Refetch to get updated data (all students will have new profit %)
+        await refetchCSKHDetail();
+        toast.success(`Đã cập nhật % lợi nhuận mặc định: ${value}%`);
+      } catch (error: any) {
+        console.error('Failed to update default profit percent:', error);
+        toast.error('Không thể cập nhật % lợi nhuận: ' + (error.message || 'Lỗi không xác định'));
+      }
+    }, 800);
   };
 
-  // Chỉ cập nhật local state khi gõ, KHÔNG gọi API
-  const handleStudentProfitChange = (studentId: string, value: number) => {
-    setLocalStudentPercents((prev) => ({ ...prev, [studentId]: value }));
-  };
-
-  // Lưu vào DB khi blur hoặc nhấn Enter
-  const handleStudentProfitSave = async (studentId: string) => {
-    if (!staffId || !canEditProfit) return;
-    const value = localStudentPercents[studentId];
-    if (value === undefined) return;
+  const handleStudentProfitChange = async (studentId: string, value: number) => {
+    if (!staffId) return;
+    
+    // Update in database immediately
     try {
       const studentStat = studentStats.find((s) => s.student.id === studentId);
       if (!studentStat) return;
-      await updateCSKHPaymentStatus(staffId, studentId, monthKey, studentStat.paymentStatus, value);
+      const currentStatus = studentStat.paymentStatus;
+      await updateCSKHPaymentStatus(staffId, studentId, monthKey, currentStatus, value);
+      // Refetch to get updated data from backend
       await refetchCSKHDetail();
     } catch (error: any) {
       console.error('Failed to update profit percent:', error);
-      toast.error('Không thể cập nhật % lợi nhuận: ' + (error.message || 'Lỗi không xác định'));
-      // Revert về giá trị gốc từ backend
-      const orig = studentStats.find((s) => s.student.id === studentId);
-      if (orig) setLocalStudentPercents((prev) => ({ ...prev, [studentId]: orig.profitPercent }));
+      // Don't show error toast for profit percent changes to avoid spam
     }
   };
 
@@ -543,30 +522,23 @@ function StaffCSKHDetail() {
                       <span>Lợi nhuận</span>
                       <input
                         type="number"
-                        value={defaultProfitPercent}
+                        value={editableDefaultProfit ?? defaultProfitPercent ?? 10}
                         min="0"
                         max="100"
                         step="0.1"
                         onChange={(e) => handleDefaultProfitChange(parseFloat(e.target.value) || 0)}
-                        onBlur={handleDefaultProfitBlur}
-                        onKeyDown={(e) => { if (e.key === 'Enter') { e.currentTarget.blur(); } }}
-                        disabled={!canEditProfit || isUpdatingDefault}
+                        disabled={!canEditProfit}
                         style={{
                           width: '60px',
                           padding: '4px',
-                          border: `1px solid ${isUpdatingDefault ? 'var(--primary)' : 'var(--border)'}`,
+                          border: '1px solid var(--border)',
                           borderRadius: 'var(--radius)',
                           textAlign: 'center',
                           background: 'var(--bg)',
-                          opacity: isUpdatingDefault ? 0.7 : 1,
-                          transition: 'border-color 0.2s ease, opacity 0.2s ease',
                         }}
-                        title={canEditProfit ? '% lợi nhuận mặc định – nhấn Enter hoặc click ra ngoài để lưu cho tất cả học sinh' : '% lợi nhuận mặc định'}
+                        title="% lợi nhuận mặc định"
                       />
                       <span style={{ fontSize: '0.875rem', color: 'var(--muted)' }}>%</span>
-                      {isUpdatingDefault && (
-                        <span style={{ fontSize: '0.75rem', color: 'var(--primary)', whiteSpace: 'nowrap' }}>Đang lưu...</span>
-                      )}
                     </div>
                   </th>
                   <th style={{ padding: 'var(--spacing-3)', textAlign: 'center', minWidth: '150px', borderBottom: '2px solid var(--border)', fontWeight: 600 }}>
@@ -641,13 +613,11 @@ function StaffCSKHDetail() {
                             className="student-profit-percent"
                             data-staff-id={staffId}
                             data-student-id={student.id}
-                            value={localStudentPercents[student.id] ?? stat.profitPercent ?? defaultProfitPercent}
+                            value={stat.profitPercent ?? defaultProfitPercent ?? 10}
                             min="0"
                             max="100"
                             step="0.1"
                             onChange={(e) => handleStudentProfitChange(student.id, parseFloat(e.target.value) || 0)}
-                            onBlur={() => handleStudentProfitSave(student.id)}
-                            onKeyDown={(e) => { if (e.key === 'Enter') { e.currentTarget.blur(); } }}
                             disabled={!canEditProfit}
                             onClick={(e) => e.stopPropagation()}
                             style={{
@@ -657,9 +627,8 @@ function StaffCSKHDetail() {
                               borderRadius: 'var(--radius)',
                               textAlign: 'center',
                               background: 'var(--bg)',
-                              transition: 'border-color 0.2s ease',
                             }}
-                            title={canEditProfit ? '% lợi nhuận – nhấn Enter hoặc click ra ngoài để lưu' : '% lợi nhuận riêng cho học sinh này'}
+                            title="% lợi nhuận riêng cho học sinh này"
                           />
                           <span style={{ fontSize: '0.875rem', color: 'var(--muted)' }}>%</span>
                           <span style={{ marginLeft: 'var(--spacing-2)', fontWeight: 500, color: 'var(--text)' }}>

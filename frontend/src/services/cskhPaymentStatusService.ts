@@ -33,6 +33,17 @@ export async function getDefaultProfitPercent(staffId: string): Promise<number> 
 }
 
 /**
+ * Update default profit percent for a CSKH staff member
+ * This saves persistently and bulk-updates all student records
+ */
+export async function updateDefaultProfitPercent(staffId: string, profitPercent: number): Promise<number> {
+  const response = await api.put<{ profitPercent: number }>(`/staff/${staffId}/cskh/default-profit-percent`, {
+    profitPercent,
+  });
+  return response.data?.profitPercent || profitPercent;
+}
+
+/**
  * Update payment status for a student
  */
 export async function updateCSKHPaymentStatus(
