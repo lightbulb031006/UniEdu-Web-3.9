@@ -197,8 +197,40 @@ export async function login(credentials: LoginCredentials): Promise<AuthResult> 
     role: user.role,
     email: user.email,
   };
-  if (user.role === 'teacher' && user.link_id) {
-    tokenPayload.linkId = user.link_id;
+  if (user.role === 'teacher') {
+    if (user.link_id) {
+      tokenPayload.linkId = user.link_id;
+    } else {
+      // Auto-detect and link teacher record by email when link_id is missing
+      // This handles staff created manually without auto-linking (e.g. CSKH staff)
+      try {
+        const { data: matchingTeacher } = await supabase
+          .from('teachers')
+          .select('id')
+          .ilike('email', user.email)
+          .limit(1)
+          .single();
+        if (matchingTeacher) {
+          // Auto-update link_id in users table for future logins
+          await supabase
+            .from('users')
+            .update({ link_id: matchingTeacher.id })
+            .eq('id', user.id);
+          tokenPayload.linkId = matchingTeacher.id;
+          user.link_id = matchingTeacher.id;
+          logger.info('[LOGIN] Auto-linked teacher record', {
+            userId: user.id,
+            teacherId: matchingTeacher.id,
+          });
+        }
+      } catch (autoLinkError) {
+        // Non-critical: continue login even if auto-link fails
+        logger.warn('[LOGIN] Failed to auto-link teacher record', {
+          userId: user.id,
+          error: (autoLinkError as Error).message,
+        });
+      }
+    }
   }
   const token = generateToken(tokenPayload, rememberMe);
 
